@@ -25,3 +25,23 @@ works but costs a third of the canvas, and at the ~40px a chat list actually ren
 three rings collapse into a smudge. So the crop becomes the bezel: the sweep origin moves inside the
 circle, the rings grow to fill it, and the quiet rings are struck in graphite rather than carbon,
 which is the one deviation from the web mark and exists because carbon disappears at that size.
+
+## FOMOBRAIN — the token's artwork (`fomobrain/`)
+
+The Dexscreener header and icon, with the home page's brain as the character. `brain_frame.html`
+is the particle cloud from `site/src/components/Brain.astro` cut down to one still — no stations,
+no nerves — and `make_fomobrain.py` renders it through headless Chrome, then composes the header
+around it with the same mark, type and readout strip as the cards above.
+
+```bash
+.venv/Scripts/python assets/brand/fomobrain/make_fomobrain.py
+```
+
+| file | where it goes |
+|---|---|
+| `dex-header-1500x500.png` | Dexscreener token profile → header image |
+| `dex-icon-512.png`, `dex-icon-1000.png` | Dexscreener token profile → icon (shown in a circle; the cloud fills the square on purpose) |
+| `dex-icon-1000-transparent.png` | The same icon with no ground, for anywhere that supplies its own |
+
+The view is pinned in `VIEW` (angle, roll, seed, how far the lobe has fired) so a re-render is the
+same picture; change the seed to get a different frame of the same brain.
