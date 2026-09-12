@@ -42,6 +42,7 @@ around it with the same mark, type and readout strip as the cards above.
 | `dex-header-1500x500.png` | Dexscreener token profile → header image |
 | `dex-icon-512.png`, `dex-icon-1000.png` | Dexscreener token profile → icon (shown in a circle; the cloud fills the square on purpose) |
 | `dex-icon-1000-transparent.png` | The same icon with no ground, for anywhere that supplies its own |
+| `flywheel-1600x900.png` | The token's flywheel as one picture — `make_flywheel.py`: one ring, five stations, the brain at the hub, two roads in from outside, every road ending at burn |
 
 The view is pinned in `VIEW` (angle, roll, seed, how far the lobe has fired) so a re-render is the
 same picture; change the seed to get a different frame of the same brain.
