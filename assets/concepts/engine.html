@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOMO Radar — the execution engine, a concept</title>
+<!--
+  A concept, not a product: what the trading engine on top of the radar would look like.
+
+  The brain on the left is the radar as it exists - the tape, the scores, the bursts. Everything
+  to the right of it is the engine: six gates a signal has to clear, arranged as a lattice rather
+  than a line - one gate fans out into three that run in parallel, an AND-join brings them back,
+  a failed market check parks the signal and sends it round again, a token that turns out to be
+  seeded vetoes a position that is already open, and every closed trade feeds two loops back:
+  the profit into the deposit that sizes the next trade, the outcome into the scores that judge
+  the next wallet. Units are signals; watch them split, fail, park, return, fill and leave.
+
+  The numbers are simulated. The gates, the loops and the reasons are the design.
+  Scales to any window. ?still=1 or reduced motion: a populated frame, nothing moving.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root { --black:#000; --white:#fff; --carbon:#606060; --graphite:#949494; --green:#00ff85; --crimson:#ff003d;
+          --amber:#ff8a00; --yellow:#fcff76; --violet:#6100ff; --cyan:#8fd9ff;
+          --sans:"Space Grotesk", system-ui, sans-serif; --mono:"JetBrains Mono", ui-monospace, monospace; }
+  html, body { margin:0; height:100%; background:var(--black); color:var(--white); overflow:hidden; font-family:var(--mono); }
+  .stage { position:fixed; inset:0; display:grid; place-items:center; }
+  .board { position:relative; width:1600px; height:900px; transform-origin:center center; background:var(--black); }
+  .board > * { position:absolute; }
+  #lattice { left:0; top:0; width:1600px; height:900px; }
+  #units { left:0; top:0; width:1600px; height:900px; pointer-events:none; }
+
+  .mono { font-family:var(--mono); } .sans { font-family:var(--sans); }
+  .eyebrow { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--graphite); }
+  .led { display:inline-block; width:7px; height:7px; border-radius:999px; background:var(--green); vertical-align:1px; margin-right:8px; animation:blink 2.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+
+  header { left:40px; top:28px; width:1520px; height:62px; border-bottom:1px solid var(--carbon); }
+  header h1 { position:absolute; left:0; top:22px; margin:0; font-family:var(--sans); font-weight:300; font-size:30px; letter-spacing:.08em; text-transform:uppercase; line-height:1; }
+  header .eyebrow { position:absolute; left:0; top:0; }
+  header .kpis { position:absolute; right:0; top:4px; display:flex; gap:34px; }
+  .kpi { text-align:right; }
+  .kpi .k { font-size:9.5px; letter-spacing:.14em; color:var(--carbon); text-transform:uppercase; }
+  .kpi .v { font-family:var(--sans); font-weight:700; font-size:24px; letter-spacing:.01em; line-height:1.15; font-variant-numeric:tabular-nums; }
+  .kpi .v.g { color:var(--green); } .kpi .v.c { color:var(--crimson); } .kpi .v.y { color:var(--yellow); }
+
+  .panel { border:1px solid var(--carbon); }
+  .panel .ph { position:absolute; left:12px; top:9px; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--graphite); }
+  .panel .ph b { color:var(--white); font-weight:700; }
+  .panel .pr { position:absolute; right:12px; top:9px; font-size:9.5px; letter-spacing:.1em; color:var(--carbon); text-transform:uppercase; }
+
+  /* the brain: the radar as it is */
+  #brain { left:40px; top:112px; width:280px; height:676px; border-color:var(--white); }
+  #brainCv { position:absolute; left:29px; top:30px; width:222px; height:200px; }
+  #brainCap { position:absolute; left:0; right:0; top:232px; text-align:center; font-size:9.5px; letter-spacing:.12em; color:var(--graphite); text-transform:uppercase; }
+  #brainCap b { color:var(--white); }
+  .list { position:absolute; left:12px; right:12px; font-size:9.5px; line-height:15px; }
+  .list .h { color:var(--carbon); letter-spacing:.14em; text-transform:uppercase; border-bottom:1px solid var(--carbon); padding-bottom:4px; margin-bottom:4px; display:flex; justify-content:space-between; }
+  .row { display:flex; gap:8px; white-space:nowrap; overflow:hidden; }
+  .row .t { color:var(--carbon); width:48px; flex:none; }
+  .row .w { color:var(--white); width:76px; flex:none; overflow:hidden; text-overflow:ellipsis; }
+  .row .s { color:var(--green); width:60px; flex:none; overflow:hidden; text-overflow:ellipsis; }
+  .row .u { color:var(--graphite); margin-left:auto; }
+  .row.fresh { color:var(--green); }
+  .score { display:flex; align-items:center; gap:8px; }
+  .score .w { width:96px; }
+  .score .m { flex:1; height:6px; border:1px solid var(--carbon); position:relative; }
+  .score .m i { position:absolute; left:0; top:0; bottom:0; background:var(--amber); }
+  .score .n { width:26px; text-align:right; color:var(--amber); font-variant-numeric:tabular-nums; }
+  .score .d { width:28px; font-size:8.5px; color:var(--graphite); }
+  .score .d.up { color:var(--green); } .score .d.dn { color:var(--crimson); }
+  #tape { top:262px; }
+  #scores { top:452px; }
+
+  /* the book and the deposit: what the engine holds */
+  #book { left:1300px; top:112px; width:260px; height:420px; }
+  #posList { top:30px; }
+  .pos { display:grid; grid-template-columns:62px 40px 48px 1fr; gap:6px; font-variant-numeric:tabular-nums; }
+  .pos .sym { color:var(--white); font-weight:700; }
+  .pos .sz { color:var(--graphite); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .pos .mx { color:var(--graphite); }
+  .pos .pnl { text-align:right; } .pos .pnl.g { color:var(--green); } .pos .pnl.c { color:var(--crimson); }
+  .pos.closing { opacity:.5; }
+  .empty { color:var(--carbon); }
+  #exits { top:262px; }
+  #deposit { left:1300px; top:552px; width:260px; height:236px; }
+  #depV { position:absolute; left:12px; top:34px; font-family:var(--sans); font-weight:700; font-size:34px; letter-spacing:.01em; font-variant-numeric:tabular-nums; line-height:1; }
+  #depM { position:absolute; left:12px; right:12px; top:82px; height:12px; border:1px solid var(--white); }
+  #depM i { position:absolute; left:2px; top:2px; bottom:2px; background:var(--amber); }
+  .split { position:absolute; left:12px; right:12px; top:110px; display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:9.5px; }
+  .split > div { border:1px solid var(--carbon); padding:8px 9px; }
+  .split .k { color:var(--carbon); letter-spacing:.12em; text-transform:uppercase; font-size:8.5px; white-space:nowrap; }
+  .split .v { font-family:var(--sans); font-weight:700; font-size:18px; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .split .v.a { color:var(--amber); } .split .v.c { color:var(--crimson); }
+  #depNote { position:absolute; left:12px; right:12px; top:178px; font-size:9px; color:var(--carbon); letter-spacing:.04em; line-height:14px; }
+
+  /* the ledger: every decision, one line each */
+  #ledger { left:40px; top:808px; width:1520px; height:66px; border-top:1px solid var(--carbon); overflow:hidden; }
+  #ledger .ph { top:8px; left:0; }
+  #log { position:absolute; left:250px; right:0; top:8px; font-size:9.5px; line-height:14px; white-space:nowrap; }
+  #log div { display:flex; gap:10px; }
+  #log .t { color:var(--carbon); } #log .s { color:var(--white); font-weight:700; width:74px; } #log .src { color:var(--graphite); width:150px; }
+  #log .ok { color:var(--green); } #log .no { color:var(--crimson); } #log .wait { color:var(--yellow); } #log .r { color:var(--graphite); }
+
+  /* the lattice: gates and edges (svg) */
+  .edge { fill:none; stroke:#3a3a3a; stroke-width:1.2; }
+  .edge.on { stroke:var(--white); }
+  .edge.loop { stroke:var(--cyan); stroke-dasharray:5 5; }
+  .edge.veto { stroke:var(--crimson); stroke-dasharray:3 5; }
+  .edge.fb { stroke:var(--amber); stroke-dasharray:5 5; }
+  .edge.reject { stroke:#2a2a2a; stroke-dasharray:2 4; }
+  .gate rect { fill:#000; stroke:var(--white); stroke-width:1.2; }
+  .gate.src rect { stroke:var(--carbon); }
+  .gate.join rect { stroke:var(--white); }
+  .gate.park rect { stroke:var(--cyan); stroke-dasharray:4 3; }
+  .gate.flash-ok rect { stroke:var(--green); stroke-width:2.2; }
+  .gate.flash-no rect { stroke:var(--crimson); stroke-width:2.2; }
+  .gate text { font-family:var(--mono); }
+  .gate .tag { font-size:8.5px; letter-spacing:.12em; fill:var(--carbon); }
+  .gate .name { font-size:11px; font-weight:700; letter-spacing:.1em; fill:#fff; }
+  .gate .sub { font-size:7.8px; letter-spacing:.03em; fill:var(--graphite); }
+  .gate .cnt { font-size:8.5px; letter-spacing:.06em; fill:var(--graphite); font-variant-numeric:tabular-nums; }
+  .gate .cnt .ok { fill:var(--green); } .gate .cnt .no { fill:var(--crimson); }
+  .elabel { font-family:var(--mono); font-size:8.5px; letter-spacing:.1em; fill:var(--graphite); }
+  .elabel.loop { fill:var(--cyan); } .elabel.veto { fill:var(--crimson); } .elabel.fb { fill:var(--amber); }
+  .rail { stroke:var(--carbon); stroke-dasharray:2 4; }
+  .railL { font-family:var(--mono); font-size:9px; letter-spacing:.12em; fill:var(--carbon); }
+  .railL tspan.n { fill:var(--crimson); }
+
+  @media (prefers-reduced-motion: reduce) { .led { animation:none; } }
+</style>
+</head>
+<body>
+<div class="stage"><div class="board" id="board">
+  <header>
+    <div class="eyebrow"><span class="led"></span>$FOMOBRAIN · THE ALGO · CONCEPT v0.1 · SIMULATED — THE GATES ARE THE DESIGN, THE NUMBERS ARE NOT</div>
+    <h1>Six gates, three loops, one book</h1>
+    <div class="kpis">
+      <div class="kpi"><div class="k">deposit</div><div class="v y" id="kDep">$25,000</div></div>
+      <div class="kpi"><div class="k">today</div><div class="v" id="kPnl">$0</div></div>
+      <div class="kpi"><div class="k">open</div><div class="v" id="kOpen">0</div></div>
+      <div class="kpi"><div class="k">hit rate</div><div class="v" id="kHit">—</div></div>
+      <div class="kpi"><div class="k">declined</div><div class="v c" id="kDec">0</div></div>
+    </div>
+  </header>
+
+  <section class="panel" id="brain">
+    <div class="ph"><b>THE BRAIN</b> · the radar</div>
+    <div class="pr" id="clock">23:50:00</div>
+    <canvas id="brainCv"></canvas>
+    <div id="brainCap"><b>169</b> WALLETS SCORED · TAPE EVERY <b>20 S</b> · EVERY FILL vs ITS RECEIPT</div>
+    <div class="list" id="tape"><div class="h"><span>tape · trusted fills</span><span id="tapeN">0</span></div><div id="tapeRows"></div></div>
+    <div class="list" id="scores"><div class="h"><span>scores · move on outcomes</span><span>judge</span></div><div id="scoreRows"></div></div>
+  </section>
+
+  <svg id="lattice" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg"></svg>
+  <canvas id="units"></canvas>
+
+  <section class="panel" id="book">
+    <div class="ph"><b>THE BOOK</b> · open positions</div>
+    <div class="pr" id="bookN">0 / 5</div>
+    <div class="list" id="posList"><div class="h"><span>sym · size · vs entry</span><span>pnl</span></div><div id="posRows"><div class="empty">nothing open</div></div></div>
+    <div class="list" id="exits"><div class="h"><span>closed · why</span><span id="exitN">0</span></div><div id="exitRows"></div></div>
+  </section>
+
+  <section class="panel" id="deposit">
+    <div class="ph"><b>THE DEPOSIT</b> · sizes every trade</div>
+    <div id="depV">$25,000</div>
+    <div id="depM"><i style="width:40%"></i></div>
+    <div class="split">
+      <div><div class="k">50% compounds</div><div class="v a" id="cmp">$0</div></div>
+      <div><div class="k">50% burned</div><div class="v c" id="burn">$0</div></div>
+    </div>
+    <div id="depNote">a trade is sized by conviction and liquidity, never above 4% of the deposit; five positions at once at most; the day stops at −6%.</div>
+  </section>
+
+  <footer class="panel" id="ledger" style="border-left:0;border-right:0;border-bottom:0">
+    <div class="ph"><b>THE LEDGER</b> · every decision</div>
+    <div id="log"></div>
+  </footer>
+</div></div>
+
+<script>
+(() => {
+  const q = new URLSearchParams(location.search);
+  const reduced = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || q.has('still');
+  const board = document.getElementById('board');
+  const fit = () => { const s = Math.min(innerWidth / 1600, innerHeight / 900); board.style.transform = `scale(${s})`; };
+  addEventListener('resize', fit); fit();
+
+  // ── a seeded random so the concept plays the same way every time it is opened
+  let seed = 11;
+  const rand = () => { seed ^= seed << 13; seed >>>= 0; seed ^= seed >> 17; seed ^= seed << 5; seed >>>= 0; return seed / 4294967296; };
+  const rnd = (a, b) => a + rand() * (b - a);
+  const pick = (a) => a[Math.floor(rand() * a.length)];
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const C = { white: '#fff', carbon: '#606060', graphite: '#949494', green: '#00ff85', crimson: '#ff003d', amber: '#ff8a00', yellow: '#fcff76', violet: '#6100ff', cyan: '#8fd9ff' };
+
+  // ── the lattice
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('lattice');
+  const el = (tag, attrs = {}, parent = svg, text = null) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text !== null) e.textContent = text; parent.appendChild(e); return e; };
+  const GW = 136, GH = 48;
+  const gates = {
+    burst:   { x: 400, y: 262, tag: 'IN', name: 'BURST',      sub: 'Δ4.0 · 30 min · 3+ wallets', cls: 'src' },
+    launch:  { x: 400, y: 450, tag: 'IN', name: 'LAUNCH',     sub: 'the cohort enters early', cls: 'src' },
+    signal:  { x: 400, y: 638, tag: 'IN', name: 'SIGNAL',     sub: 'conviction over the bar', cls: 'src' },
+    prov:    { x: 560, y: 450, tag: 'L1', name: 'PROVENANCE', sub: 'is the fill really theirs' },
+    cohort:  { x: 720, y: 300, tag: 'L2', name: 'COHORT',     sub: 'who · cost basis · record' },
+    token:   { x: 720, y: 450, tag: 'L3', name: 'TOKEN',      sub: 'seeded? liquid? sellable?' },
+    market:  { x: 720, y: 600, tag: 'L4', name: 'MARKET',     sub: 'vs cohort cost · spread' },
+    confirm: { x: 880, y: 450, tag: 'AND', name: 'CONFIRM',   sub: 'all three, or none', cls: 'join' },
+    park:    { x: 880, y: 640, tag: 'WAIT', name: 'PARK',     sub: 'right token, wrong price', cls: 'park' },
+    risk:    { x: 1040, y: 450, tag: 'L5', name: 'RISK',      sub: 'size · exposure · day cap' },
+    exec:    { x: 1195, y: 450, tag: 'L6', name: 'EXECUTE',   sub: 'router · slippage · retry' },
+    manage:  { x: 1195, y: 640, tag: 'OUT', name: 'MANAGE',   sub: 'exits · trail · time · veto' },
+  };
+  const P = {  // fixed points off the lattice
+    brainOut: [320, 450], brainIn: [320, 700], bookIn: [1300, 450], bookOut: [1300, 520], depIn: [1300, 660], rail: 748,
+  };
+  const at = (g) => [gates[g].x, gates[g].y];
+  const Q = (p0, p1, p2) => `M${p0[0]} ${p0[1]} Q${p1[0]} ${p1[1]} ${p2[0]} ${p2[1]}`;
+  const mid = (a, b, bend = 0) => { const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; return [mx - dy / L * bend, my + dx / L * bend]; };
+  const edges = {};
+  const edge = (id, a, b, cls = '', bend = 0, ctrl = null) => { const c = ctrl || mid(a, b, bend); edges[id] = { a, b, c, el: el('path', { d: Q(a, c, b), class: 'edge ' + cls }) }; return edges[id]; };
+  // the brain feeds three ways in
+  edge('b-burst', P.brainOut, at('burst'), '', -30);
+  edge('b-launch', P.brainOut, at('launch'));
+  edge('b-signal', P.brainOut, at('signal'), '', 30);
+  // three ways in, one first gate
+  edge('burst-prov', at('burst'), at('prov'), '', 20);
+  edge('launch-prov', at('launch'), at('prov'));
+  edge('signal-prov', at('signal'), at('prov'), '', -20);
+  // one gate fans into three that run at once
+  edge('prov-cohort', at('prov'), at('cohort'), '', -22);
+  edge('prov-token', at('prov'), at('token'));
+  edge('prov-market', at('prov'), at('market'), '', 22);
+  // and the three join
+  edge('cohort-confirm', at('cohort'), at('confirm'), '', -22);
+  edge('token-confirm', at('token'), at('confirm'));
+  edge('market-confirm', at('market'), at('confirm'), '', 22);
+  // the straight road to the book
+  edge('confirm-risk', at('confirm'), at('risk'));
+  edge('risk-exec', at('risk'), at('exec'));
+  edge('exec-book', at('exec'), P.bookIn);
+  // loop one: a good token at a bad price waits and goes round again
+  edge('confirm-park', at('confirm'), at('park'), 'loop');
+  edge('park-market', at('park'), at('market'), 'loop', 0, [800, 700]);
+  // the veto: a token that turns out seeded kills the position it already has
+  edge('token-manage', at('token'), at('manage'), 'veto', 0, [960, 560]);
+  // out of the book, into management, and the two loops back
+  edge('book-manage', P.bookOut, at('manage'), '', 0, [1300, 640]);
+  edge('manage-dep', at('manage'), P.depIn, 'fb', 0, [1250, 680]);
+  edge('manage-brain', at('manage'), P.brainIn, 'fb', 0, [760, 930]);
+  // every gate has a way down to the rail
+  for (const g of ['prov', 'cohort', 'token', 'market', 'confirm', 'risk', 'exec', 'park']) edge('rej-' + g, at(g), [gates[g].x, P.rail], 'reject');
+  // labels on the edges that need a word
+  const elabel = (x, y, s, cls = '', anchor = 'middle') => el('text', { x, y, class: 'elabel ' + cls, 'text-anchor': anchor }, svg, s);
+  elabel(640, 372, 'FAN OUT · RUN AT ONCE');
+  elabel(800, 372, 'AND-JOIN');
+  elabel(800, 720, 'RE-CHECK IN 90 S', 'loop');
+  elabel(975, 585, 'VETO · SEEDED LATER', 'veto');
+  elabel(1296, 700, 'PNL → DEPOSIT', 'fb', 'end');
+  elabel(760, 792, 'OUTCOME → SCORES · THE JUDGE LEARNS WHAT HAPPENED', 'fb');
+  elabel(1296, 512, '← CLOSE', '', 'end');
+  // the rail: where the declined go, with why
+  el('line', { x1: 430, y1: P.rail, x2: 1270, y2: P.rail, class: 'rail' });
+  const railL = el('text', { x: 430, y: P.rail + 16, class: 'railL' });
+  // the gates, drawn last
+  const counts = {};
+  const gateEls = {};
+  for (const [id, g] of Object.entries(gates)) {
+    const grp = el('g', { class: 'gate ' + (g.cls || ''), transform: `translate(${g.x - GW / 2} ${g.y - GH / 2})` });
+    el('rect', { x: 0, y: 0, width: GW, height: GH }, grp);
+    el('text', { x: 9, y: 14, class: 'tag' }, grp, g.tag);
+    el('text', { x: 9, y: 28, class: 'name' }, grp, g.name);
+    el('text', { x: 9, y: 41, class: 'sub' }, grp, g.sub);
+    const cnt = el('text', { x: GW - 8, y: 14, class: 'cnt', 'text-anchor': 'end' }, grp);
+    counts[id] = { ok: 0, no: 0, el: cnt };
+    gateEls[id] = grp;
+  }
+  const paintCounts = () => { for (const [id, c] of Object.entries(counts)) { if (gates[id].cls === 'src') { c.el.textContent = c.ok ? String(c.ok) : ''; continue; } c.el.innerHTML = ''; if (!c.ok && !c.no) continue; const a = el('tspan', { class: 'ok' }, c.el, String(c.ok)); el('tspan', {}, c.el, ' · '); el('tspan', { class: 'no' }, c.el, String(c.no)); } };
+  const flash = (id, ok) => { const g = gateEls[id]; g.classList.remove('flash-ok', 'flash-no'); void g.getBBox(); g.classList.add(ok ? 'flash-ok' : 'flash-no'); setTimeout(() => g.classList.remove('flash-ok', 'flash-no'), 420); };
+  const lit = (id, on) => edges[id] && edges[id].el.classList.toggle('on', on);
+
+  // ── the world: tokens, wallets, reasons
+  const SYMS = ['CATGPT', 'FLYBRAIN', 'RIDE', 'BYCOCKET', 'SEXFLY', 'PONS', 'CRUMBS', 'SHROOM', 'SLINK', 'MEME', 'JUGG', 'FLY', 'GLORP', 'HOOD', 'ASTRA', 'WIVES', 'NOBI', 'CLAM'];
+  const WALLETS = [['unipcs', 96], ['ogle', 91], ['0xAvast', 90], ['AvgJoesCrypto', 89], ['frankdegods', 87], ['soby0x', 87], ['picadura', 84], ['rodotfun', 84], ['fr3ak', 83], ['m0f0', 80]];
+  const REASON = {
+    prov: ['gifted fill · not their buy', 'direct router call · not theirs', 'dust · 0.4% of their median'],
+    cohort: ['one wallet, not three', 'two of three score under 60', 'they are averaging down, not entering', 'their own bag · they seeded it'],
+    token: ['seeded · 4 trusted got dust', 'liquidity $6.1k · under the floor', 'sell probe failed · honeypot', 'tax 12% · over the cap'],
+    market: ['+41% above cohort cost', 'spread 7% · no fill at that', 'candle exhaustion · 3 red in a row', 'liquidity thinning while we look'],
+    risk: ['exposure cap 20% · full', 'five open already', 'day at −5.1% · stop'],
+    exec: ['slippage over 3% · walked away', 'router reverted twice'],
+    park: ['never came back to cost', 'seeded while parked'],
+  };
+  const P_FAIL = { prov: .09, cohort: .16, token: .21, market: .28, risk: .10, exec: .05, parkRetry: .62 };
+  const EXITS = ['cohort leaving · 3 of 7 out', 'trail −18% off the high', 'time · 6 h, no move', 'take half at 2×', 'veto · token seeded', 'cohort leaving · 5 of 7 out', 'day cap · flat everything'];
+
+  // ── state
+  const S = { t: 0, clock: 23 * 3600 + 50 * 60, deposit: 25000, dep0: 25000, cmp: 0, burn: 0, pnlDay: 0, wins: 0, closed: 0, declined: 0, open: [], units: [], groups: {}, tape: [], exits: [], log: [], spawnT: 0.6, scores: WALLETS.map(([w, s]) => ({ w, s, d: 0 })), tapeN: 0 };
+  const hhmmss = (s) => { s = Math.floor(s) % 86400; return [s / 3600, s / 60 % 60, s % 60].map((v) => String(Math.floor(v)).padStart(2, '0')).join(':'); };
+  const money = (v) => (v < 0 ? '−' : '') + '$' + Math.abs(Math.round(v)).toLocaleString('en-US');
+  const log = (sym, src, kind, text) => { S.log.unshift({ t: hhmmss(S.clock), sym, src, kind, text }); S.log.length = Math.min(S.log.length, 4); };
+
+  // a unit is one signal on its way through the gates
+  const bez = (e, t) => { const u = 1 - t; return [u * u * e.a[0] + 2 * u * t * e.c[0] + t * t * e.b[0], u * u * e.a[1] + 2 * u * t * e.c[1] + t * t * e.b[1]]; };
+  const SPEED = 190; // px per second
+  const elen = (e) => { let L = 0, p = e.a; for (let i = 1; i <= 12; i++) { const q2 = bez(e, i / 12); L += Math.hypot(q2[0] - p[0], q2[1] - p[1]); p = q2; } return L; };
+  for (const e of Object.values(edges)) e.L = elen(e);
+  const unit = (sym, colour, edgeId, then, opts = {}) => { const u = { sym, colour, edge: edges[edgeId], edgeId, t: 0, then, label: opts.label || '', size: opts.size || 5, dim: opts.dim || false }; S.units.push(u); lit(edgeId, true); return u; };
+  const dwell = (u, sec, then) => { u.dwell = sec; u.dwellThen = then; u.edge = null; };
+
+  const spawn = () => {
+    const src = pick(['burst', 'burst', 'launch', 'signal', 'signal']);
+    const sym = pick(SYMS), colour = src === 'burst' ? C.yellow : src === 'launch' ? C.green : C.white;
+    const why = src === 'burst' ? `burst +${rnd(4.0, 5.2).toFixed(1)} · ${3 + Math.floor(rand() * 5)} wallets` : src === 'launch' ? `launch · heat ${rnd(2.5, 4.4).toFixed(1)}` : `conviction ${rnd(5.0, 7.5).toFixed(1)}`;
+    counts[src].ok++;
+    const w = pick(WALLETS);
+    S.tape.unshift({ t: hhmmss(S.clock), w: w[0], sym, usd: Math.round(rnd(300, 9000)) }); S.tape.length = Math.min(S.tape.length, 9); S.tapeN++;
+    unit(sym, colour, 'b-' + src, (u) => dwell(u, .35, () => unit(sym, colour, src + '-prov', (u2) => gateProv(u2, sym, colour, why, src))));
+  };
+  const gateProv = (u, sym, colour, why, src) => dwell(u, .5, () => {
+    if (rand() < P_FAIL.prov) return reject(sym, colour, 'prov', why, src);
+    counts.prov.ok++; flash('prov', true); paintCounts();
+    const gid = sym + '#' + S.t.toFixed(2); S.groups[gid] = { sym, colour, why, src, results: {}, n: 0 };
+    for (const g of ['cohort', 'token', 'market']) unit(sym, colour, 'prov-' + g, (u2) => gateProbe(u2, gid, g), { size: 4 });
+  });
+  const gateProbe = (u, gid, g) => dwell(u, .55, () => {
+    const G = S.groups[gid]; if (!G) return;
+    const fail = rand() < P_FAIL[g];
+    G.results[g] = !fail; counts[g][fail ? 'no' : 'ok']++; flash(g, !fail); paintCounts();
+    if (fail) { const r = pick(REASON[g]); G.reason = G.reason || { g, r }; log(G.sym, G.why, 'no', `${gates[g].name} ✕  ${r}`); return fall(u, g, G.colour); }
+    unit(G.sym, G.colour, g + '-confirm', (u2) => join(u2, gid, g), { size: 4 });
+  });
+  const join = (u, gid, g) => dwell(u, .25, () => {
+    const G = S.groups[gid]; if (!G) return; G.n++;
+    if (G.n < Object.keys(G.results).filter((k) => G.results[k]).length) return;  // wait for the siblings that passed
+    if (Object.keys(G.results).length < 3) { G.pending = true; return; }           // a sibling is still on its way
+    resolveJoin(gid);
+  });
+  const resolveJoin = (gid) => {
+    const G = S.groups[gid]; if (!G) return; delete S.groups[gid];
+    const ok = G.results.cohort && G.results.token && G.results.market;
+    if (ok) { counts.confirm.ok++; flash('confirm', true); paintCounts(); log(G.sym, G.why, 'ok', 'CONFIRM ✓  three of three'); return unit(G.sym, G.colour, 'confirm-risk', (u) => gateRisk(u, G)); }
+    if (G.results.cohort && G.results.token && !G.results.market) {
+      counts.confirm.no++; flash('confirm', false); paintCounts(); log(G.sym, G.why, 'wait', `PARK  ${G.reason ? G.reason.r : 'price'} · re-check`);
+      return unit(G.sym, G.colour, 'confirm-park', (u) => dwell(u, 2.6, () => {
+        if (rand() < P_FAIL.parkRetry) { counts.park.ok++; flash('park', true); paintCounts(); log(G.sym, G.why, 'wait', 'PARK → MARKET  price back at cohort cost');
+          return unit(G.sym, G.colour, 'park-market', (u2) => dwell(u2, .55, () => { const fail = rand() < .35; counts.market[fail ? 'no' : 'ok']++; flash('market', !fail); paintCounts();
+            if (fail) { log(G.sym, G.why, 'no', `MARKET ✕  ${pick(REASON.market)}`); return fall(u2, 'market', G.colour); }
+            unit(G.sym, G.colour, 'market-confirm', (u3) => dwell(u3, .25, () => { counts.confirm.ok++; flash('confirm', true); paintCounts(); log(G.sym, G.why, 'ok', 'CONFIRM ✓  second pass'); unit(G.sym, G.colour, 'confirm-risk', (u4) => gateRisk(u4, G)); })); })); }
+        counts.park.no++; flash('park', false); paintCounts(); log(G.sym, G.why, 'no', `PARK ✕  ${pick(REASON.park)}`); fall(u, 'park', G.colour); }));
+    }
+    counts.confirm.no++; flash('confirm', false); paintCounts();
+  };
+  const gateRisk = (u, G) => dwell(u, .5, () => {
+    const full = S.open.length >= 5, day = S.pnlDay < -S.dep0 * .06;
+    const fail = full || day || rand() < P_FAIL.risk;
+    if (fail) { const r = full ? REASON.risk[1] : day ? REASON.risk[2] : REASON.risk[0]; counts.risk.no++; flash('risk', false); paintCounts(); log(G.sym, G.why, 'no', `RISK ✕  ${r}`); return fall(u, 'risk', G.colour); }
+    const size = clamp(rnd(1.2, 4.0), 1, 4);
+    counts.risk.ok++; flash('risk', true); paintCounts();
+    unit(G.sym, G.colour, 'risk-exec', (u2) => dwell(u2, .45, () => {
+      if (rand() < P_FAIL.exec) { counts.exec.no++; flash('exec', false); paintCounts(); log(G.sym, G.why, 'no', `EXECUTE ✕  ${pick(REASON.exec)}`); return fall(u2, 'exec', G.colour); }
+      counts.exec.ok++; flash('exec', true); paintCounts(); log(G.sym, G.why, 'ok', `EXECUTE ✓  size ${size.toFixed(1)}% · slippage 1.${Math.floor(rand() * 9)}%`);
+      unit(G.sym, G.colour, 'exec-book', () => openPos(G, size), { label: `${size.toFixed(1)}%` });
+    }));
+  });
+  const openPos = (G, size) => { S.open.push({ sym: G.sym, colour: G.colour, size, usd: S.deposit * size / 100, mx: 1, pnl: 0, age: 0, hold: rnd(7, 16), drift: rnd(-.03, .07), vetoed: false }); paintBook(); };
+  const closePos = (p, why, veto = false) => {
+    S.open.splice(S.open.indexOf(p), 1);
+    const pnl = p.usd * p.pnl;
+    const u = unit(p.sym, pnl >= 0 ? C.green : C.crimson, 'book-manage', (u2) => dwell(u2, .45, () => {
+      flash('manage', pnl >= 0); S.closed++; if (pnl > 0) S.wins++;
+      S.exits.unshift({ sym: p.sym, why, pnl }); S.exits.length = Math.min(S.exits.length, 7);
+      log(p.sym, `${p.size.toFixed(1)}% · ${p.mx.toFixed(2)}×`, pnl >= 0 ? 'ok' : 'no', `CLOSE  ${why}  ${money(pnl)}`);
+      S.pnlDay += pnl;
+      if (pnl > 0) { S.deposit += pnl / 2; S.cmp += pnl / 2; S.burn += pnl / 2; } else S.deposit += pnl;
+      unit(p.sym, pnl >= 0 ? C.green : C.crimson, 'manage-dep', () => {}, { label: money(pnl) });
+      // the outcome moves the scores of the wallets that were in it
+      const w = pick(S.scores), d = pnl >= 0 ? 1 : -1; w.s = clamp(w.s + d, 40, 99); w.d = d;
+      unit(p.sym, C.amber, 'manage-brain', () => paintScores(), { label: `${w.w} ${d > 0 ? '+' : '−'}1`, size: 4 });
+      paintBook(); paintKpis();
+    }));
+    if (veto) u.colour = C.crimson;
+  };
+  const reject = (sym, colour, g, why, src) => { counts[g].no++; flash(g, false); paintCounts(); log(sym, why, 'no', `${gates[g].name} ✕  ${pick(REASON[g])}`); fall({ sym, colour }, g, colour); };
+  const fall = (u, g, colour) => { S.declined++; unit(u.sym, C.crimson, 'rej-' + g, () => {}, { dim: true, size: 3.5 }); paintKpis(); };
+
+  // ── painting the panels
+  const $ = (id) => document.getElementById(id);
+  const paintKpis = () => { $('kDep').textContent = money(S.deposit); const p = $('kPnl'); p.textContent = money(S.pnlDay); p.className = 'v ' + (S.pnlDay > 0 ? 'g' : S.pnlDay < 0 ? 'c' : ''); $('kOpen').textContent = String(S.open.length); $('kHit').textContent = S.closed ? Math.round(S.wins / S.closed * 100) + '%' : '—'; $('kDec').textContent = String(S.declined);
+    $('depV').textContent = money(S.deposit); $('depM').firstElementChild.style.width = clamp(S.deposit / S.dep0 * 40, 4, 96) + '%'; $('cmp').textContent = money(S.cmp); $('burn').textContent = money(S.burn); };
+  const paintBook = () => { $('bookN').textContent = `${S.open.length} / 5`; const r = $('posRows'); r.innerHTML = S.open.length ? '' : '<div class="empty">nothing open</div>';
+    for (const p of S.open) { const d = document.createElement('div'); d.className = 'pos'; d.innerHTML = `<span class="sym">${p.sym}</span><span class="sz">${p.size.toFixed(1)}%</span><span class="mx">${p.mx.toFixed(2)}×</span><span class="pnl ${p.pnl >= 0 ? 'g' : 'c'}">${(p.pnl * 100 >= 0 ? '+' : '−')}${Math.abs(p.pnl * 100).toFixed(1)}%</span>`; r.appendChild(d); }
+    $('exitN').textContent = String(S.closed); const e = $('exitRows'); e.innerHTML = '';
+    for (const x of S.exits) { const d = document.createElement('div'); d.className = 'pos'; d.innerHTML = `<span class="sym">${x.sym}</span><span class="sz" style="grid-column:2/4">${x.why}</span><span class="pnl ${x.pnl >= 0 ? 'g' : 'c'}">${money(x.pnl)}</span>`; e.appendChild(d); } };
+  const paintTape = () => { $('tapeN').textContent = String(S.tapeN); const r = $('tapeRows'); r.innerHTML = ''; S.tape.forEach((f, i) => { const d = document.createElement('div'); d.className = 'row' + (i === 0 ? ' fresh' : ''); d.innerHTML = `<span class="t">${f.t}</span><span class="w">${f.w}</span><span class="s">$${f.sym}</span><span class="u">$${f.usd.toLocaleString('en-US')}</span>`; r.appendChild(d); }); };
+  const paintScores = () => { const r = $('scoreRows'); r.innerHTML = ''; for (const s of S.scores) { const d = document.createElement('div'); d.className = 'score'; d.innerHTML = `<span class="w">${s.w}</span><span class="m"><i style="width:${s.s}%"></i></span><span class="n">${s.s}</span><span class="d ${s.d > 0 ? 'up' : s.d < 0 ? 'dn' : ''}">${s.d > 0 ? '▲' : s.d < 0 ? '▼' : ''}</span>`; r.appendChild(d); } };
+  const paintLog = () => { const r = $('log'); r.innerHTML = ''; for (const l of S.log) { const d = document.createElement('div'); d.innerHTML = `<span class="t">${l.t}</span><span class="s">$${l.sym}</span><span class="src">${l.src}</span><span class="${l.kind}">${l.text}</span>`; r.appendChild(d); } };
+  const paintRail = () => { railL.innerHTML = ''; el('tspan', {}, railL, 'DECLINED  '); el('tspan', { class: 'n' }, railL, String(S.declined)); el('tspan', {}, railL, '   ·   a reason for every one, in the ledger'); };
+
+  // ── the units, drawn on the canvas over the lattice
+  const cv = $('units'), pr = window.devicePixelRatio || 1; cv.width = 1600 * pr; cv.height = 900 * pr; const c = cv.getContext('2d'); c.setTransform(pr, 0, 0, pr, 0, 0);
+  const drawUnits = () => {
+    c.clearRect(0, 0, 1600, 900);
+    c.font = '700 8.5px "JetBrains Mono", monospace'; c.textBaseline = 'middle';
+    for (const u of S.units) {
+      const p = u.edge ? bez(u.edge, u.t) : u.pos;
+      if (!p) continue;
+      c.globalAlpha = u.dim ? .55 : 1;
+      c.fillStyle = u.colour; c.beginPath(); c.arc(p[0], p[1], u.size, 0, 7); c.fill();
+      if (u.dwell) { c.strokeStyle = u.colour; c.lineWidth = 1; c.beginPath(); c.arc(p[0], p[1], u.size + 4 + Math.sin(S.t * 9) * 1.5, 0, 7); c.stroke(); }
+      c.fillStyle = u.colour; c.fillText(u.label || u.sym, p[0] + u.size + 5, p[1] + (u.edge && u.edge.a[1] === u.edge.b[1] ? -9 : 0));
+      c.globalAlpha = 1;
+    }
+  };
+
+  // ── time
+  const step = (dt) => {
+    S.t += dt; S.clock += dt * 12;
+    S.spawnT -= dt; if (S.spawnT <= 0) { spawn(); S.spawnT = rnd(1.4, 2.6); paintTape(); }
+    for (const u of S.units.slice()) {
+      if (u.dwell) { u.dwell -= dt; if (u.dwell <= 0) { u.dwell = 0; S.units.splice(S.units.indexOf(u), 1); u.dwellThen(u); } continue; }
+      if (!u.edge) continue;
+      u.t += dt * SPEED / u.edge.L;
+      if (u.t >= 1) { u.t = 1; u.pos = bez(u.edge, 1); const e = u.edgeId; S.units.splice(S.units.indexOf(u), 1); lit(e, S.units.some((x) => x.edgeId === e)); u.then(u); if (u.dwell) S.units.push(u); }
+    }
+    // the groups whose last sibling fell: resolve once its survivors have arrived
+    for (const [gid, G] of Object.entries(S.groups)) { if (Object.keys(G.results).length === 3 && G.n >= Object.values(G.results).filter(Boolean).length) resolveJoin(gid); }
+    // the book lives
+    for (const p of S.open.slice()) {
+      p.age += dt; p.pnl += (p.drift * dt) + rnd(-.012, .012); p.mx = 1 + p.pnl; if (p.pnl > .95 && !p.half) { p.half = true; }
+      if (!p.vetoed && rand() < dt * .012) { p.vetoed = true; closePos(p, EXITS[4], true); continue; }
+      if (p.age > p.hold || p.pnl < -.22 || p.pnl > 1.6) closePos(p, p.pnl > 1.6 ? EXITS[3] : p.pnl < -.22 ? EXITS[1] : pick([EXITS[0], EXITS[2], EXITS[5]]));
+    }
+    if (Math.floor(S.t * 4) !== Math.floor((S.t - dt) * 4)) { paintBook(); paintKpis(); paintLog(); paintRail(); $('clock').textContent = hhmmss(S.clock); }
+  };
+
+  // ── the brain, small, at the top of its panel
+  (() => {
+    const bcv = $('brainCv'); const W = 222, H = 200; bcv.width = W * pr; bcv.height = H * pr; const bc = bcv.getContext('2d'); bc.setTransform(pr, 0, 0, pr, 0, 0);
+    const BCX = W / 2, BCY = H * .47, BSCALE = 78, k = BSCALE / 200; let s2 = 7;
+    const r2 = () => { s2 ^= s2 << 13; s2 >>>= 0; s2 ^= s2 >> 17; s2 ^= s2 << 5; s2 >>>= 0; return s2 / 4294967296; }; const rr = (a, b) => a + r2() * (b - a);
+    const PTS = []; const push = (x, y, z, tint, w, b) => PTS.push({ x, y, z, ph: rr(0, 6.28), sp: rr(.25, .9), amp: rr(.003, .012), b, tint, w });
+    const hemiR = (u, v) => { const f = Math.cos(u), up = Math.cos(v); let R = 1; R *= 1 + .1 * f - .16 * f * f; R *= up > 0 ? 1 + .1 * up : 1 - .46 * Math.abs(up); R *= 1 + .2 * Math.max(0, -up) * Math.max(0, f) * 1.5; R *= 1 + .055 * Math.sin(u * 3 + v * 2); return R; };
+    const gy = (u, v) => Math.sin(u * 7.5 + v * 4.2) * Math.sin(v * 5.5 - u * 2.1);
+    for (let i = 0; i < 3000; i++) { const side = r2() < .5 ? -1 : 1, u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), g = gy(u, v); if (r2() > .3 + .7 * ((g + 1) / 2)) continue; const sh = r2() < .82 ? rr(.9, 1) : rr(.45, .9), R = hemiR(u, v) * sh * (1 + g * .045); const x = Math.sin(v) * Math.cos(u) * .5 * R + side * .235; if (Math.abs(x) < .052) continue; push(x, Math.cos(v) * .385 * R - .045, Math.sin(v) * Math.sin(u) * .415 * R, 0, rr(.9, 2.1), clamp(.3 + ((g + 1) / 2) * .62 + rr(-.1, .1), .06, 1)); }
+    for (let i = 0; i < 800; i++) { const u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), sh = r2() < .8 ? rr(.88, 1) : rr(.5, .88), f = Math.sin(v * 22) * .5 + .5; if (r2() > .25 + .75 * f) continue; const R = (1 - .22 * Math.max(0, Math.cos(v))) * sh; push(Math.sin(v) * Math.cos(u) * .27 * R, Math.cos(v) * .138 * R + .362, Math.sin(v) * Math.sin(u) * .215 * R - .3, 1, rr(.6, 1.4), clamp(.34 + f * .5 + rr(-.08, .08), .1, 1)); }
+    for (let i = 0; i < 260; i++) { const t = r2(), w = .115 - t * .052, a = rr(0, 6.28), on = r2() < .75, q2 = on ? w : w * Math.sqrt(r2()); push(Math.cos(a) * q2, .36 + t * .46, Math.sin(a) * q2 - .075, 2, rr(.6, 1.3), clamp(.3 + (on ? .4 : .05) + rr(-.08, .08), .1, 1)); }
+    const TINT = [[180, 235, 255], [120, 255, 205], [150, 205, 255]];
+    const draw = (T) => { bc.clearRect(0, 0, W, H); const yaw = T * .3, roll = Math.sin(T * .21) * .26, cy0 = Math.cos(yaw), sy0 = Math.sin(yaw), cr = Math.cos(roll), sr = Math.sin(roll);
+      const scanD = ((T * .155) % 1) * 1.5 - .75, sa = T * .11, nx = Math.cos(sa), nz = Math.sin(sa);
+      for (const p of PTS) { const br = 1 + Math.sin(T * p.sp + p.ph) * p.amp * 3.2, x = p.x * br, y = p.y * br, z = p.z * br; const X = x * cy0 + z * sy0; let Z = -x * sy0 + z * cy0; const Y = y * cr - Z * sr; Z = y * sr + Z * cr; const ps = 2.1 / (2.1 + Z * .9), sx = BCX + X * BSCALE * ps, sy = BCY + Y * BSCALE * ps, d = clamp((1.1 - Z) / 2.2, 0, 1);
+        const sc = Math.abs(x * nx + z * nz - scanD) < .045 ? 1 : 0, a = clamp((.13 + p.b * .8) * (.42 + d * .58) + sc * .5, 0, 1), tc = TINT[p.tint]; bc.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},${a.toFixed(2)})`; const sz = Math.max(.6, p.w * (.55 + d * .85) * ps * k * (1 + sc * .6)); bc.fillRect(sx, sy, sz * 1.6, sz * 1.6); }
+      for (const sd of [-1, 1]) { const ex = BCX + sd * BSCALE * .17, ey = BCY - BSCALE * .06, ew = BSCALE * .052, eh = BSCALE * .066; bc.fillStyle = 'rgba(2,5,10,.96)'; bc.beginPath(); bc.ellipse(ex, ey, ew, eh, 0, 0, 7); bc.fill(); bc.strokeStyle = 'rgba(150,220,255,.8)'; bc.lineWidth = 1; bc.stroke(); bc.fillStyle = C.green; bc.beginPath(); bc.arc(ex + ew * .3, ey - eh * .1, ew * .42, 0, 7); bc.fill(); } };
+    window.__brain = draw;
+  })();
+
+  // ── run
+  paintScores(); paintTape(); paintBook(); paintKpis(); paintLog(); paintRail(); paintCounts();
+  if (reduced) {  // fast-forward a busy hour, then hold one frame of it
+    for (let i = 0; i < 70 * 30; i++) step(1 / 30);
+    paintBook(); paintKpis(); paintLog(); paintRail(); paintTape(); paintScores();
+    drawUnits(); window.__brain(4.33);
+    return;
+  }
+  let last = performance.now();
+  (function loop() { requestAnimationFrame(loop); const now = performance.now(); const dt = Math.min(.05, (now - last) / 1000); last = now; step(dt); drawUnits(); window.__brain(S.t + 4.33); })();
+})();
+</script>
+</body>
+</html>
