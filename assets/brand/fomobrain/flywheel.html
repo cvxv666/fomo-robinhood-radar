@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOMOBRAIN — the flywheel</title>
+<!--
+  The flywheel as a page: the same 1600 x 900 composition as make_flywheel.py, built live.
+  The ring, arcs, stations and labels are SVG; units travel the arcs; the brain at the hub is
+  the home page's particle cloud, turning and firing. Fits any window (the board scales), and
+  holds still under prefers-reduced-motion or with ?still=1 for a screenshot.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root {
+    --black: #000; --white: #fff; --carbon: #606060; --graphite: #949494;
+    --green: #00ff85; --crimson: #ff003d; --amber: #ff8a00; --yellow: #fcff76; --cyan: #8fd9ff;
+    --sans: "Space Grotesk", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  html, body { margin: 0; height: 100%; background: var(--black); color: var(--white); overflow: hidden; }
+  .stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  .board { position: relative; width: 1600px; height: 900px; transform-origin: center center; background: var(--black); }
+  .board > svg { position: absolute; inset: 0; width: 1600px; height: 900px; }
+  #hub { position: absolute; left: 610px; top: 299px; width: 380px; height: 380px; }
+
+  /* type, in the design units of the board */
+  .mono { font-family: var(--mono); }
+  .sans { font-family: var(--sans); }
+  text { fill: var(--white); }
+  .eyebrow { font-family: var(--mono); font-size: 12.5px; letter-spacing: .13em; fill: var(--graphite); }
+  .title { font-family: var(--sans); font-weight: 300; font-size: 54px; letter-spacing: .07em; }
+  .sub { font-family: var(--mono); font-size: 13px; letter-spacing: .05em; fill: var(--graphite); }
+  .lock-b { font-family: var(--sans); font-weight: 700; font-size: 19px; letter-spacing: .05em; }
+  .lock-l { font-family: var(--sans); font-weight: 300; font-size: 19px; letter-spacing: .05em; }
+  .st-name { font-family: var(--mono); font-weight: 700; font-size: 17px; letter-spacing: .1em; }
+  .st-sub { font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; fill: var(--graphite); }
+  .arc-l { font-family: var(--mono); font-weight: 700; font-size: 12.5px; letter-spacing: .08em; }
+  .spoke-l { font-family: var(--mono); font-weight: 700; font-size: 11px; letter-spacing: .07em; fill: var(--cyan); }
+  .loop-b { font-family: var(--mono); font-weight: 700; font-size: 12.5px; letter-spacing: .08em; fill: var(--amber); }
+  .loop-s { font-family: var(--mono); font-size: 11.5px; letter-spacing: .03em; fill: var(--graphite); }
+  .icon-t { font-family: var(--mono); font-weight: 700; font-size: 12px; }
+  .burn-n { font-family: var(--mono); font-weight: 700; font-size: 20px; letter-spacing: .13em; fill: var(--crimson); }
+  .rail { font-family: var(--mono); font-weight: 700; font-size: 14.5px; letter-spacing: .1em; }
+  .rail .arrow { font-weight: 400; fill: var(--amber); }
+  .led { animation: blink 2.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .led { animation: none; } }
+</style>
+</head>
+<body>
+<div class="stage"><div class="board" id="board">
+  <svg id="art" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" aria-labelledby="t">
+    <title id="t">The $FOMOBRAIN flywheel: every road ends at burn</title>
+    <defs>
+      <marker id="h-white" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 L12 6 L0 12 Z" fill="#fff"/></marker>
+      <marker id="h-amber" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 L12 6 L0 12 Z" fill="#ff8a00"/></marker>
+      <marker id="h-crimson" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 L12 6 L0 12 Z" fill="#ff003d"/></marker>
+      <marker id="h-green" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 L12 6 L0 12 Z" fill="#00ff85"/></marker>
+      <marker id="h-graphite" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 L12 6 L0 12 Z" fill="#949494"/></marker>
+    </defs>
+
+    <!-- header -->
+    <circle cx="64" cy="58" r="4" fill="#00ff85" class="led"/>
+    <text class="eyebrow" x="78" y="63">$FOMOBRAIN  ·  THE FLYWHEEL  ·  ROBINHOOD CHAIN</text>
+    <text class="title" x="60" y="122">EVERY ROAD ENDS AT BURN</text>
+    <text class="sub" x="60" y="151">signals, fees and the algo itself are paid in $FOMOBRAIN; what is paid is destroyed</text>
+    <g transform="translate(1492 44)"><g transform="scale(1)">
+      <rect x="0.5" y="0.5" width="47" height="47" stroke="#fff" fill="none"/>
+      <path d="M42 44 A38 38 0 0 0 4 6" stroke="#606060" fill="none"/>
+      <path d="M30 44 A26 26 0 0 0 4 18" stroke="#fcff76" fill="none"/>
+      <path d="M18 44 A14 14 0 0 0 4 30" stroke="#606060" fill="none"/>
+      <path d="M4 44 L33.1 19.6" stroke="#fff"/>
+      <circle cx="23.9" cy="27.3" r="3" fill="#00ff85"/>
+    </g></g>
+    <text class="lock-b" x="1478" y="66" text-anchor="end">FOMO</text>
+    <text class="lock-l" x="1478" y="88" text-anchor="end">BRAIN</text>
+    <line x1="60" y1="172" x2="1540" y2="172" stroke="#606060"/>
+
+    <!-- the wheel: built by the script below -->
+    <g id="wheel"></g>
+
+    <!-- the rail -->
+    <line x1="60" y1="848" x2="1540" y2="848" stroke="#606060"/>
+    <text class="rail" x="60" y="880">MORE SUBSCRIBERS <tspan class="arrow">→</tspan> <tspan fill="#ff003d">MORE BURN</tspan></text>
+    <text class="rail" x="1540" y="880" text-anchor="end">MORE VOLUME <tspan class="arrow">→</tspan> <tspan fill="#ff8a00">BIGGER DEPOSIT</tspan> <tspan class="arrow">→</tspan> MORE PROFIT <tspan class="arrow">→</tspan> BIGGER BUYBACK <tspan class="arrow">→</tspan> <tspan fill="#ff003d">MORE BURN</tspan></text>
+  </svg>
+  <canvas id="hub"></canvas>
+</div></div>
+
+<script>
+(() => {
+  const q = new URLSearchParams(location.search);
+  const reduced = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || q.has('still');
+
+  // ── fit the board to the window
+  const board = document.getElementById('board');
+  const fit = () => { const s = Math.min(innerWidth / 1600, innerHeight / 900); board.style.transform = `scale(${s})`; };
+  addEventListener('resize', fit); fit();
+
+  // ── the wheel
+  const NS = 'http://www.w3.org/2000/svg';
+  const W = { cx: 800, cy: 505, R: 230, NR: 44 };
+  const ST = { trades: 162, fees: 234, deposit: 306, buyback: 18, burn: 90 };
+  const rad = (a) => a * Math.PI / 180;
+  const at = (a, r = W.R) => [W.cx + Math.cos(rad(a)) * r, W.cy + Math.sin(rad(a)) * r];
+  const P = Object.fromEntries(Object.entries(ST).map(([k, a]) => [k, at(a)]));
+  const gap = Math.asin(W.NR / W.R) * 180 / Math.PI + 2.5;
+  const f = (n) => n.toFixed(2);
+  const arcPath = (a0, a1, r = W.R, cx = W.cx, cy = W.cy) => {
+    const [x0, y0] = [cx + Math.cos(rad(a0)) * r, cy + Math.sin(rad(a0)) * r];
+    const [x1, y1] = [cx + Math.cos(rad(a1)) * r, cy + Math.sin(rad(a1)) * r];
+    return `M${f(x0)} ${f(y0)} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${f(x1)} ${f(y1)}`;
+  };
+  const out = [];
+  const el = (s) => out.push(s);
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const text = (cls, x, y, s, anchor = 'start', extra = '') => el(`<text class="${cls}" x="${f(x)}" y="${f(y)}" text-anchor="${anchor}" ${extra}>${esc(s)}</text>`);
+
+  // the ring, faint
+  el(`<circle cx="${W.cx}" cy="${W.cy}" r="${W.R}" fill="none" stroke="#606060"/>`);
+
+  // the arcs, each with a head and units travelling it
+  const arcs = [
+    ['trades', 'fees', '#fff', 'white', 3, false],
+    ['fees', 'deposit', '#fff', 'white', 3, false],
+    ['deposit', 'buyback', '#ff8a00', 'amber', 3, false],
+    ['buyback', 'burn', '#ff003d', 'crimson', 4, false],
+    ['burn', 'trades', '#949494', 'graphite', 0, true],
+  ];
+  arcs.forEach(([a, b, colour, head, dots, dashed], i) => {
+    let a0 = ST[a] + gap, a1 = ST[b] - gap; if (a1 < a0) a1 += 360;
+    const id = `arc-${a}`;
+    el(`<path id="${id}" d="${arcPath(a0, a1)}" fill="none" stroke="${colour}" stroke-width="2" ${dashed ? 'stroke-dasharray="6 5"' : ''} marker-end="url(#h-${head})"/>`);
+    for (let k = 0; k < dots; k++) {
+      const begin = -((k / dots) * 4).toFixed(2);
+      el(`<circle r="3" fill="${colour}"><animateMotion dur="4s" begin="${begin}s" repeatCount="indefinite"><mpath href="#${id}"/></animateMotion></circle>`);
+    }
+  });
+
+  // what each arc carries, just outside the ring at its middle
+  const arcLabel = (a, b, s, colour, o = 30) => {
+    let a0 = ST[a], a1 = ST[b]; if (a1 < a0) a1 += 360;
+    const m = (a0 + a1) / 2, c = Math.cos(rad(m));
+    const [x, y] = at(m, W.R + o);
+    text('arc-l', x, y + 4.5, s, c < -0.3 ? 'end' : c > 0.3 ? 'start' : 'middle', `fill="${colour}"`);
+  };
+  arcLabel('trades', 'fees', 'EVERY TRADE PAYS', '#fff');
+  arcLabel('fees', 'deposit', 'CREATOR FEES FUND THE STAKE', '#fff', 34);
+  arcLabel('deposit', 'buyback', '50% OF PROFIT', '#ff8a00');
+  arcLabel('buyback', 'burn', 'BOUGHT OFF THE MARKET', '#ff003d');
+  arcLabel('burn', 'trades', 'LESS SUPPLY · SAME DEMAND', '#949494');
+
+  // the deposit compounds: a loop on its own station
+  {
+    const [dx, dy] = P.deposit, lx = dx + 40, ly = dy - 40, lr = 28;
+    el(`<path d="${arcPath(150, 460, lr, lx, ly)}" fill="none" stroke="#ff8a00" stroke-width="1.6" marker-end="url(#h-amber)"/>`);
+    text('loop-b', lx + 38, ly - 6, '50% BACK IN');
+    text('loop-s', lx + 38, ly + 11, 'the stake compounds');
+  }
+
+  // the two roads from outside, both ending at the same station
+  const sig = [272, 690], alg = [1328, 690], [bx, by] = P.burn;
+  const curve = (id, p0, p1, p2, colour, head) => {
+    el(`<path id="${id}" d="M${p0[0]} ${p0[1]} Q${p1[0]} ${p1[1]} ${p2[0]} ${p2[1]}" fill="none" stroke="${colour}" stroke-width="2" marker-end="url(#h-${head})"/>`);
+    for (let k = 0; k < 4; k++) el(`<circle r="3" fill="${colour}"><animateMotion dur="4s" begin="${-(k)}s" repeatCount="indefinite"><mpath href="#${id}"/></animateMotion></circle>`);
+  };
+  curve('road-sig', [sig[0] + 44, sig[1] + 8], [560, 800], [bx - 54, by + 14], '#00ff85', 'green');
+  curve('road-alg', [alg[0] - 44, alg[1] + 8], [1040, 800], [bx + 54, by + 14], '#fff', 'white');
+  text('arc-l', 545, 812, '100% BURNED', 'middle', 'fill="#00ff85"');
+  text('arc-l', 1055, 812, '100% BURNED', 'middle', 'fill="#fff"');
+
+  // spokes: the brain makes the signals, and the signals the algo trades
+  const spoke = (x0, y0, x1, y1) => el(`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#8fd9ff" stroke-width="1.2" stroke-dasharray="6 5"/>`);
+  spoke(W.cx - 84, W.cy + 68, sig[0] + 36, sig[1] - 28);
+  spoke(W.cx + 84, W.cy + 68, alg[0] - 36, alg[1] - 28);
+  spoke(W.cx + 66, W.cy - 84, P.deposit[0] - 30, P.deposit[1] + 34);
+  text('spoke-l', 600, 668, 'MAKES THE SIGNALS', 'end');
+  text('spoke-l', 1010, 668, 'MAKES THE SIGNALS IT TRADES');
+
+  // the hub's caption (the brain itself is the canvas over the svg)
+  text('st-name', W.cx, W.cy + 104, 'THE BRAIN', 'middle', 'letter-spacing=".12em"');
+  text('st-sub', W.cx, W.cy + 123, '169 traders · one mind · reads the chain every 20 s', 'middle');
+
+  // ── the stations, over the arcs
+  const K = 1.4;
+  const node = (x, y, r, colour, dashed = false, w = 2) =>
+    el(`<circle cx="${f(x)}" cy="${f(y)}" r="${r}" fill="#000" stroke="${colour}" stroke-width="${w}" ${dashed ? 'stroke-dasharray="6 6"' : ''}/>`);
+  const icons = {
+    candles: (x, y) => [[14, true], [20, false], [26, true]].map(([h, up], i) => {
+      h *= K; const cx = x + (-12 + i * 12) * K, c = up ? '#00ff85' : '#ff003d';
+      return `<line x1="${f(cx)}" y1="${f(y - h / 2 - 5 * K)}" x2="${f(cx)}" y2="${f(y + h / 2 + 5 * K)}" stroke="${c}" stroke-width="1.2"/>
+              <rect x="${f(cx - 3.5 * K)}" y="${f(y - h / 2)}" width="${f(7 * K)}" height="${f(h)}" fill="#000" stroke="${c}" stroke-width="1.4"/>`;
+    }).join(''),
+    fee: (x, y) => { const r = 15 * K; const a0 = rad(300), a1 = rad(360);
+      return `<circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="#fff" stroke-width="1.4"/>
+              <path d="M${x} ${y} L${f(x + Math.cos(a0) * r)} ${f(y + Math.sin(a0) * r)} A${r} ${r} 0 0 1 ${f(x + Math.cos(a1) * r)} ${f(y + Math.sin(a1) * r)} Z" fill="#ff8a00"/>
+              <text class="icon-t" x="${x - K}" y="${y + 5 * K}" text-anchor="middle" font-size="${15 * K}">%</text>`; },
+    deposit: (x, y) => { const w = 40 * K, h = 14 * K, x0 = x - w / 2, y0 = y - h / 2, b = 2, seg = (w - b * 4 - b * 9) / 10;
+      let s = `<rect x="${f(x0)}" y="${f(y0)}" width="${f(w)}" height="${f(h)}" fill="none" stroke="#fff" stroke-width="${b}"/>`;
+      for (let i = 0; i < 10; i++) s += `<rect x="${f(x0 + b * 2 + i * (seg + b))}" y="${f(y0 + b * 2)}" width="${f(seg)}" height="${f(h - b * 4)}" fill="${i < 6 ? '#ff8a00' : '#606060'}"/>`;
+      return s; },
+    buyback: (x, y) => `<circle cx="${f(x + 6 * K)}" cy="${y}" r="${9 * K}" fill="none" stroke="#fff" stroke-width="1.4"/>
+              <line x1="${f(x - 22 * K)}" y1="${y}" x2="${f(x - 8 * K)}" y2="${y}" stroke="#fff" stroke-width="1.6" marker-end="url(#h-white)"/>
+              <text class="icon-t" x="${f(x + 6 * K)}" y="${f(y + 3.5 * K)}" text-anchor="middle" font-size="${8.5 * K}">50</text>`,
+    burn: (x, y) => { const r = 16 * K; return `<circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="#ff003d" stroke-width="2"/>
+              <line x1="${f(x - r * .72)}" y1="${f(y + r * .72)}" x2="${f(x + r * .72)}" y2="${f(y - r * .72)}" stroke="#ff003d" stroke-width="2"/>
+              <text class="icon-t" x="${x}" y="${f(y + 4 * K)}" text-anchor="middle" font-size="${12 * K}" fill="#ff003d">0</text>`; },
+    signal: (x, y) => `<rect x="${f(x - 19 * K)}" y="${f(y - 12 * K)}" width="${f(38 * K)}" height="${f(21 * K)}" rx="${4 * K}" fill="none" stroke="#00ff85" stroke-width="1.4"/>
+              <path d="M${f(x - 12 * K)} ${f(y + 9 * K)} L${f(x - 12 * K)} ${f(y + 15 * K)} L${f(x - 5 * K)} ${f(y + 9 * K)}" fill="#000" stroke="#00ff85" stroke-width="1.4"/>
+              <text class="icon-t" x="${x}" y="${f(y + 3 * K)}" text-anchor="middle" font-size="${8.5 * K}" fill="#00ff85">▲ 4.1</text>`,
+    algo: (x, y) => { let s = `<rect x="${f(x - 17 * K)}" y="${f(y - 13 * K)}" width="${f(34 * K)}" height="${f(26 * K)}" fill="none" stroke="#fff" stroke-width="1.4"/>`;
+      for (let i = 0; i < 4; i++) { const px = x + (-12 + i * 8) * K;
+        s += `<line x1="${f(px)}" y1="${f(y - 13 * K)}" x2="${f(px)}" y2="${f(y - 18 * K)}" stroke="#fff" stroke-width="1.2"/><line x1="${f(px)}" y1="${f(y + 13 * K)}" x2="${f(px)}" y2="${f(y + 18 * K)}" stroke="#fff" stroke-width="1.2"/>`; }
+      return s + `<text class="icon-t" x="${x}" y="${f(y + 4 * K)}" text-anchor="middle" font-size="${8.5 * K}">ALGO</text>`; },
+  };
+  const station = (p, r, colour, icon, name, sub, lx, ly, anchor, dashed = false, w = 2) => {
+    node(p[0], p[1], r, colour, dashed, w); el(icons[icon](p[0], p[1]));
+    if (name) { text('st-name', lx, ly, name, anchor, `fill="${colour}"`); text('st-sub', lx, ly + 19, sub, anchor); }
+  };
+  station(sig, 42, '#00ff85', 'signal', 'SIGNALS', 'in the bot · paid in $FOMOBRAIN', sig[0], sig[1] + 72, 'middle');
+  station(alg, 42, '#fff', 'algo', 'THE ALGO', 'sold or rented · paid in $FOMOBRAIN', alg[0], alg[1] + 72, 'middle');
+  station(P.trades, W.NR, '#00ff85', 'candles', 'TRADES', 'of $FOMOBRAIN', P.trades[0] - 60, P.trades[1] + 4, 'end');
+  station(P.fees, W.NR, '#fff', 'fee', 'CREATOR FEES', 'on every trade', P.fees[0] - 58, P.fees[1] - 8, 'end');
+  station(P.deposit, W.NR, '#ff8a00', 'deposit', 'THE DEPOSIT', "the algo trades it on the brain's signals", P.deposit[0] + 60, P.deposit[1] + 34, 'start');
+  station(P.buyback, W.NR, '#fff', 'buyback', 'BUYBACK', '50% of what the algo makes', P.buyback[0] + 60, P.buyback[1] + 4, 'start');
+  station(P.burn, W.NR + 10, '#ff003d', 'burn', '', '', 0, 0, 'middle', true, 2.4);
+  text('burn-n', bx, by + 76, 'BURN', 'middle');
+  text('st-sub', bx, by + 94, 'gone. every road ends here.', 'middle');
+
+  const art = document.getElementById('art');
+  document.getElementById('wheel').innerHTML = out.join('');
+  if (reduced) art.pauseAnimations();
+
+  // ── the hub: the brain from the home page, turning and firing
+  const cv = document.getElementById('hub');
+  const pr = window.devicePixelRatio || 1;
+  const HW = 380, HH = 380;
+  cv.width = HW * pr; cv.height = HH * pr;
+  const c = cv.getContext('2d'); c.setTransform(pr, 0, 0, pr, 0, 0);
+  const BCX = HW * 0.5, BCY = HH * 0.47, BSCALE = 0.44 * HW, DOT = 280, D = 2.6, LOBE = '#00ff85';
+  let s = 5;
+  const rand = () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+  const rnd = (a, b) => a + rand() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const PTS = [], BUCK = Array.from({ length: 32 }, () => []), GLOW = [], SCAN = [];
+  const TINT = [[180, 235, 255], [120, 255, 205], [150, 205, 255], [110, 150, 190]];
+  const push = (x, y, z, tint, w, bright) => PTS.push({ x, y, z, ph: rnd(0, 6.283), sp: rnd(0.25, 0.9), amp: rnd(0.003, 0.012), b: bright, tint, fire: 0, scan: 0, ref: 0, w });
+  const hemiR = (u, v) => { const front = Math.cos(u), up = Math.cos(v); let R = 1;
+    R *= 1 + 0.10 * front - 0.16 * front * front; R *= up > 0 ? (1 + 0.10 * up) : (1 - 0.46 * Math.abs(up));
+    R *= 1 + 0.20 * Math.max(0, -up) * Math.max(0, front) * 1.5; R *= 1 + 0.055 * Math.sin(u * 3 + v * 2); return R; };
+  const gyrus = (u, v) => Math.sin(u * 7.5 + v * 4.2) * Math.sin(v * 5.5 - u * 2.1);
+  for (let i = 0; i < 4600 * D; i++) {
+    const side = rand() < 0.5 ? -1 : 1, u = rnd(0, 6.283), v = Math.acos(rnd(-1, 1)), g = gyrus(u, v);
+    if (rand() > 0.30 + 0.70 * ((g + 1) / 2)) continue;
+    const shell = rand() < 0.82 ? rnd(0.90, 1.0) : rnd(0.45, 0.90), R = hemiR(u, v) * shell * (1 + g * 0.045);
+    const x = Math.sin(v) * Math.cos(u) * 0.50 * R + side * 0.235, y = Math.cos(v) * 0.385 * R - 0.045, z = Math.sin(v) * Math.sin(u) * 0.415 * R;
+    if (Math.abs(x) < 0.052) continue;
+    push(x, y, z, 0, rnd(0.9, 2.1), clamp(0.30 + ((g + 1) / 2) * 0.62 + rnd(-0.10, 0.10), 0.06, 1));
+  }
+  for (let i = 0; i < 150 * D; i++) { const v = rnd(0.22, 2.75), R = hemiR(0, v); push(rnd(-0.03, 0.03), Math.cos(v) * 0.36 * R - 0.045, rnd(-0.34, 0.36) * R, 0, rnd(0.5, 1.0), rnd(0.55, 0.95)); }
+  for (let i = 0; i < 1250 * D; i++) { const u = rnd(0, 6.283), v = Math.acos(rnd(-1, 1)), shell = rand() < 0.8 ? rnd(0.88, 1.0) : rnd(0.5, 0.88), fz = Math.sin(v * 22) * 0.5 + 0.5;
+    if (rand() > 0.25 + 0.75 * fz) continue; const R = (1 - 0.22 * Math.max(0, Math.cos(v))) * shell;
+    push(Math.sin(v) * Math.cos(u) * 0.270 * R, Math.cos(v) * 0.138 * R + 0.362, Math.sin(v) * Math.sin(u) * 0.215 * R - 0.300, 1, rnd(0.6, 1.4), clamp(0.34 + fz * 0.5 + rnd(-0.08, 0.08), 0.1, 1)); }
+  for (let i = 0; i < 420 * D; i++) { const t = rand(), rr = 0.115 - t * 0.052, a = rnd(0, 6.283), onSkin = rand() < 0.75, r2 = onSkin ? rr : rr * Math.sqrt(rand());
+    push(Math.cos(a) * r2, 0.360 + t * 0.46, Math.sin(a) * r2 - 0.075, 2, rnd(0.6, 1.3), clamp(0.30 + (onSkin ? 0.40 : 0.05) + rnd(-0.08, 0.08), 0.1, 1)); }
+  for (let i = 0; i < 300 * D; i++) { const u = rnd(0, 6.283), v = Math.acos(rnd(-1, 1)), R = 1.05 + rand() * 0.5;
+    push(Math.sin(v) * Math.cos(u) * 0.58 * R, Math.cos(v) * 0.46 * R, Math.sin(v) * Math.sin(u) * 0.48 * R, 3, rnd(0.5, 1.0), rnd(0.05, 0.28)); }
+  const HASH = {}, CELL = 0.085; let FRONT = [];
+  const CAP = reduced ? 25 : 90;    // a still gets one small lobe lit, as the print; motion gets the wave
+  PTS.forEach((p, i) => { const k = ((p.x / CELL) | 0) + '_' + ((p.y / CELL) | 0) + '_' + ((p.z / CELL) | 0); (HASH[k] || (HASH[k] = [])).push(i); });
+  const stepFront = () => { if (!FRONT.length) return; const next = [];
+    for (const i of FRONT) { const p = PTS[i], cx = (p.x / CELL) | 0, cy = (p.y / CELL) | 0, cz = (p.z / CELL) | 0, cand = [];
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c2 = -1; c2 <= 1; c2++) { const bk = HASH[(cx + a) + '_' + (cy + b) + '_' + (cz + c2)]; if (!bk) continue;
+        for (const j of bk) { const t = PTS[j]; if (t.fire > 0.2 || t.ref > 0) continue; cand.push(j); } }
+      if (!cand.length) continue; const branches = rand() < 0.42 ? 2 : 1;
+      for (let k = 0; k < branches; k++) { const j = cand[Math.floor(rand() * cand.length)], t = PTS[j]; if (t.fire > 0.2 || t.ref > 0) continue; t.fire = 1; t.ref = 70; next.push(j); } }
+    FRONT = next.length > CAP ? next.slice(0, CAP) : next; };
+  const fireLobe = () => { FRONT = []; const ox = rnd(-0.4, 0.4), oy = rnd(-0.3, 0.3), oz = rnd(-0.3, 0.3), best = [];
+    for (let i = 0; i < PTS.length; i++) { const p = PTS[i], d = (p.x - ox) ** 2 + (p.y - oy) ** 2 + (p.z - oz) ** 2;
+      if (best.length < 6) best.push({ i, d }); else { let wi = 0; for (let k = 1; k < best.length; k++) if (best[k].d > best[wi].d) wi = k; if (d < best[wi].d) best[wi] = { i, d }; } }
+    best.forEach((b) => { PTS[b.i].fire = 1; PTS[b.i].ref = 70; FRONT.push(b.i); }); };
+  const draw = (T) => {
+    stepFront(); c.clearRect(0, 0, HW, HH);
+    const yaw = T * 0.30, roll = Math.sin(T * 0.21) * 0.26, cy0 = Math.cos(yaw), sy0 = Math.sin(yaw), cr = Math.cos(roll), sr = Math.sin(roll), FOV = 2.1;
+    const scanPhase = (T * 0.155) % 1, scanAng = T * 0.11, nx = Math.cos(scanAng), nz = Math.sin(scanAng), scanD = scanPhase * 1.5 - 0.75, SLAB = 0.045, k = BSCALE / DOT;
+    for (const p of PTS) {
+      const br = 1 + Math.sin(T * p.sp + p.ph) * p.amp * 3.2, x = p.x * br, y = p.y * br, z = p.z * br;
+      const X = x * cy0 + z * sy0; let Z = -x * sy0 + z * cy0; const Y = y * cr - Z * sr; Z = y * sr + Z * cr;
+      const persp = FOV / (FOV + Z * 0.9), sx = BCX + X * BSCALE * persp, sy = BCY + Y * BSCALE * persp, d = clamp((1.1 - Z) / 2.2, 0, 1);
+      const sd = Math.abs(x * nx + z * nz - scanD); if (sd < SLAB) p.scan = 1; else p.scan *= 0.90;
+      p.fire *= 0.90; if (p.ref > 0) p.ref--;
+      const lit = p.fire, sc = p.scan, a = (0.13 + p.b * 0.80) * (0.42 + d * 0.58) + lit * 0.55 + sc * 0.42;
+      const sz = (p.w * (0.55 + d * 0.85) * persp) * (1 + lit * 1.1 + sc * 0.55) * k, ab = Math.min(7, (a * 8) | 0);
+      BUCK[p.tint * 8 + ab].push(sx, sy, sz);
+      if (lit > 0.14) GLOW.push(sx, sy, sz + 3.2 * lit * k, lit);
+      if (sc > 0.30) SCAN.push(sx, sy, sz + 1.6 * sc * k, sc);
+    }
+    if (SCAN.length) { c.fillStyle = '#bfefff'; for (let i = 0; i < SCAN.length; i += 4) { c.globalAlpha = Math.min(0.65, SCAN[i + 3] * 0.55); c.beginPath(); c.arc(SCAN[i], SCAN[i + 1], SCAN[i + 2], 0, 7); c.fill(); } c.globalAlpha = 1; SCAN.length = 0; }
+    if (GLOW.length) { c.fillStyle = LOBE; for (let i = 0; i < GLOW.length; i += 4) { c.globalAlpha = Math.min(0.5, GLOW[i + 3] * 0.42); c.beginPath(); c.arc(GLOW[i], GLOW[i + 1], GLOW[i + 2], 0, 7); c.fill(); } c.globalAlpha = 1; GLOW.length = 0; }
+    for (let t2 = 0; t2 < 4; t2++) for (let ab = 0; ab < 8; ab++) { const bk = BUCK[t2 * 8 + ab]; if (!bk.length) continue; const tc = TINT[t2];
+      c.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},${((ab + 0.5) / 8).toFixed(3)})`; c.beginPath();
+      for (let i = 0; i < bk.length; i += 3) { const x = bk[i], y = bk[i + 1], s2 = bk[i + 2]; if (s2 < 1.2) c.rect(x, y, s2 * 1.7, s2 * 1.7); else { c.moveTo(x + s2 * 0.62, y); c.arc(x, y, s2 * 0.62, 0, 7); } }
+      c.fill(); bk.length = 0; }
+    // the eyes, held in the front of the cloud, looking up at the name
+    const look = -Math.PI / 2 + 0.35, blink = (Math.sin(T * 0.55) > 0.985) ? 0.12 : 1;
+    for (const sd of [-1, 1]) { const ex = BCX + sd * BSCALE * 0.17, ey = BCY - BSCALE * 0.06, ew = BSCALE * 0.052, eh = BSCALE * 0.066 * blink;
+      c.fillStyle = 'rgba(2,5,10,0.96)'; c.beginPath(); c.ellipse(ex, ey, ew, eh, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(150,220,255,0.8)'; c.lineWidth = 1.3 * k; c.stroke();
+      if (blink > 0.5) { const px = ex + Math.cos(look) * ew * 0.42, py = ey + Math.sin(look) * eh * 0.42;
+        c.fillStyle = LOBE; c.beginPath(); c.arc(px, py, ew * 0.46, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,0.9)'; c.beginPath(); c.arc(px - ew * 0.16, py - eh * 0.18, ew * 0.15, 0, 7); c.fill(); } }
+  };
+  // the still: the same pose as the PNG, one lobe a few steps in
+  fireLobe(); for (let i = 0; i < 7; i++) { stepFront(); }
+  if (reduced) { draw(4.33); return; }   // yaw 1.3, as the print
+  let T = 4.33, last = performance.now();
+  setInterval(fireLobe, 1300);
+  (function loop() { requestAnimationFrame(loop); const now = performance.now(); T += Math.min(0.05, (now - last) / 1000); last = now; draw(T); })();
+})();
+</script>
+</body>
+</html>
