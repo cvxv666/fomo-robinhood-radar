@@ -105,6 +105,10 @@ class Telegram:
     def me(self) -> dict:
         return self.call("getMe")
 
+    def set_commands(self, commands: list[tuple[str, str]]) -> object:
+        """The list under the menu button. Idempotent, so it runs on every start."""
+        return self.call("setMyCommands", commands=[{"command": c, "description": d} for c, d in commands])
+
 
 # ---------------------------------------------------------------- formatting
 
@@ -478,23 +482,32 @@ CAPTION_LIMIT = 1024   # Telegram's, on a photo caption
 HELP = """<b>FOMO ROBINHOOD RADAR</b>
 <i>which fomo.family traders on Robinhood Chain actually know what they are doing</i>
 
-/signals — what trusted wallets are buying now
-/hot — where several of them went in at once, just now
-/fresh — launches they are entering right now
-/exits — where they are getting out
-/digest — the last day in one message
-/top — the scored leaderboard
-/watch, /dropped — the other two verdicts
-/subscribe — get bursts, launches and signals pushed as they happen
-/unsubscribe — stop
-/status — what the database holds
-/health — what is quietly broken
+<b>Send me anything:</b>
+· a token address → who holds it, at what cost, and what they said
+· a trader's handle → the verdict and their open book
 
-Or just send me:
-· a token address → who holds it and at what cost
-· a trader handle → the verdict and their book
+<b>Or ask the feeds:</b>
+/hot — several trusted wallets entering one token inside minutes
+/signals — what trusted wallets bought today
+/fresh — launches they are entering early
+/exits — where they are getting out
+/top — the leaderboard, ranked by judgement
+
+<b>Alerts</b> are on for this chat: bursts the moment they form, launches and signals as they
+cross the bar, and one digest a day. /stop turns them off, /start turns them back on.
 
 Research, not financial advice."""
+
+# what the menu button offers - the short list, in the order somebody new would want it
+COMMANDS = [
+    ("hot", "several trusted wallets entering one token right now"),
+    ("signals", "what trusted wallets bought today"),
+    ("fresh", "launches the cohort is entering early"),
+    ("exits", "where the cohort is getting out"),
+    ("top", "the leaderboard, by judgement"),
+    ("stop", "stop the alerts"),
+    ("help", "what this is and what to send"),
+]
 
 
 # ---------------------------------------------------------------- subscriptions
@@ -617,7 +630,13 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
     if cmd.startswith("/token_"):
         cmd, args = "/token", [cmd[len("/token_"):]]
 
-    if cmd in ("/start", "/help"):
+    if cmd == "/start":
+        # Starting is joining. Three of four thousand visitors found /subscribe on the first
+        # day; the alerts are the product, and asking people to opt in twice is how a bot with
+        # a hundred readers has three subscribers.
+        subscribe(conn, chat_id, username)
+        return HELP
+    if cmd == "/help":
         return HELP
     if cmd == "/status":
         return status_text(conn)
@@ -657,13 +676,19 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
         floor = float(args[0]) if args and args[0].replace(".", "", 1).isdigit() else None
         fresh = subscribe(conn, chat_id, username, floor)
         level = floor if floor is not None else settings.telegram_min_conviction
-        return (("Subscribed." if fresh else "Threshold updated.") +
-                f" You will get a signal when its conviction reaches <b>{level:g}</b>.\n\n"
-                "That is roughly what four wallets scoring 80 look like. "
-                "Send <code>/subscribe 3</code> for more, <code>/subscribe 12</code> for fewer.")
-    if cmd == "/unsubscribe":
+        return (("Alerts are on." if fresh else "Bar updated.") +
+                " You will hear about:\n"
+                "· a <b>burst</b> — several trusted wallets entering one token inside minutes, "
+                "sent within seconds of the fill\n"
+                "· a <b>launch</b> the cohort is entering in its first minutes\n"
+                f"· a <b>signal</b> once a token's conviction reaches <b>{level:g}</b> — about four "
+                "wallets scoring 80\n"
+                "· one digest a day\n\n"
+                "Usually five to fifteen a day. <code>/subscribe 3</code> for more signals, "
+                "<code>/subscribe 8</code> for fewer, /stop for none.")
+    if cmd in ("/stop", "/unsubscribe", "/mute"):
         unsubscribe(conn, chat_id)
-        return "Unsubscribed. /subscribe turns it back on."
+        return "Alerts are off for this chat. /start turns them back on; the feeds still answer."
     if cmd == "/token":
         if not args:
             return "Send it as <code>/token 0x…</code>, or just paste the address."
@@ -723,6 +748,10 @@ def run(conn, tg: Telegram | None = None, once: bool = False) -> dict:
     tg = tg or Telegram()
     who = tg.me()
     log.info("bot @%s online", who.get("username"))
+    try:
+        tg.set_commands(COMMANDS)
+    except Exception as e:  # noqa: BLE001 - a menu that failed to register is not a bot that is down
+        log.warning("could not register the command menu: %s", e)
     stats = {"handled": 0, "broadcasts": 0, "sent": 0}
     # -inf rather than 0: monotonic() counts from boot, and on a machine up for less than the
     # alert interval - a fresh CI runner, a just-rebooted server - zero would mean waiting

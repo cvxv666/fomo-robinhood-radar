@@ -96,9 +96,13 @@ SITE_URL="$(sed -n 's/^PUBLIC_SITE_URL=//p' "$APP/.env" | tail -1)"
 REPO_URL="$(sed -n 's/^PUBLIC_REPO_URL=//p' "$APP/.env" | tail -1)"
 sudo -u radar env PUBLIC_SITE_URL="$SITE_URL" PUBLIC_REPO_URL="$REPO_URL" npm run build 2>&1 | grep -E "error|Complete!" | tail -1
 
-systemctl restart radar-api radar-site radar-bot radar-receive
+# The site starts After= the api, so the pair restarts as one and the public gap is the api's
+# stop plus one node start - a few seconds. The bot and the receiver follow on their own; a
+# Telegram poll that has to be re-issued is not something anybody sees.
+systemctl restart radar-api radar-site
+systemctl restart radar-bot radar-receive
 sleep 5
-for u in radar-api radar-site radar-bot; do printf '   %-12s %s\n' "$u" "$(systemctl is-active $u)"; done
+for u in radar-api radar-site radar-bot radar-watch; do printf '   %-12s %s\n' "$u" "$(systemctl is-active $u)"; done
 REMOTE
 
 echo "==> checking"

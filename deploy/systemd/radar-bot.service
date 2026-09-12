@@ -12,6 +12,8 @@ EnvironmentFile=/opt/fomoradar/app/.env
 ExecStart=/opt/fomoradar/venv/bin/python -m fomo_agent.cli bot
 Restart=always
 RestartSec=15
+# the bot sits in a 50-second long poll; a stop must not wait for it
+TimeoutStopSec=8
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict

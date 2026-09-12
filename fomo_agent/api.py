@@ -567,6 +567,12 @@ def serve(host: str | None = None, port: int | None = None, reload: bool = False
     # The reloader must watch the package and nothing else. Pointed at the working directory it
     # also watches fomo_agent.db-wal, which sqlite rewrites on every read — the service then
     # restarts in a loop and drops requests mid-flight, which looks exactly like flaky data.
+    # Three seconds for in-flight requests on shutdown, then they are dropped. Without the cap a
+    # restart waits for every request to finish, and a request waiting on an upstream that is
+    # rate-limiting us can take a minute; the site sat behind a 502 for 64 seconds once because
+    # of exactly that. Anything a request could not finish in three seconds, the client has
+    # already given up on.
     uvicorn.run("fomo_agent.api:app", host=host or settings.api_host,
                 port=port or settings.api_port, reload=reload,
-                reload_dirs=["fomo_agent"] if reload else None)
+                reload_dirs=["fomo_agent"] if reload else None,
+                timeout_graceful_shutdown=3)

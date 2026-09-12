@@ -32,6 +32,10 @@ class FakeTelegram:
         self.sent.append((str(chat_id), text))
         return {"message_id": len(self.sent)}
 
+    def set_commands(self, commands):
+        self.commands = commands
+        return True
+
     def photo(self, chat_id, path, caption):
         if "photo" in self.fail_for:
             raise RuntimeError("Bad Request: PHOTO_INVALID_DIMENSIONS")
@@ -103,6 +107,32 @@ def test_signal_message_carries_the_names_not_just_a_count(conn):
 def test_help_is_the_answer_to_start_and_to_nothing(conn):
     for text in ("/start", "/help", "", "   "):
         assert "FOMO ROBINHOOD RADAR" in bot.handle_text(conn, text, 1, None)
+
+
+def test_starting_is_joining(conn):
+    """Three of four thousand visitors found /subscribe on the first day. /start is the opt-in;
+    /stop is the opt-out, and it says the feeds still answer."""
+    assert bot.subscribers(conn) == []
+    bot.handle_text(conn, "/start", 42, "newcomer")
+    assert [s["chat_id"] for s in bot.subscribers(conn)] == ["42"]
+    bot.handle_text(conn, "/start", 42, "newcomer")
+    assert len(bot.subscribers(conn)) == 1, "a second /start is not a second row"
+    answer = bot.handle_text(conn, "/stop", 42, "newcomer")
+    assert bot.subscribers(conn) == [] and "/start" in answer
+    assert "FOMO ROBINHOOD RADAR" in bot.handle_text(conn, "/help", 43, None)
+    assert bot.subscribers(conn) == [], "/help alone does not subscribe"
+
+
+def test_the_menu_is_registered_on_start(conn, monkeypatch):
+    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
+
+    class Poller(FakeTelegram):
+        def updates(self, offset, timeout=None):
+            return []
+
+    tg = Poller()
+    bot.run(conn, tg, once=True)
+    assert [c for c, _ in tg.commands][:2] == ["hot", "signals"]
 
 
 def test_a_bare_handle_returns_the_verdict(conn):
