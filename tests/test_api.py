@@ -226,13 +226,33 @@ def test_candles_are_served_from_memory_between_requests(monkeypatch):
     assert calls[1][2] == "day", "a month is daily candles, not 720 hourly ones"
 
 
+def test_the_api_never_waits_for_the_candle_source(monkeypatch):
+    """Forty request threads asleep on GeckoTerminal's thirty-a-minute was the whole API hanging.
+    The impatient client answers at once when the allowance is spent, and the chart says why."""
+    from fomo_agent.sources.geckoterminal import GeckoTerminal, Busy
+    import httpx
+
+    gt = GeckoTerminal(client=httpx.Client(base_url="http://127.0.0.1:9"), patient=False)
+    gt.limiter.max = 0   # no room at all
+    import time as _t
+    t0 = _t.monotonic()
+    try:
+        gt.ohlcv("robinhood", "0xpool", "hour", 1, 24)
+        raised = None
+    except Exception as e:  # noqa: BLE001
+        raised = e
+    assert _t.monotonic() - t0 < 0.5, "it did not sleep"
+    # ohlcv itself catches HTTPError and returns [], so Busy surfaces as an empty answer
+    assert raised is None
+
+
 def test_the_upstream_client_is_one_per_process(monkeypatch):
     """A client per request brought a rate limiter per request, which limits nothing, and a
     connection pool per request that nothing closed: 581 open sockets and 2.3 GB after a day."""
     made = []
 
     class FakeGecko:
-        def __init__(self):
+        def __init__(self, **kw):
             made.append(self)
 
         def ohlcv(self, *a):

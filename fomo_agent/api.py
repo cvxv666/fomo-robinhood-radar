@@ -138,12 +138,15 @@ async def remember_responses(request: Request, call_next):
     key = str(request.url)
     if (hit := _cached(key)) is not None:
         return hit
+    import asyncio
     waiting = _inflight.get(key)
     if waiting is not None:
-        await waiting
+        try:
+            await asyncio.wait_for(asyncio.shield(waiting), timeout=8.0)
+        except asyncio.TimeoutError:
+            pass   # the first reader is stuck on something; this one goes and finds out itself
         if (hit := _cached(key)) is not None:
             return hit
-    import asyncio
     fut = asyncio.get_running_loop().create_future()
     _inflight[key] = fut
     try:
@@ -239,7 +242,7 @@ def gecko():
 
     with _clients_lock:
         if "gecko" not in _clients:
-            _clients["gecko"] = GeckoTerminal()
+            _clients["gecko"] = GeckoTerminal(patient=False)
         return _clients["gecko"]
 
 
@@ -277,7 +280,9 @@ def candles_for(pool: str, chain_name: str, span: str) -> list[list[float]]:
     try:
         rows = gecko().ohlcv(chain_name, pool, timeframe, aggregate, limit)
     except Exception as e:  # noqa: BLE001 - a page without a chart is still a page
-        log.warning("candles for %s failed: %s", pool[:12], e)
+        # an allowance spent is the ordinary case under load, not something to log every time
+        if "allowance spent" not in str(e) and "not backing off" not in str(e):
+            log.warning("candles for %s failed: %s", pool[:12], e)
         return hit[1] if hit else []
     _evict_stale()
     _candles[key] = (time.monotonic(), rows)
@@ -526,8 +531,11 @@ def token_chart(
         return {"mint": mint, "span": span, "pool": None, "candles": [],
                 "why": "no pool on record for this token yet"}
     rows = candles_for(row["pool_address"], row["chain"] or chain() or "robinhood", span)
-    return {"mint": mint, "span": span, "pool": row["pool_address"],
-            "symbol": row["symbol"], "candles": rows, "source": "geckoterminal"}
+    out = {"mint": mint, "span": span, "pool": row["pool_address"],
+           "symbol": row["symbol"], "candles": rows, "source": "geckoterminal"}
+    if not rows:
+        out["why"] = "the candle source is rate-limiting us this minute; the chart comes back on its own"
+    return out
 
 
 @app.get("/api/search", tags=["meta"])

@@ -20,6 +20,15 @@ class RateLimiter:
         # deciding there is room.
         self._lock = threading.Lock()
 
+    def room(self) -> bool:
+        """Whether a call could go now, without waiting for one. A request thread serving the
+        public asks this; a batch job calls wait()."""
+        with self._lock:
+            now = time.monotonic()
+            while self.calls and now - self.calls[0] > 60:
+                self.calls.popleft()
+            return len(self.calls) < self.max
+
     def wait(self) -> None:
         with self._lock:
             now = time.monotonic()

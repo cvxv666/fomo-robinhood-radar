@@ -46,13 +46,24 @@ def feed_path(feed: str) -> tuple[str, dict]:
     raise ValueError(f"unknown gecko feed: {feed}")
 
 
+class Busy(httpx.HTTPError):
+    """The allowance is spent and this client was told not to wait for it."""
+
+
 class GeckoTerminal:
-    def __init__(self, client: httpx.Client | None = None, chains: Iterable[str] | None = None, feeds: Iterable[str] | None = None):
+    def __init__(self, client: httpx.Client | None = None, chains: Iterable[str] | None = None,
+                 feeds: Iterable[str] | None = None, patient: bool = True):
         self.http = client or httpx.Client(base_url=BASE, timeout=20, headers={"accept": "application/json"})
         self.chains = tuple(chains) if chains else settings.dex_chains
         self.feeds = tuple(feeds) if feeds else settings.gecko_feeds
         self.limiter = RateLimiter(settings.gecko_max_req_per_min, "geckoterminal")
         self._last = 0.0
+        # A batch job waits its turn and backs off on 429; that is the right shape for a pass that
+        # must finish. A request thread serving the public must never sleep on anybody's limit:
+        # with bots walking thousands of token pages, forty threads asleep on GeckoTerminal's
+        # thirty-a-minute is the whole API hanging. The impatient client asks whether there is
+        # room, and if there is not, or the answer is 429, it says so at once.
+        self.patient = patient
 
     def pools(self, chain: str, feed: str) -> list[dict]:
         network = NETWORK_MAP.get(chain, chain)
@@ -77,6 +88,17 @@ class GeckoTerminal:
 
     def _get(self, path: str, params: dict | None = None) -> list[dict]:
         """One GET against the rate limit, backing off on 429 and giving up rather than hammering."""
+        if not self.patient:
+            if not self.limiter.room():
+                raise Busy(f"geckoterminal: allowance spent, not waiting for {path}")
+            self.limiter.wait()   # there is room, so this returns at once
+            r = self.http.get(path, params=params or {})
+            self._last = time.monotonic()
+            if r.status_code == 429:
+                raise Busy(f"geckoterminal: 429 on {path}, not backing off")
+            r.raise_for_status()
+            data = r.json().get("data", [])
+            return data if isinstance(data, list) else [data]
         for attempt in range(3):
             gap = settings.gecko_min_interval_s - (time.monotonic() - self._last)
             if gap > 0:
