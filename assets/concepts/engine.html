@@ -37,7 +37,7 @@
   @keyframes blink { 50% { opacity:.25; } }
 
   header { left:40px; top:26px; width:1520px; height:66px; border-bottom:1px solid var(--carbon); }
-  header h1 { position:absolute; left:0; top:24px; margin:0; font-family:var(--sans); font-weight:300; font-size:36px; letter-spacing:.08em; text-transform:uppercase; line-height:1; }
+  header h1 { position:absolute; left:0; top:14px; margin:0; font-family:var(--sans); font-weight:300; font-size:36px; letter-spacing:.08em; text-transform:uppercase; line-height:1; }
   header .eyebrow { position:absolute; left:0; top:0; }
   header .kpis { position:absolute; right:0; top:2px; display:flex; gap:30px; align-items:flex-start; }
   .kpi { text-align:right; }
@@ -148,7 +148,6 @@
 <body>
 <div class="stage"><div class="board" id="board">
   <header>
-    <div class="eyebrow"><span class="led"></span>$FOMOBRAIN · THE ALGO · CONCEPT v0.2 · SIMULATED — THE GATES ARE THE DESIGN, THE NUMBERS ARE NOT</div>
     <h1>Six gates, three loops, one book</h1>
     <div class="kpis">
       <canvas id="spark"></canvas>
@@ -188,7 +187,6 @@
       <div><div class="k">50% compounds</div><div class="v a" id="cmp">$0</div></div>
       <div><div class="k">50% burned</div><div class="v c" id="burn">$0</div></div>
     </div>
-    <div id="depNote">sized by conviction and liquidity, never above 4% of the deposit · five positions at once at most · the day stops at −6%</div>
   </section>
 
   <footer class="panel" id="ledger" style="border-left:0;border-right:0;border-bottom:0">
