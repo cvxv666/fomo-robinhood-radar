@@ -94,7 +94,9 @@ sudo -u radar npm install --silent --no-fund --no-audit
 # whatever the config default happens to be, which is a domain we do not serve.
 SITE_URL="$(sed -n 's/^PUBLIC_SITE_URL=//p' "$APP/.env" | tail -1)"
 REPO_URL="$(sed -n 's/^PUBLIC_REPO_URL=//p' "$APP/.env" | tail -1)"
-sudo -u radar env PUBLIC_SITE_URL="$SITE_URL" PUBLIC_REPO_URL="$REPO_URL" npm run build 2>&1 | grep -E "error|Complete!" | tail -1
+TOKEN_CA="$(sed -n 's/^PUBLIC_TOKEN_CA=//p' "$APP/.env" | tail -1)"
+TOKEN_SYMBOL="$(sed -n 's/^PUBLIC_TOKEN_SYMBOL=//p' "$APP/.env" | tail -1)"
+sudo -u radar env PUBLIC_SITE_URL="$SITE_URL" PUBLIC_REPO_URL="$REPO_URL"   PUBLIC_TOKEN_CA="$TOKEN_CA" PUBLIC_TOKEN_SYMBOL="${TOKEN_SYMBOL:-FOMOBRAIN}"   npm run build 2>&1 | grep -E "error|Complete!" | tail -1
 
 # The site starts After= the api, so the pair restarts as one and the public gap is the api's
 # stop plus one node start - a few seconds. The bot and the receiver follow on their own; a

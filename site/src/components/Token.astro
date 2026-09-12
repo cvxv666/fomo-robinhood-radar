@@ -1,0 +1,159 @@
+---
+/**
+ * The token block: the contract address, one line of swagger, and a button that copies it.
+ *
+ * Renders nothing until PUBLIC_TOKEN_CA is set at build time, so the component can sit on the
+ * home page before the token exists and the launch is one line in .env plus a deploy. Sits right
+ * under the hero, above the instrument rack: the first thing after the headline, before the data.
+ *
+ * Deliberately short. The token page on this same site (/token/<ca>) has the holders, the cost
+ * basis and the chart the moment the pool exists; this block's one job is the address.
+ */
+const ca = (import.meta.env.PUBLIC_TOKEN_CA ?? '').trim();
+const symbol = (import.meta.env.PUBLIC_TOKEN_SYMBOL ?? 'FOMOBRAIN').trim();
+const short = ca ? `${ca.slice(0, 6)}…${ca.slice(-4)}` : '';
+---
+{ca && (
+  <section class="token" id="token" aria-label={`${symbol} contract address`}>
+    <div class="token-copy">
+      <p class="eyebrow">
+        <span class="led" aria-hidden="true"></span>
+        ${symbol} · the token · Robinhood Chain
+      </p>
+      <h2>The brain<br />has a ticker</h2>
+      <p class="line">
+        169 of the best traders on Robinhood, fused into one mind that reads the chain every
+        twenty seconds. <strong>Now it has an address.</strong>
+      </p>
+    </div>
+
+    <div class="token-ca">
+      <span class="label">Contract address</span>
+      <button class="ca" type="button" data-ca={ca} title="Copy the contract address">
+        <code class="full">{ca}</code>
+        <code class="short" aria-hidden="true">{short}</code>
+      </button>
+      <div class="row">
+        <button class="btn copy" type="button" data-ca={ca}>
+          <span class="idle">Copy CA</span>
+          <span class="done" aria-live="polite">Copied</span>
+        </button>
+        <a class="btn" href={`/token/${ca}`}>On the radar →</a>
+      </div>
+      <p class="warn">Verify the address here, on this site, before you buy anything. There will be copies.</p>
+    </div>
+  </section>
+)}
+
+<style>
+  .token {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 520px);
+    gap: 30px;
+    align-items: center;
+    border: 1px solid #00ff85;
+    padding: 28px 30px;
+    margin-bottom: 25px;
+  }
+  .eyebrow {
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #00ff85; margin: 0 0 14px; max-width: none;
+  }
+  .led {
+    width: 7px; height: 7px; border-radius: 9999px; background: #00ff85;
+    animation: blink 2.4s ease-in-out infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) { .led { animation: none; } }
+
+  .token h2 {
+    font-size: clamp(30px, 4.6vw, 52px);
+    line-height: 0.95;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    font-weight: 300;
+    margin: 0 0 14px;
+  }
+  .line { font-size: 15px; color: #949494; max-width: 46ch; margin: 0; }
+  .line strong { color: #ffffff; font-weight: 500; }
+
+  /* the address: one hairline box, the whole thing is the click target */
+  .token-ca { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .label {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 9.5px;
+    letter-spacing: 0.14em; text-transform: uppercase; color: #606060;
+  }
+  .ca {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    border: 1px solid #ffffff; background: none; color: #ffffff;
+    padding: 12px 14px; font: inherit;
+  }
+  .ca:hover { border-color: #00ff85; color: #00ff85; }
+  .ca code {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px;
+    letter-spacing: 0.02em; word-break: break-all; background: none; padding: 0;
+  }
+  .ca .short { display: none; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .copy { position: relative; min-width: 108px; text-align: center; }
+  .copy .done { display: none; color: #00ff85; }
+  .copy.is-done { border-color: #00ff85; }
+  .copy.is-done .idle { display: none; }
+  .copy.is-done .done { display: inline; }
+  .warn {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10.5px;
+    color: #606060; margin: 2px 0 0; max-width: none;
+  }
+
+  @media (max-width: 900px) {
+    .token { grid-template-columns: 1fr; padding: 22px 18px; gap: 20px; }
+  }
+  @media (max-width: 480px) {
+    .ca .full { display: none; }
+    .ca .short { display: inline; }
+  }
+</style>
+
+<script>
+  // Copy on the button and on the address itself. Clipboard API first; the hidden-textarea route
+  // for browsers that only expose execCommand, which still includes a few in-app webviews.
+  const copy = async (text: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch { /* fall through */ }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    return ok;
+  };
+
+  document.querySelectorAll<HTMLElement>('#token [data-ca]').forEach((el) => {
+    el.addEventListener('click', async () => {
+      const ca = el.dataset.ca ?? '';
+      if (!ca) return;
+      const ok = await copy(ca);
+      const btn = document.querySelector<HTMLElement>('#token .copy');
+      if (!btn) return;
+      if (!ok) {
+        // nothing copied: select the address so a long-press or ctrl+c does the job
+        const full = document.querySelector('#token .ca .full');
+        if (full) { const r = document.createRange(); r.selectNodeContents(full); const s = getSelection(); s?.removeAllRanges(); s?.addRange(r); }
+        return;
+      }
+      btn.classList.add('is-done');
+      window.setTimeout(() => btn.classList.remove('is-done'), 1600);
+    });
+  });
+</script>

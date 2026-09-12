@@ -3,6 +3,7 @@ import Base from '../layouts/Base.astro';
 import Meter from '../components/Meter.astro';
 import Search from '../components/Search.astro';
 import Brain from '../components/Brain.astro';
+import Token from '../components/Token.astro';
 import Spark from '../components/Spark.astro';
 import Panel from '../components/Panel.astro';
 import Ident from '../components/Ident.astro';
@@ -45,6 +46,9 @@ const lead = signals[0];
 
     <div class="hero-brain"><Brain /></div>
   </section>
+
+  <!-- ── the token: nothing until PUBLIC_TOKEN_CA is set ────── -->
+  <Token />
 
   <!-- ── instrument strip ───────────────────────────────────── -->
   {!down && (
