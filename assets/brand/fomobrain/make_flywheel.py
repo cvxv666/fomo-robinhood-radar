@@ -45,7 +45,7 @@ def line(d, x0, y0, x1, y1, colour, w=1.0, dashed=False):
     if L == 0:
         return
     ux, uy = (x1 - x0) / L, (y1 - y0) / L
-    t, on, off = 0.0, 5.0, 4.0
+    t, on, off = 0.0, 6.0, 5.0
     while t < L:
         e = min(L, t + on)
         d.line([S(x0 + ux * t), S(y0 + uy * t), S(x0 + ux * e), S(y0 + uy * e)],
@@ -53,14 +53,14 @@ def line(d, x0, y0, x1, y1, colour, w=1.0, dashed=False):
         t += on + off
 
 
-def arrowhead(d, x, y, ang, colour, size=9.0):
+def arrowhead(d, x, y, ang, colour, size=12.0):
     """A filled triangle with its tip at (x, y) pointing along `ang` (radians, screen)."""
     bx, by = x - math.cos(ang) * size, y - math.sin(ang) * size
     nx, ny = -math.sin(ang) * size * 0.48, math.cos(ang) * size * 0.48
     d.polygon([(S(x), S(y)), (S(bx + nx), S(by + ny)), (S(bx - nx), S(by - ny))], fill=colour)
 
 
-def arc_arrow(d, cx, cy, r, a0, a1, colour, w=1.4, dashed=False, dots=0):
+def arc_arrow(d, cx, cy, r, a0, a1, colour, w=2.0, dashed=False, dots=0):
     """An arc from angle a0 to a1 (degrees, clockwise on screen) with a head at a1."""
     if dashed:
         step = 3.0
@@ -78,11 +78,11 @@ def arc_arrow(d, cx, cy, r, a0, a1, colour, w=1.4, dashed=False, dots=0):
         f = (k + 1) / (dots + 1)
         t = math.radians(a0 + (a1 - a0) * f)
         px, py = cx + math.cos(t) * r, cy + math.sin(t) * r
-        rr = 1.6 + f * 1.4
+        rr = 2.2 + f * 1.8
         d.ellipse([S(px - rr), S(py - rr), S(px + rr), S(py + rr)], fill=colour)
 
 
-def curve_arrow(d, p0, p1, p2, colour, w=1.4, dots=0, dashed=False):
+def curve_arrow(d, p0, p1, p2, colour, w=2.0, dots=0, dashed=False):
     """A quadratic curve p0 -> p2 bent through p1, head at p2, optional units along it."""
     pts = []
     for i in range(61):
@@ -101,11 +101,11 @@ def curve_arrow(d, p0, p1, p2, colour, w=1.4, dots=0, dashed=False):
     for k in range(dots):
         f = (k + 1) / (dots + 1)
         px, py = pts[int(f * 60)]
-        rr = 1.6 + f * 1.4
+        rr = 2.2 + f * 1.8
         d.ellipse([S(px - rr), S(py - rr), S(px + rr), S(py + rr)], fill=colour)
 
 
-def node(d, x, y, r, colour, w=1.4, dashed=False):
+def node(d, x, y, r, colour, w=2.0, dashed=False):
     d.ellipse([S(x - r), S(y - r), S(x + r), S(y + r)], fill=BLACK)
     if dashed:
         for a in range(0, 360, 12):
@@ -115,65 +115,67 @@ def node(d, x, y, r, colour, w=1.4, dashed=False):
 
 
 def station_label(d, x, y, name, sub, colour, anchor="c", sub_colour=GRAPHITE):
-    text(d, x, y, name, mono(S(12.5), 700), colour, track=1.2, anchor=anchor)
-    text(d, x, y + 15, sub, mono(S(10)), sub_colour, track=0.5, anchor=anchor)
+    text(d, x, y, name, mono(S(17), 700), colour, track=1.6, anchor=anchor)
+    text(d, x, y + 19, sub, mono(S(12.5)), sub_colour, track=0.5, anchor=anchor)
 
 
 # ---------------------------------------------------------------- the icons, all hairline
+# every icon takes k, its size relative to the first drawing, so the nodes can grow as one
 
-def icon_candles(d, x, y):
+def icon_candles(d, x, y, k=1.0):
     for i, (h, up) in enumerate(((14, True), (20, False), (26, True))):
-        cx = x - 12 + i * 12
+        h *= k
+        cx = x + (-12 + i * 12) * k
         colour = GREEN if up else CRIMSON
-        line(d, cx, y - h / 2 - 5, cx, y + h / 2 + 5, colour, 1)
-        d.rectangle([S(cx - 3.5), S(y - h / 2), S(cx + 3.5), S(y + h / 2)], fill=BLACK, outline=colour, width=max(1, round(S(1.2))))
+        line(d, cx, y - h / 2 - 5 * k, cx, y + h / 2 + 5 * k, colour, 1.2)
+        d.rectangle([S(cx - 3.5 * k), S(y - h / 2), S(cx + 3.5 * k), S(y + h / 2)], fill=BLACK, outline=colour, width=max(1, round(S(1.4))))
 
 
-def icon_fee(d, x, y):
+def icon_fee(d, x, y, k=1.0):
     # a coin with a slice taken: the fee is the wedge
-    r = 15
-    d.ellipse([S(x - r), S(y - r), S(x + r), S(y + r)], outline=WHITE, width=max(1, round(S(1.2))))
+    r = 15 * k
+    d.ellipse([S(x - r), S(y - r), S(x + r), S(y + r)], outline=WHITE, width=max(1, round(S(1.4))))
     d.pieslice([S(x - r), S(y - r), S(x + r), S(y + r)], 300, 360, fill=AMBER)
-    text(d, x - 1, y + 5, "%", mono(S(15), 700), WHITE, anchor="c")
+    text(d, x - 1 * k, y + 5 * k, "%", mono(S(15 * k), 700), WHITE, anchor="c")
 
 
-def icon_deposit(d, x, y):
-    meter(d, S(x - 20), S(y - 7), S(40), S(14), 6, 10)
+def icon_deposit(d, x, y, k=1.0):
+    meter(d, S(x - 20 * k), S(y - 7 * k), S(40 * k), S(14 * k), 6, 10)
 
 
-def icon_buyback(d, x, y):
+def icon_buyback(d, x, y, k=1.0):
     # the market on the left, the token on the right, the arrow is the buy
-    r = 9
-    d.ellipse([S(x + 6 - r), S(y - r), S(x + 6 + r), S(y + r)], outline=WHITE, width=max(1, round(S(1.2))))
-    line(d, x - 22, y, x - 8, y, WHITE, 1.4)
-    arrowhead(d, x - 6, y, 0, WHITE, 7)
-    text(d, x + 6, y + 3.5, "50", mono(S(8.5), 700), WHITE, anchor="c")
+    r = 9 * k
+    d.ellipse([S(x + 6 * k - r), S(y - r), S(x + 6 * k + r), S(y + r)], outline=WHITE, width=max(1, round(S(1.4))))
+    line(d, x - 22 * k, y, x - 8 * k, y, WHITE, 1.6)
+    arrowhead(d, x - 6 * k, y, 0, WHITE, 8 * k)
+    text(d, x + 6 * k, y + 3.5 * k, "50", mono(S(8.5 * k), 700), WHITE, anchor="c")
 
 
-def icon_burn(d, x, y):
-    r = 16
-    d.ellipse([S(x - r), S(y - r), S(x + r), S(y + r)], outline=CRIMSON, width=max(1, round(S(1.6))))
-    line(d, x - r * 0.72, y + r * 0.72, x + r * 0.72, y - r * 0.72, CRIMSON, 1.6)
-    text(d, x, y + 4, "0", mono(S(12), 700), CRIMSON, anchor="c")
+def icon_burn(d, x, y, k=1.0):
+    r = 16 * k
+    d.ellipse([S(x - r), S(y - r), S(x + r), S(y + r)], outline=CRIMSON, width=max(1, round(S(2))))
+    line(d, x - r * 0.72, y + r * 0.72, x + r * 0.72, y - r * 0.72, CRIMSON, 2)
+    text(d, x, y + 4 * k, "0", mono(S(12 * k), 700), CRIMSON, anchor="c")
 
 
-def icon_signal(d, x, y):
+def icon_signal(d, x, y, k=1.0):
     # a message with a burst in it
-    d.rounded_rectangle([S(x - 19), S(y - 12), S(x + 19), S(y + 9)], radius=S(4), outline=GREEN, width=max(1, round(S(1.2))))
-    d.polygon([(S(x - 12), S(y + 9)), (S(x - 12), S(y + 15)), (S(x - 5), S(y + 9))], fill=BLACK, outline=GREEN)
-    line(d, x - 12, y + 9, x - 12, y + 15, GREEN, 1.2)
-    line(d, x - 12, y + 15, x - 5, y + 9, GREEN, 1.2)
-    text(d, x, y + 3, "▲ 4.1", mono(S(8.5), 700), GREEN, anchor="c")
+    d.rounded_rectangle([S(x - 19 * k), S(y - 12 * k), S(x + 19 * k), S(y + 9 * k)], radius=S(4 * k), outline=GREEN, width=max(1, round(S(1.4))))
+    d.polygon([(S(x - 12 * k), S(y + 9 * k)), (S(x - 12 * k), S(y + 15 * k)), (S(x - 5 * k), S(y + 9 * k))], fill=BLACK, outline=GREEN)
+    line(d, x - 12 * k, y + 9 * k, x - 12 * k, y + 15 * k, GREEN, 1.4)
+    line(d, x - 12 * k, y + 15 * k, x - 5 * k, y + 9 * k, GREEN, 1.4)
+    text(d, x, y + 3 * k, "\u25b2 4.1", mono(S(8.5 * k), 700), GREEN, anchor="c")
 
 
-def icon_algo(d, x, y):
-    # a chip with a lock: the finished algo, and the closed group it goes to
-    d.rectangle([S(x - 17), S(y - 13), S(x + 17), S(y + 13)], outline=WHITE, width=max(1, round(S(1.2))))
+def icon_algo(d, x, y, k=1.0):
+    # a chip with pins: the finished algo, boxed and handed over
+    d.rectangle([S(x - 17 * k), S(y - 13 * k), S(x + 17 * k), S(y + 13 * k)], outline=WHITE, width=max(1, round(S(1.4))))
     for i in range(4):
-        px = x - 12 + i * 8
-        line(d, px, y - 13, px, y - 18, WHITE, 1)
-        line(d, px, y + 13, px, y + 18, WHITE, 1)
-    text(d, x, y + 4, "ALGO", mono(S(8.5), 700), WHITE, anchor="c")
+        px = x + (-12 + i * 8) * k
+        line(d, px, y - 13 * k, px, y - 18 * k, WHITE, 1.2)
+        line(d, px, y + 13 * k, px, y + 18 * k, WHITE, 1.2)
+    text(d, x, y + 4 * k, "ALGO", mono(S(8.5 * k), 700), WHITE, anchor="c")
 
 
 # ---------------------------------------------------------------- the picture
@@ -181,25 +183,26 @@ def icon_algo(d, x, y):
 def flywheel(name: str = "flywheel-1600x900.png", w: int = 1600, h: int = 900) -> None:
     im, d = canvas(w, h)
     pad = 60
+    K = 1.4  # the icons, relative to the first drawing
 
     # ── header: what this is, in the words of the card
-    d.ellipse([S(pad), S(56), S(pad + 7), S(63)], fill=GREEN)
-    text(d, pad + 16, 63, "$FOMOBRAIN  ·  THE FLYWHEEL  ·  ROBINHOOD CHAIN", mono(S(11)), GRAPHITE, track=1.5)
+    d.ellipse([S(pad), S(54), S(pad + 8), S(62)], fill=GREEN)
+    text(d, pad + 18, 63, "$FOMOBRAIN  ·  THE FLYWHEEL  ·  ROBINHOOD CHAIN", mono(S(12.5)), GRAPHITE, track=1.6)
     text(d, pad, 122, "EVERY ROAD ENDS AT BURN", sans(S(54), 300), WHITE, track=3.8)
-    text(d, pad, 150, "signals, fees and the algo itself are paid in $FOMOBRAIN; what is paid is destroyed",
-         mono(S(11.5)), GRAPHITE, track=0.6)
-    mark(d, S(w - pad - 44), S(46), S(44))
-    text(d, w - pad - 56, 66, "FOMO", sans(S(17), 700), WHITE, track=0.9, anchor="r")
-    text(d, w - pad - 56, 86, "BRAIN", sans(S(17), 300), WHITE, track=0.9, anchor="r")
+    text(d, pad, 151, "signals, fees and the algo itself are paid in $FOMOBRAIN; what is paid is destroyed",
+         mono(S(13)), GRAPHITE, track=0.6)
+    mark(d, S(w - pad - 48), S(44), S(48))
+    text(d, w - pad - 62, 66, "FOMO", sans(S(19), 700), WHITE, track=0.9, anchor="r")
+    text(d, w - pad - 62, 88, "BRAIN", sans(S(19), 300), WHITE, track=0.9, anchor="r")
     line(d, pad, 172, w - pad, 172, CARBON, 1)
 
     # ── the wheel
-    cx, cy, R = 800, 515, 232
+    cx, cy, R = 800, 505, 230
     ST = {  # angle on the ring, clockwise from three o'clock, screen-wise
         "trades": 162, "fees": 234, "deposit": 306, "buyback": 18, "burn": 90,
     }
     P = {k: (cx + math.cos(math.radians(a)) * R, cy + math.sin(math.radians(a)) * R) for k, a in ST.items()}
-    NR = 32      # node radius
+    NR = 44      # node radius
     gap = math.degrees(math.asin(NR / R)) + 2.5
 
     # the ring itself, faint, so the arcs read as the mechanism and the ring as the wheel
@@ -214,91 +217,91 @@ def flywheel(name: str = "flywheel-1600x900.png", w: int = 1600, h: int = 900) -
     arc_arrow(d, cx, cy, R, ST["burn"] + gap, ST["trades"] - gap, GRAPHITE, dashed=True)
 
     # what each arc carries, set just outside the ring at its middle
-    def arc_label(a0, a1, s, colour, out=26):
+    def arc_label(a0, a1, s, colour, out=30):
         a = math.radians((a0 + a1) / 2)
         x, y = cx + math.cos(a) * (R + out), cy + math.sin(a) * (R + out)
         anchor = "r" if math.cos(a) < -0.3 else "l" if math.cos(a) > 0.3 else "c"
-        text(d, x, y + 3.5, s, mono(S(10)), colour, track=0.8, anchor=anchor)
+        text(d, x, y + 4.5, s, mono(S(12.5), 700), colour, track=1, anchor=anchor)
     arc_label(ST["trades"], ST["fees"], "EVERY TRADE PAYS", WHITE)
-    arc_label(ST["fees"], ST["deposit"], "CREATOR FEES FUND THE STAKE", WHITE, out=30)
+    arc_label(ST["fees"], ST["deposit"], "CREATOR FEES FUND THE STAKE", WHITE, out=34)
     arc_label(ST["deposit"], ST["buyback"] + 360, "50% OF PROFIT", AMBER)
     arc_label(ST["buyback"], ST["burn"], "BOUGHT OFF THE MARKET", CRIMSON)
-    arc_label(ST["burn"], ST["trades"], "LESS SUPPLY · SAME DEMAND", GRAPHITE)
+    arc_label(ST["burn"], ST["trades"], "LESS SUPPLY \u00b7 SAME DEMAND", GRAPHITE)
 
     # the deposit compounds: a small loop on its own station
     dx, dy = P["deposit"]
-    lr = 22
-    lx, ly = dx + 30, dy - 30
-    arc_arrow(d, lx, ly, lr, 150, 460, AMBER, w=1.2)
-    text(d, lx + 30, ly - 6, "50% BACK IN", mono(S(9.5), 700), AMBER, track=0.8)
-    text(d, lx + 30, ly + 7, "the stake compounds", mono(S(9)), GRAPHITE, track=0.4)
+    lr = 28
+    lx, ly = dx + 40, dy - 40
+    arc_arrow(d, lx, ly, lr, 150, 460, AMBER, w=1.6)
+    text(d, lx + 38, ly - 6, "50% BACK IN", mono(S(12.5), 700), AMBER, track=1)
+    text(d, lx + 38, ly + 11, "the stake compounds", mono(S(11.5)), GRAPHITE, track=0.4)
 
     # ── the hub: the brain, and the three things it drives
-    hub = brain(340, 340, scale=0.44, cy=0.47, d=2.6, dot=280)
-    im.paste(hub.convert("RGB"), (S(cx - 170), S(cy - 182)), hub)
+    hub = brain(380, 380, scale=0.44, cy=0.47, d=2.6, dot=280)
+    im.paste(hub.convert("RGB"), (S(cx - 190), S(cy - 206)), hub)
     d = ImageDraw.Draw(im)
-    text(d, cx, cy + 92, "THE BRAIN", mono(S(12.5), 700), WHITE, track=1.4, anchor="c")
-    text(d, cx, cy + 107, "169 traders · one mind · reads the chain every 20 s", mono(S(9.5)), GRAPHITE, track=0.4, anchor="c")
+    text(d, cx, cy + 104, "THE BRAIN", mono(S(17), 700), WHITE, track=1.8, anchor="c")
+    text(d, cx, cy + 123, "169 traders \u00b7 one mind \u00b7 reads the chain every 20 s", mono(S(11.5)), GRAPHITE, track=0.4, anchor="c")
 
     # the two roads from outside the ring, both ending at the same station
-    sig = (300, 700)
-    alg = (1300, 700)
-    node(d, *sig, 30, GREEN)
-    icon_signal(d, *sig)
-    station_label(d, sig[0], sig[1] + 56, "SIGNALS", "in the bot · paid in $FOMOBRAIN", GREEN)
-    node(d, *alg, 30, WHITE)
-    icon_algo(d, *alg)
-    station_label(d, alg[0], alg[1] + 56, "THE ALGO", "sold or rented · paid in $FOMOBRAIN", WHITE)
+    sig = (272, 690)
+    alg = (1328, 690)
+    node(d, *sig, 42, GREEN)
+    icon_signal(d, *sig, K)
+    station_label(d, sig[0], sig[1] + 72, "SIGNALS", "in the bot \u00b7 paid in $FOMOBRAIN", GREEN)
+    node(d, *alg, 42, WHITE)
+    icon_algo(d, *alg, K)
+    station_label(d, alg[0], alg[1] + 72, "THE ALGO", "sold or rented \u00b7 paid in $FOMOBRAIN", WHITE)
 
     bx, by = P["burn"]
-    curve_arrow(d, (sig[0] + 32, sig[1] + 6), (560, 790), (bx - 40, by + 12), GREEN, dots=4)
-    curve_arrow(d, (alg[0] - 32, alg[1] + 6), (1040, 790), (bx + 40, by + 12), WHITE, dots=4)
-    text(d, 548, 806, "100% BURNED", mono(S(10), 700), GREEN, track=1, anchor="c")
-    text(d, 1052, 806, "100% BURNED", mono(S(10), 700), WHITE, track=1, anchor="c")
+    curve_arrow(d, (sig[0] + 44, sig[1] + 8), (560, 800), (bx - 54, by + 14), GREEN, dots=4)
+    curve_arrow(d, (alg[0] - 44, alg[1] + 8), (1040, 800), (bx + 54, by + 14), WHITE, dots=4)
+    text(d, 545, 812, "100% BURNED", mono(S(12.5), 700), GREEN, track=1.2, anchor="c")
+    text(d, 1055, 812, "100% BURNED", mono(S(12.5), 700), WHITE, track=1.2, anchor="c")
 
     # spokes: the brain makes the signals, and it makes the signals the algo trades
     spoke = lambda x0, y0, x1, y1, s, lx, ly, anchor: (  # noqa: E731
-        line(d, x0, y0, x1, y1, CYAN, 1, dashed=True),
-        text(d, lx, ly, s, mono(S(9)), CYAN, track=0.6, anchor=anchor))
-    spoke(cx - 78, cy + 62, sig[0] + 26, sig[1] - 22, "MAKES THE SIGNALS", 470, 692, "r")
-    spoke(cx + 78, cy + 62, alg[0] - 26, alg[1] - 22, "MAKES THE SIGNALS IT TRADES", 1130, 627, "l")
-    spoke(cx + 62, cy - 78, P["deposit"][0] - 22, P["deposit"][1] + 24, "", 0, 0, "l")
+        line(d, x0, y0, x1, y1, CYAN, 1.2, dashed=True),
+        text(d, lx, ly, s, mono(S(11), 700), CYAN, track=0.8, anchor=anchor))
+    spoke(cx - 84, cy + 68, sig[0] + 36, sig[1] - 28, "MAKES THE SIGNALS", 600, 668, "r")
+    spoke(cx + 84, cy + 68, alg[0] - 36, alg[1] - 28, "MAKES THE SIGNALS IT TRADES", 1010, 668, "l")
+    spoke(cx + 66, cy - 84, P["deposit"][0] - 30, P["deposit"][1] + 34, "", 0, 0, "l")
 
     # ── the stations, drawn last so they sit over the arcs
     node(d, *P["trades"], NR, GREEN)
-    icon_candles(d, *P["trades"])
-    station_label(d, P["trades"][0] - 46, P["trades"][1] + 4, "TRADES", "of $FOMOBRAIN", GREEN, anchor="r")
+    icon_candles(d, *P["trades"], K)
+    station_label(d, P["trades"][0] - 60, P["trades"][1] + 4, "TRADES", "of $FOMOBRAIN", GREEN, anchor="r")
 
     node(d, *P["fees"], NR, WHITE)
-    icon_fee(d, *P["fees"])
-    station_label(d, P["fees"][0] - 44, P["fees"][1] - 6, "CREATOR FEES", "on every trade", WHITE, anchor="r")
+    icon_fee(d, *P["fees"], K)
+    station_label(d, P["fees"][0] - 58, P["fees"][1] - 8, "CREATOR FEES", "on every trade", WHITE, anchor="r")
 
     node(d, *P["deposit"], NR, AMBER)
-    icon_deposit(d, *P["deposit"])
-    station_label(d, P["deposit"][0] + 46, P["deposit"][1] + 28, "THE DEPOSIT", "the algo trades it on the brain's signals", AMBER, anchor="l")
+    icon_deposit(d, *P["deposit"], K)
+    station_label(d, P["deposit"][0] + 60, P["deposit"][1] + 34, "THE DEPOSIT", "the algo trades it on the brain's signals", AMBER, anchor="l")
 
     node(d, *P["buyback"], NR, WHITE)
-    icon_buyback(d, *P["buyback"])
-    station_label(d, P["buyback"][0] + 46, P["buyback"][1] + 4, "BUYBACK", "50% of what the algo makes", WHITE, anchor="l")
+    icon_buyback(d, *P["buyback"], K)
+    station_label(d, P["buyback"][0] + 60, P["buyback"][1] + 4, "BUYBACK", "50% of what the algo makes", WHITE, anchor="l")
 
-    node(d, *P["burn"], NR + 8, CRIMSON, w=1.8, dashed=True)
-    icon_burn(d, *P["burn"])
-    text(d, bx, by + 62, "BURN", mono(S(14), 700), CRIMSON, track=2, anchor="c")
-    text(d, bx, by + 77, "gone. every road ends here.", mono(S(10)), GRAPHITE, track=0.5, anchor="c")
+    node(d, *P["burn"], NR + 10, CRIMSON, w=2.4, dashed=True)
+    icon_burn(d, *P["burn"], K)
+    text(d, bx, by + 76, "BURN", mono(S(20), 700), CRIMSON, track=2.6, anchor="c")
+    text(d, bx, by + 94, "gone. every road ends here.", mono(S(12)), GRAPHITE, track=0.5, anchor="c")
 
     # ── the rail: the two sentences that are the whole argument
-    line(d, pad, 838, w - pad, 838, CARBON, 1)
-    y = 866
+    line(d, pad, 848, w - pad, 848, CARBON, 1)
+    y = 880
+    fs = 14.5
     x = pad
-    for s, colour in (("MORE SUBSCRIBERS", WHITE), ("→", AMBER), ("MORE BURN", CRIMSON)):
-        x += text(d, x, y, s, mono(S(11.5), 700 if colour != AMBER else 400), colour, track=1.2) + 12
-    x = w - pad
-    parts = [("MORE VOLUME", WHITE), ("→", AMBER), ("BIGGER DEPOSIT", AMBER), ("→", AMBER), ("MORE PROFIT", WHITE),
-             ("→", AMBER), ("BIGGER BUYBACK", WHITE), ("→", AMBER), ("MORE BURN", CRIMSON)]
-    total = sum(run_width([(s, mono(S(11.5), 700 if c != AMBER else 400))], S(1.2)) / SS + 12 for s, c in parts) - 12
+    for s, colour in (("MORE SUBSCRIBERS", WHITE), ("\u2192", AMBER), ("MORE BURN", CRIMSON)):
+        x += text(d, x, y, s, mono(S(fs), 700 if colour != AMBER else 400), colour, track=1.4) + 14
+    parts = [("MORE VOLUME", WHITE), ("\u2192", AMBER), ("BIGGER DEPOSIT", AMBER), ("\u2192", AMBER), ("MORE PROFIT", WHITE),
+             ("\u2192", AMBER), ("BIGGER BUYBACK", WHITE), ("\u2192", AMBER), ("MORE BURN", CRIMSON)]
+    total = sum(run_width([(s, mono(S(fs), 700 if c != AMBER else 400))], S(1.4)) / SS + 14 for s, c in parts) - 14
     x = w - pad - total
     for s, colour in parts:
-        x += text(d, x, y, s, mono(S(11.5), 700 if colour != AMBER else 400), colour, track=1.2) + 12
+        x += text(d, x, y, s, mono(S(fs), 700 if colour != AMBER else 400), colour, track=1.4) + 14
 
     save(im, name, w, h, HERE)
 
