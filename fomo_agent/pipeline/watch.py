@@ -137,7 +137,7 @@ def name(conn: sqlite3.Connection, burning: list[dict]) -> int:
 def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
     """Tell every subscriber about each burst once. Lazy import: the bot needs a token, this does
     not, and a watcher with no bot configured is still a faster tape."""
-    from ..bot import Telegram, fmt_hot, subscribers, already_sent, mark_sent
+    from ..bot import Telegram, fmt_hot, subscribers, already_sent, mark_sent, gone, unsubscribe
 
     subs = subscribers(conn)
     if not subs or not settings.telegram_bot_token:
@@ -157,6 +157,8 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
                 sent += 1
             except Exception as e:  # noqa: BLE001 - one blocked chat must not stop the rest
                 log.warning("hot push to %s failed: %s", sub["chat_id"], e)
+                if gone(e):
+                    unsubscribe(conn, sub["chat_id"])
     return sent
 
 

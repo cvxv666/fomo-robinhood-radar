@@ -62,6 +62,17 @@ class Telegram:
             raise TelegramError("another copy of this bot is already polling — stop it first")
         if r.status_code == 401:
             raise TelegramError("TELEGRAM_BOT_TOKEN rejected — check it, or /revoke a new one")
+        # Telegram puts the reason in the body - "Forbidden: bot was blocked by the user",
+        # "Bad Request: chat not found" - and raise_for_status would throw it away in favour of
+        # the bare status line. The reason is what the caller decides on: a chat that blocked us
+        # is dropped, and without it eleven blocked chats were retried on every broadcast for a
+        # day, seven thousand warnings' worth.
+        if r.status_code in (400, 403):
+            try:
+                reason = r.json().get("description")
+            except ValueError:
+                reason = None
+            raise TelegramError(f"{method}: {reason or r.reason_phrase}")
         r.raise_for_status()
         body = r.json()
         if not body.get("ok"):
@@ -535,6 +546,15 @@ def subscribers(conn) -> list[dict]:
     return [dict(r) for r in conn.execute("SELECT * FROM bot_subscribers WHERE active=1")]
 
 
+def gone(e: Exception) -> bool:
+    """A send that will never succeed again: blocked, deleted, kicked, or a chat that is not
+    there. Every one of these is a 403 or a 400 with a permanent reason; a network hiccup or a
+    429 is not, and those are retried next time."""
+    s = str(e)
+    return ("Forbidden" in s or "bot was blocked" in s or "chat not found" in s
+            or "user is deactivated" in s or "bot was kicked" in s)
+
+
 def already_sent(conn, chat_id, mint: str, within_s: int) -> bool:
     row = conn.execute(
         "SELECT ts FROM bot_sent WHERE chat_id=? AND mint=? ORDER BY ts DESC LIMIT 1",
@@ -595,7 +615,7 @@ def broadcast(conn, tg: Telegram) -> dict:
             except Exception as e:  # noqa: BLE001 - one blocked chat must not stop the rest
                 stats["errors"] += 1
                 log.warning("send to %s failed: %s", sub["chat_id"], e)
-                if "bot was blocked" in str(e) or "chat not found" in str(e):
+                if gone(e):
                     unsubscribe(conn, sub["chat_id"])
     if stats["sent"]:
         log.info("broadcast: %s", stats)

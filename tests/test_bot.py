@@ -268,6 +268,27 @@ def test_a_blocked_chat_unsubscribes_itself(conn, monkeypatch):
     assert bot.subscribers(conn) == [], "a chat that blocked us is dropped, not retried forever"
 
 
+def test_every_permanent_refusal_unsubscribes(conn, monkeypatch):
+    """Telegram says why in the body; the bare status line is what httpx would have shown, and
+    "Client error '403 Forbidden'" has to count too - for a day it did not, and eleven blocked
+    chats were retried on every broadcast."""
+    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
+    for i, reason in enumerate(("Forbidden: user is deactivated", "Forbidden: bot was kicked from the group chat",
+                                "Client error '403 Forbidden' for url 'https://api.telegram.org/x'",
+                                "Bad Request: chat not found")):
+        bot.subscribe(conn, f"gone{i}", None, min_conviction=0.5)
+
+    class Refusing(FakeTelegram):
+        def send(self, chat_id, text, preview=False):
+            reasons = ("Forbidden: user is deactivated", "Forbidden: bot was kicked from the group chat",
+                       "Client error '403 Forbidden' for url 'https://api.telegram.org/x'", "Bad Request: chat not found")
+            raise RuntimeError(reasons[int(str(chat_id)[-1])])
+
+    bot.broadcast(conn, Refusing())
+    assert bot.subscribers(conn) == []
+    assert not bot.gone(RuntimeError("ReadTimeout: the network blinked")), "a hiccup is retried"
+
+
 def test_broadcast_with_no_subscribers_does_nothing(conn):
     tg = FakeTelegram()
     assert bot.broadcast(conn, tg) == {"subscribers": 0, "sent": 0, "launches": 0,
