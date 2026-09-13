@@ -55,6 +55,8 @@ class Settings:
     resolve_min_hits: int = field(default_factory=lambda: _int("RESOLVE_MIN_HITS", 3))
     resolve_min_ratio: float = field(default_factory=lambda: _float("RESOLVE_MIN_RATIO", 1.4))
     resolve_users_per_pass: int = field(default_factory=lambda: _int("RESOLVE_USERS_PER_PASS", 20))
+    # a user that could not be resolved is tried again after this many days, or sooner if new swaps arrive
+    resolve_retry_days: int = field(default_factory=lambda: _int("RESOLVE_RETRY_DAYS", 3))
     # where the "who else traded this token just then" answer comes from. `rpc` is free on
     # Robinhood Chain; drop it to force every window through Codex.
     resolve_sources: tuple[str, ...] = field(default_factory=lambda: tuple(

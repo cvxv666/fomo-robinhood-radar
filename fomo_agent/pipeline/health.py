@@ -80,6 +80,8 @@ def checks(conn: sqlite3.Connection, rpc: RobinhoodRPC | None = None) -> list[di
     unscored = one("SELECT COUNT(*) FROM traders WHERE score IS NULL AND status IN "
                    "('tracking','active','watch')")
     unresolved = one("SELECT COUNT(*) FROM fomo_users WHERE onchain_address IS NULL")
+    resolvable = one("SELECT COUNT(*) FROM fomo_users u WHERE u.onchain_address IS NULL AND EXISTS "
+                     "(SELECT 1 FROM fomo_swaps s WHERE s.user_id = u.user_id)")
     priced = one("SELECT COUNT(*) FROM tokens WHERE price_usd IS NOT NULL")
     tokens = one("SELECT COUNT(*) FROM tokens")
 
@@ -106,7 +108,8 @@ def checks(conn: sqlite3.Connection, rpc: RobinhoodRPC | None = None) -> list[di
         {"name": "prices", "ok": tokens == 0 or priced / tokens > 0.6,
          "detail": f"{priced} of {tokens} tokens priced"},
         {"name": "wallet resolution", "ok": True,
-         "detail": f"{unresolved} fomo users still without an on-chain address"},
+         "detail": f"{unresolved} fomo users still without an on-chain address, "
+                   f"{resolvable} of them with swaps to try, {unresolved - resolvable} with none"},
     ]
     return sorted(out, key=lambda c: c["ok"])
 

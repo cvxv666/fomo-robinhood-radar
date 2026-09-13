@@ -71,10 +71,16 @@ def decide(ranked: list[tuple[str, float, int]], used: int,
 
 
 def user_windows(conn: sqlite3.Connection, user_id: str, chain: str, limit: int) -> list[tuple[str, int, str]]:
-    """Distinct (token, ts, side) the user traded on this chain, newest first."""
+    """Distinct (token, ts, side) the user traded on this chain, newest first.
+
+    One window per swap, not per token: a wallet that trades the same two names all month is
+    in every one of those windows, and each is its own piece of evidence - the makers around
+    it at ten past three are not the makers around it the next morning. Grouped by token this
+    user had two windows out of fifty-seven swaps and could never reach three hits.
+    """
     rows = conn.execute(
         "SELECT token, ts, side FROM fomo_swaps WHERE user_id=? AND chain=? "
-        "GROUP BY token ORDER BY MAX(ts) DESC LIMIT ?",
+        "GROUP BY token, ts ORDER BY ts DESC LIMIT ?",
         (user_id, chain, limit),
     ).fetchall()
     return [(r["token"], r["ts"], r["side"]) for r in rows]
@@ -135,11 +141,18 @@ def resolve_pending(conn: sqlite3.Connection, codex: Codex | None = None, chain:
                     limit: int | None = None) -> dict:
     """Turn fomo users with stored swaps into trackable `traders` rows."""
     fetch, client = maker_source(chain, codex)
+    # Never tried first, then the ones tried longest ago, and a failed try is stamped so the
+    # queue moves: without the stamp the twenty richest unresolved were asked every fifteen
+    # minutes for a day, 132 RPC calls a pass, and the other 187 never got a turn. A user gets
+    # another go once new swaps have arrived since the last try, or after three days.
+    now = db.now()
     rows = conn.execute(
-        "SELECT u.* FROM fomo_users u WHERE u.onchain_at IS NULL "
+        "SELECT u.* FROM fomo_users u WHERE u.onchain_address IS NULL "
         "AND EXISTS (SELECT 1 FROM fomo_swaps s WHERE s.user_id=u.user_id AND s.chain=?) "
-        "ORDER BY COALESCE(u.pnl_30d, u.pnl_7d, u.pnl_24h) DESC NULLS LAST LIMIT ?",
-        (chain, limit or settings.resolve_users_per_pass),
+        "AND (u.onchain_at IS NULL OR u.onchain_at < ? "
+        "     OR EXISTS (SELECT 1 FROM fomo_swaps s WHERE s.user_id=u.user_id AND s.chain=? AND s.ts > u.onchain_at)) "
+        "ORDER BY u.onchain_at IS NOT NULL, u.onchain_at, COALESCE(u.pnl_30d, u.pnl_7d, u.pnl_24h) DESC NULLS LAST LIMIT ?",
+        (chain, now - settings.resolve_retry_days * 86400, chain, limit or settings.resolve_users_per_pass),
     ).fetchall()
     stats = {"attempted": 0, "resolved": 0, "new_traders": 0, "confirmed_existing": 0,
              "conflicts": 0, "unresolved": 0, "requests": 0}
@@ -177,8 +190,8 @@ def resolve_pending(conn: sqlite3.Connection, codex: Codex | None = None, chain:
                              "WHERE user_id=?", (db.now(), address, str(info), u["user_id"]))
             else:
                 stats["unresolved"] += 1
-                conn.execute("UPDATE fomo_users SET onchain_note=? WHERE user_id=?",
-                             (str(info), u["user_id"]))
+                conn.execute("UPDATE fomo_users SET onchain_at=?, onchain_note=? WHERE user_id=?",
+                             (now, str(info), u["user_id"]))
         log.info("resolve %s -> %s %s", u["handle"] or u["user_id"][:8], address or "unresolved", info)
     stats["requests"] = client.requests
     stats["source"] = type(client).__name__

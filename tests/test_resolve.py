@@ -51,6 +51,46 @@ def test_a_single_candidate_wins_outright():
     assert addr == "0xme" and info["ratio"] is None      # nothing to compare against
 
 
+def test_every_swap_is_its_own_window(tmp_path):
+    """Fifty-seven swaps in two names used to be two windows; now they are as many as asked for."""
+    from fomo_agent import db
+    from fomo_agent.pipeline.resolve import user_windows
+    conn = db.connect(tmp_path / "w.db")
+    with db.tx(conn):
+        conn.execute("INSERT INTO fomo_users(user_id, handle) VALUES('u1', 'visi')")
+        for i in range(6):
+            conn.execute("INSERT INTO fomo_swaps(user_id, chain, token, ts, side, swap_id) VALUES('u1','robinhood',?,?,?,?)",
+                         ("0x" + "a" * 40 if i % 2 else "0x" + "b" * 40, 1000 + i * 100, "buy", f"s{i}"))
+    assert len(user_windows(conn, "u1", "robinhood", 12)) == 6
+    assert len(user_windows(conn, "u1", "robinhood", 4)) == 4
+
+
+def test_a_failed_resolution_is_stamped_and_not_retried_at_once(tmp_path):
+    from fomo_agent import db
+    from fomo_agent.pipeline import resolve as r
+    conn = db.connect(tmp_path / "f.db")
+    with db.tx(conn):
+        conn.execute("INSERT INTO fomo_users(user_id, handle, pnl_30d) VALUES('u1', 'visi', 10)")
+        conn.execute("INSERT INTO fomo_swaps(user_id, chain, token, ts, side, swap_id) VALUES('u1','robinhood',?,?,?,?)",
+                     ("0x" + "a" * 40, 1000, "buy", "s1"))
+
+    class NoMakers:
+        requests = 0
+    # drive resolve_pending with a maker source that never finds anybody
+    import fomo_agent.pipeline.resolve as mod
+    mod_source = mod.maker_source
+    mod.maker_source = lambda chain, codex=None, rpc=None: ((lambda token, ts, side: set()), NoMakers())
+    try:
+        first = r.resolve_pending(conn, chain="robinhood", limit=5)
+        again = r.resolve_pending(conn, chain="robinhood", limit=5)
+    finally:
+        mod.maker_source = mod_source
+    assert first["attempted"] == 1 and first["unresolved"] == 1
+    assert again["attempted"] == 0, "stamped, so the next pass moves on"
+    row = conn.execute("SELECT onchain_at, onchain_note FROM fomo_users WHERE user_id='u1'").fetchone()
+    assert row["onchain_at"] and "no candidates" in row["onchain_note"]
+
+
 def test_swap_rows_split_legs_and_drop_quote_tokens():
     swap = {
         "id": "abc", "createdAt": "2026-09-04T07:40:45.450Z",
