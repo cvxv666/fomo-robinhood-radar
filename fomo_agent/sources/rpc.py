@@ -149,7 +149,7 @@ class RobinhoodRPC:
         self.url = url or settings.rpc_url
         # the endpoints in the order they are asked; a 429 on one moves the next call to the next
         self.urls = [self.url] + [u for u in settings.rpc_urls if u != self.url]
-        self._which = 0
+        self.spared = 0   # calls the extra endpoints answered while the node was rate-limiting
         self.http = client or httpx.Client(
             timeout=90,
             headers={"content-type": "application/json", "user-agent": settings.rpc_user_agent},
@@ -168,20 +168,39 @@ class RobinhoodRPC:
 
     # ---------- transport ----------
 
+    @staticmethod
+    def _unsupported(body: object) -> bool:
+        """A keyed free-tier endpoint answering "not on this plan" has not answered."""
+        if isinstance(body, list):
+            return False
+        err = (body or {}).get("error") if isinstance(body, dict) else None
+        msg = (err or {}).get("message", "").lower() if isinstance(err, dict) else ""
+        return "not supported" in msg or "free plan" in msg or "upgrade" in msg
+
     def _post(self, payload: object) -> object:
+        """One JSON-RPC round trip. The first endpoint is the chain's own node and is always
+        asked first; the others are asked only for a call it rate-limited, one call at a time,
+        never as a switch. A free-tier extra answers a batch with a 500 and a log range over a
+        hundred blocks with "not supported on free plan"; either is no answer, and the call goes
+        back to waiting on the node rather than failing on the extra."""
         self.limiter.wait()
         self.requests += 1
         for attempt in range(4):
-            r = self.http.post(self.urls[self._which], json=payload)
-            if r.status_code == 429:
-                if len(self.urls) > 1:
-                    # another endpoint is another allowance; rotate before sleeping on this one
-                    self._which = (self._which + 1) % len(self.urls)
+            r = self.http.post(self.urls[0], json=payload)
+            if r.status_code != 429:
+                r.raise_for_status()
+                return r.json()
+            for alt in self.urls[1:]:
+                try:
+                    r2 = self.http.post(alt, json=payload)
+                except httpx.HTTPError:
                     continue
-                time.sleep(2 + 2 * attempt)
-                continue
-            r.raise_for_status()
-            return r.json()
+                if r2.status_code == 200:
+                    body = r2.json()
+                    if not self._unsupported(body):
+                        self.spared += 1
+                        return body
+            time.sleep(2 + 2 * attempt)
         raise RpcError("rate limited after 4 attempts")
 
     def call(self, method: str, params: list) -> object:

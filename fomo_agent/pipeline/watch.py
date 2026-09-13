@@ -69,7 +69,7 @@ def tick(conn: sqlite3.Connection, w: Watch, now: int | None = None) -> dict:
     head, _ = w.rpc.head()   # number and timestamp in one call: the scan dates its logs from it
     first = w.last_block + 1 if w.last_block else head - settings.watch_start_back_blocks
     first = max(first, head - settings.watch_max_range_blocks, 0)
-    stats = {"head": head, "from": first, "blocks": 0, "fills": 0, "hot": 0, "sent": 0}
+    stats = {"head": head, "from": first, "blocks": 0, "fills": 0, "hot": 0, "sent": 0, "spared": w.rpc.spared}
     if head < first:
         return stats
 

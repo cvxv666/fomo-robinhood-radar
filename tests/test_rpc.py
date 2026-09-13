@@ -4,8 +4,10 @@ The fixtures are real chain 4663 responses, trimmed: an `eth_getLogs` page holdi
 fills and ordinary transfers, and the receipt of one of those fills.
 """
 import json
+import time
 from pathlib import Path
 
+import httpx
 import pytest
 
 from fomo_agent.config import settings
@@ -176,6 +178,48 @@ def test_a_failed_scan_is_not_retried_for_every_wallet(monkeypatch):
         with pytest.raises(Exception):
             rpc.get_trades(w, "robinhood")
     assert calls.count("eth_getLogs") == 1, "the second wallet got the remembered failure"
+
+
+def test_a_rate_limited_call_goes_to_the_extra_endpoint_once_and_only_when_it_answers(monkeypatch):
+    """The node 429s; the extra answers simple calls, refuses ranges on its plan, and 500s a
+    batch. Each call still starts at the node - the extra is a spare, not a replacement."""
+    hits = []
+
+    class R:
+        def __init__(self, code, body):
+            self.status_code, self._body = code, body
+
+        def json(self):
+            return self._body
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise httpx.HTTPStatusError("x", request=None, response=None)
+
+    def fake_post(url, json):
+        hits.append(url)
+        if url == "http://node":
+            return R(429, {})
+        if isinstance(json, list):
+            return R(500, {})
+        if json["method"] == "eth_getLogs":
+            return R(200, {"error": {"message": "ranges over 10000 blocks are not supported on free plan"}})
+        return R(200, {"result": "0x10"})
+
+    monkeypatch.setattr(settings, "rpc_urls", ["http://extra"])
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    rpc = RobinhoodRPC(url="http://node")
+    rpc.http.post = fake_post
+    assert rpc.call("eth_blockNumber", []) == "0x10" and rpc.spared == 1
+    assert hits == ["http://node", "http://extra"], "the node first, then the extra, for one call"
+    hits.clear()
+    with pytest.raises(Exception, match="rate limited"):
+        rpc.call("eth_getLogs", [{}])
+    assert hits.count("http://extra") == 4, "a refusal on the plan is not an answer"
+    hits.clear()
+    with pytest.raises(Exception, match="rate limited"):
+        rpc.batch("eth_getTransactionReceipt", [["0x1"]])
+    assert hits[:2] == ["http://node", "http://extra"] and hits.count("http://node") == 4
 
 
 def test_supports_only_its_own_chain():
