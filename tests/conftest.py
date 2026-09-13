@@ -1,0 +1,16 @@
+"""Settings the suite must not inherit from the machine it runs on.
+
+`config.settings` reads the real .env, and on the server that .env has the PRO gate switched on:
+every feed test would then be answered "this feed is PRO". The gate is off here unless a test
+turns it on itself (tests/test_pro.py does, through its own fixture).
+"""
+import pytest
+
+from fomo_agent.config import settings
+
+
+@pytest.fixture(autouse=True)
+def _no_gate_unless_asked(monkeypatch):
+    monkeypatch.setattr(settings, "pro_price_usd", 0.0)
+    monkeypatch.setattr(settings, "pro_grace_until", 0)
+    monkeypatch.setattr(settings, "pro_trial_days", 0)
