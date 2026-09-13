@@ -6,13 +6,13 @@
 <title>FOMO Radar — day one</title>
 <!--
   The first day with subscribers, as one board: eight pushes and how far each went, five past
-  2x. Everything is on screen from the first frame; what moves is the light - a scan crossing
-  the bars, a reading cursor walking the rows, energy running along the bars that made it, the
-  2x line flowing, the day's join wave shimmering, the brain turning. The numbers are the day's
-  own (12 Sep 2026, UTC): the peak is the pool's high after the message. ?still=1 holds still.
+  2x. Built to survive a timeline: a 1600 x 900 card is shown at a third of its size in a feed,
+  so everything here is big - one headline, eight thick bars, three numbers, a wide day strip,
+  a frame, and the brain as a silhouette. Nothing on it needs the full-size view to read.
+  Everything is on screen from the first frame; what moves is the light. ?still=1 holds still.
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@300;400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
 <style>
   :root { --black:#000; --white:#fff; --carbon:#606060; --graphite:#949494; --green:#00ff85; --crimson:#ff003d;
           --amber:#ff8a00; --yellow:#fcff76; --violet:#6100ff; --cyan:#8fd9ff;
@@ -21,18 +21,18 @@
   .stage { position:fixed; inset:0; display:grid; place-items:center; }
   .board { position:relative; width:1600px; height:900px; transform-origin:center center; background:var(--black); }
   .board > svg { position:absolute; inset:0; width:1600px; height:900px; }
-  #brain { position:absolute; left:1330px; top:18px; width:210px; height:150px; }
+  #brain { position:absolute; left:1230px; top:20px; width:330px; height:224px; }
   text { fill:var(--white); font-family:var(--mono); }
   .sans { font-family:var(--sans); } .b { font-weight:700; } .l { font-weight:300; }
   .g { fill:var(--graphite); } .c { fill:var(--carbon); } .gr { fill:var(--green); } .cr { fill:var(--crimson); } .am { fill:var(--amber); } .ye { fill:var(--yellow); }
   .led { animation:blink 2.4s ease-in-out infinite; }
   @keyframes blink { 50% { opacity:.25; } }
-  .flow { stroke-dasharray:6 6; animation:flow 1.1s linear infinite; }
-  @keyframes flow { to { stroke-dashoffset:-12; } }
+  .flow { stroke-dasharray:10 8; animation:flow 1.1s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset:-18; } }
   .breathe { animation:breathe 3.2s ease-in-out infinite; }
-  @keyframes breathe { 50% { opacity:.72; } }
+  @keyframes breathe { 50% { opacity:.7; } }
   .mark { animation:mark 2.8s ease-in-out infinite; }
-  @keyframes mark { 50% { opacity:.35; } }
+  @keyframes mark { 50% { opacity:.4; } }
   @media (prefers-reduced-motion: reduce) { .led, .flow, .breathe, .mark { animation:none; } }
 </style>
 </head>
@@ -48,14 +48,14 @@
 
   // ── the day's own numbers, UTC. Peaks are the pool's high against the push price.
   const PUSHES = [
-    { t: '11:07', h: 11.12, kind: 'LAUNCH', sym: 'Maple',    peak: 1.6,  now: 0.06 },
-    { t: '13:55', h: 13.92, kind: 'LAUNCH', sym: 'AMD',      peak: 2.22, now: 0.23 },
-    { t: '14:08', h: 14.14, kind: 'LAUNCH', sym: 'FRONTIER', peak: 4.05, now: 0.50, note: '5m 52s after the pool' },
-    { t: '14:11', h: 14.19, kind: 'BURST',  sym: 'FRONTIER', peak: 2.49, now: 0.33, note: '7 wallets · 16 s to the phone' },
-    { t: '14:41', h: 14.69, kind: 'LAUNCH', sym: 'SWARM',    peak: 7.86, now: 2.9 },
-    { t: '14:56', h: 14.93, kind: 'LAUNCH', sym: 'LONGCAT',  peak: 1.84, now: 0.45 },
-    { t: '19:56', h: 19.93, kind: 'LAUNCH', sym: 'TWINE',    peak: 2.5,  now: 0.88 },
-    { t: '21:01', h: 21.02, kind: 'LAUNCH', sym: 'UNITY',    peak: 1.25, now: 0.07 },
+    { t: '11:07', h: 11.12, kind: 'LAUNCH', sym: 'MAPLE',    peak: 1.6 },
+    { t: '13:55', h: 13.92, kind: 'LAUNCH', sym: 'AMD',      peak: 2.22 },
+    { t: '14:08', h: 14.14, kind: 'LAUNCH', sym: 'FRONTIER', peak: 4.05 },
+    { t: '14:11', h: 14.19, kind: 'BURST',  sym: 'FRONTIER', peak: 2.49 },
+    { t: '14:41', h: 14.69, kind: 'LAUNCH', sym: 'SWARM',    peak: 7.86 },
+    { t: '14:56', h: 14.93, kind: 'LAUNCH', sym: 'LONGCAT',  peak: 1.84 },
+    { t: '19:56', h: 19.93, kind: 'LAUNCH', sym: 'TWINE',    peak: 2.5 },
+    { t: '21:01', h: 21.02, kind: 'LAUNCH', sym: 'UNITY',    peak: 1.25 },
   ];
   const JOINS = [[12, 3], [13, 0], [14, 22], [15, 73], [16, 44], [17, 37], [18, 11], [19, 11], [20, 14], [21, 8], [22, 8], [23, 7], [24, 7], [25, 5], [26, 4], [27, 4], [28, 4], [29, 1], [30, 3], [31, 3], [32, 2]];
   const HIT = PUSHES.filter((p) => p.peak >= 2);
@@ -68,138 +68,132 @@
   const txt = (x, y, s, attrs = {}, parent = svg) => el('text', { x, y, ...attrs }, parent, s);
   const line = (x1, y1, x2, y2, stroke, attrs = {}, parent = svg) => el('line', { x1, y1, x2, y2, stroke, ...attrs }, parent);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const W = { WHITE: '#fff', CARBON: '#606060', GRAPHITE: '#949494', GREEN: '#00ff85', CRIMSON: '#ff003d', AMBER: '#ff8a00', YELLOW: '#fcff76', VIOLET: '#6100ff', BLACK: '#000' };
-  const pad = 60;
+  const W = { WHITE: '#fff', CARBON: '#606060', GRAPHITE: '#949494', GREEN: '#00ff85', CRIMSON: '#ff003d', AMBER: '#ff8a00', YELLOW: '#fcff76', VIOLET: '#8b5cff', BLACK: '#000' };
+  const pad = 64;
+
+  // ── the frame: a card has to hold its own edge against a dark timeline
+  el('rect', { x: 14, y: 14, width: 1572, height: 872, fill: 'none', stroke: W.WHITE, 'stroke-width': 2 });
 
   // ── head
-  el('circle', { cx: pad + 4, cy: 56, r: 4, fill: W.GREEN, class: 'led' });
-  txt(pad + 18, 61, 'FOMO ROBINHOOD RADAR  ·  12 SEP 2026  ·  THE FIRST DAY WITH SUBSCRIBERS  ·  UTC', { class: 'g', 'font-size': 12, 'letter-spacing': '.13em' });
-  txt(pad - 3, 132, '5/8 SIGNALS CROSSED 2×', { class: 'sans l', 'font-size': 66, 'letter-spacing': '.06em' });
-  txt(pad, 164, 'eight pushes to the bot in a day  ·  five went past double  ·  the peak is the pool’s high after the message, not our tape', { class: 'g', 'font-size': 12.5, 'letter-spacing': '.06em' });
-  line(pad, 186, 1540, 186, W.CARBON);
+  el('circle', { cx: pad + 6, cy: 70, r: 6, fill: W.GREEN, class: 'led' });
+  txt(pad + 24, 76, 'FOMO ROBINHOOD RADAR  ·  12 SEP 2026  ·  THE FIRST DAY WITH SUBSCRIBERS', { 'font-size': 17, 'font-weight': 700, 'letter-spacing': '.12em' });
+  const title = txt(pad - 4, 172, '', { class: 'sans b', 'font-size': 88, 'letter-spacing': '.01em' });
+  el('tspan', {}, title, '5/8 SIGNALS ');
+  el('tspan', { fill: W.GREEN }, title, 'CROSSED 2×');
+  txt(pad, 210, 'EIGHT PUSHES TO THE BOT IN ONE DAY  ·  FIVE WENT PAST DOUBLE  ·  THE PEAK IS THE POOL’S, AFTER THE MESSAGE', { class: 'g', 'font-size': 16, 'font-weight': 700, 'letter-spacing': '.08em' });
+  line(pad, 240, 1536, 240, W.WHITE, { 'stroke-width': 2 });
 
   // ── the race: eight pushes from 1x to their peak, a 2x line to beat, on a log scale
-  const R = { x0: 330, x1: 1020, y0: 236, rowH: 52 };
+  const R = { x0: 470, x1: 1000, y0: 276, rowH: 48, barH: 30 };
   const LMAX = Math.log(10);
   const X = (m) => R.x0 + (Math.log(Math.max(1, m)) / LMAX) * (R.x1 - R.x0);
-  const bottom = R.y0 + PUSHES.length * R.rowH - 6;
-  txt(pad, R.y0 - 16, 'THE PUSHES  ·  PEAK × THE PRICE AT THE MOMENT OF THE MESSAGE', { class: 'g', 'font-size': 11, 'letter-spacing': '.13em' });
-  for (const m of [1, 3, 5, 10]) {
-    line(X(m), R.y0, X(m), bottom, W.CARBON, { 'stroke-dasharray': '4 4' });
-    txt(X(m), bottom + 16, `${m}×`, { class: 'g', 'font-size': 10, 'letter-spacing': '.1em', 'text-anchor': 'middle' });
+  const bottom = R.y0 + PUSHES.length * R.rowH;
+  for (const m of [1, 5, 10]) {
+    line(X(m), R.y0 - 4, X(m), bottom, W.CARBON, { 'stroke-width': 1.5, 'stroke-dasharray': '5 5' });
+    txt(X(m), bottom + 22, `${m}×`, { class: 'g', 'font-size': 14, 'font-weight': 700, 'letter-spacing': '.08em', 'text-anchor': 'middle' });
   }
-  line(X(2), R.y0, X(2), bottom, W.YELLOW, { 'stroke-width': 1.6, class: 'flow' });
-  txt(X(2), bottom + 16, '2×  THE BAR', { class: 'ye', 'font-size': 10, 'letter-spacing': '.1em', 'text-anchor': 'middle' });
-  // the reading cursor: a hairline frame that walks the rows
-  const cursor = el('rect', { x: pad - 10, y: 0, width: R.x1 - pad + 60, height: R.rowH - 8, fill: 'none', stroke: W.WHITE, 'stroke-width': 1, opacity: .35 });
+  line(X(2), R.y0 - 4, X(2), bottom, W.YELLOW, { 'stroke-width': 3, class: 'flow' });
+  txt(X(2), bottom + 22, '2×  THE BAR', { class: 'ye', 'font-size': 14, 'font-weight': 700, 'letter-spacing': '.1em', 'text-anchor': 'middle' });
+  // the reading cursor: a frame that walks the rows
+  const cursor = el('rect', { x: pad - 12, y: 0, width: R.x1 - pad + 100, height: R.rowH - 6, fill: 'none', stroke: W.WHITE, 'stroke-width': 1.5, opacity: .4 });
   const rows = PUSHES.map((p, i) => {
-    const y = R.y0 + i * R.rowH + 22, g = el('g');
+    const y = R.y0 + i * R.rowH + R.rowH / 2, g = el('g');
     const hit = p.peak >= 2, colour = hit ? W.GREEN : W.GRAPHITE;
-    txt(pad, y + 4, p.t, { class: 'c', 'font-size': 11, 'letter-spacing': '.06em' }, g);
-    el('rect', { x: pad + 58, y: y - 8, width: p.kind === 'BURST' ? 52 : 62, height: 17, rx: 999, fill: 'none', stroke: p.kind === 'BURST' ? W.YELLOW : W.VIOLET }, g);
-    txt(pad + 58 + (p.kind === 'BURST' ? 26 : 31), y + 4, p.kind, { fill: p.kind === 'BURST' ? W.YELLOW : '#b48cff', 'font-size': 8.5, 'letter-spacing': '.12em', 'text-anchor': 'middle', 'font-weight': 700 }, g);
-    const name = txt(pad + 136, y + 5, `$${p.sym}`, { fill: W.WHITE, 'font-size': 15, 'font-weight': 700, 'letter-spacing': '.04em' }, g);
+    txt(pad, y + 6, p.t, { class: 'g', 'font-size': 16, 'letter-spacing': '.06em' }, g);
+    const pw = p.kind === 'BURST' ? 70 : 84;
+    el('rect', { x: pad + 66, y: y - 13, width: pw, height: 26, rx: 999, fill: p.kind === 'BURST' ? W.YELLOW : W.VIOLET }, g);
+    txt(pad + 66 + pw / 2, y + 5, p.kind, { fill: W.BLACK, 'font-size': 12, 'letter-spacing': '.1em', 'text-anchor': 'middle', 'font-weight': 700 }, g);
+    const name = txt(pad + 168, y + 8, `$${p.sym}`, { fill: W.WHITE, 'font-size': 24, 'font-weight': 700, 'letter-spacing': '.02em' }, g);
     const w = X(p.peak) - R.x0;
-    const bar = el('rect', { x: R.x0, y: y - 9, width: w, height: 18, fill: colour, opacity: hit ? .9 : .7 }, g);
-    const lit = el('rect', { x: R.x0, y: y - 9, width: 0, height: 18, fill: W.WHITE, opacity: 0 }, g);   // the scan's light on the bar
-    const lab = txt(R.x0 + w + 8, y + 4.5, `${p.peak.toFixed(2)}×`, { fill: colour, 'font-size': 13, 'font-weight': 700, 'letter-spacing': '.04em' }, g);
-    if (p.note) txt(R.x0 + w + 62, y + 4, p.note, { class: 'g', 'font-size': 9.5, 'letter-spacing': '.04em' }, g);
-    if (p.now > 1) { const nx = X(p.now); line(nx, y - 13, nx, y + 13, W.WHITE, { 'stroke-width': 1.2, opacity: .9 }, g); txt(nx, y - 16, `now ${p.now.toFixed(2)}×`, { class: 'g', 'font-size': 8.5, 'letter-spacing': '.06em', 'text-anchor': 'middle' }, g); }
-    txt(R.x1 + 14, y + 5, hit ? '✓' : '·', { fill: colour, 'font-size': 14, 'font-weight': 700, class: hit ? 'breathe' : '' }, g);
-    // energy along the bars that made it: a bright head running 1x to the peak
-    const spark = hit ? el('rect', { x: R.x0, y: y - 9, width: 26, height: 18, fill: W.WHITE, opacity: 0 }, g) : null;
+    const bar = el('rect', { x: R.x0, y: y - R.barH / 2, width: w, height: R.barH, fill: colour }, g);
+    const lit = el('rect', { x: R.x0, y: y - R.barH / 2, width: 0, height: R.barH, fill: W.WHITE, opacity: 0 }, g);
+    const lab = txt(R.x0 + w + 12, y + 9, `${p.peak.toFixed(p.peak < 10 ? 2 : 1)}×`, { fill: colour, 'font-size': 26, 'font-weight': 700, 'letter-spacing': '.01em' }, g);
+    txt(R.x1 + 56, y + 10, hit ? '✓' : '—', { fill: colour, 'font-size': hit ? 28 : 22, 'font-weight': 700, class: hit ? 'breathe' : '' }, g);
+    const spark = hit ? el('rect', { x: R.x0, y: y - R.barH / 2, width: 34, height: R.barH, fill: W.WHITE, opacity: 0 }, g) : null;
     return { p, y, hit, w, bar, lit, lab, name, spark, phase: i * .37 };
   });
 
-  // ── the stats column
-  const S = { x: 1130, y0: 262, gap: 112 };
-  line(S.x - 30, 208, S.x - 30, 680, W.CARBON);
-  const STATS = [[`${HIT.length}/${PUSHES.length}`, 'REACHED 2×', 'gr'], ['7.9×', 'BEST · SWARM · 5 WALLETS IN 3m 41s', 'gr'], [`${median.toFixed(1)}×`, 'MEDIAN PEAK', '']];
-  const stats = STATS.map(([v, k, cls], i) => {
-    const y = S.y0 + i * S.gap;
-    const vEl = txt(S.x, y + 22, v, { class: 'sans b ' + cls, 'font-size': 60, 'letter-spacing': '-.01em' });
-    txt(S.x, y + 46, k, { class: 'g', 'font-size': 10.5, 'letter-spacing': '.14em' });
+  // ── the three numbers
+  const S = { x: 1130, y0: 312, gap: 128 };
+  line(S.x - 34, 268, S.x - 34, 660, W.WHITE, { 'stroke-width': 2 });
+  const STATS = [[`${HIT.length}/${PUSHES.length}`, 'REACHED 2×', W.GREEN, 112], ['7.9×', 'BEST  ·  SWARM', W.GREEN, 84], [`${median.toFixed(1)}×`, 'MEDIAN PEAK', W.WHITE, 84]];
+  const stats = STATS.map(([v, k, fill, size], i) => {
+    const y = S.y0 + i * S.gap + (i ? 10 : 0);
+    const vEl = txt(S.x - 4, y + 30, v, { class: 'sans b', style: `fill:${fill}`, 'font-size': size, 'letter-spacing': '-.02em' });
+    txt(S.x, y + 58, k, { 'font-size': 15, 'font-weight': 700, 'letter-spacing': '.14em' });
     return vEl;
   });
-  // a light that passes over the big numbers now and then
-  const shine = el('rect', { x: S.x, y: S.y0 - 30, width: 40, height: 3 * S.gap, fill: W.WHITE, opacity: 0 });
+  const shine = el('rect', { x: S.x, y: S.y0 - 30, width: 44, height: 3 * S.gap + 40, fill: W.WHITE, opacity: 0 });
 
   // ── the day: joins by the hour, and where the pushes fell
-  const D = { x0: pad, x1: 1540, y0: 748, y1: 826, h0: 10, h1: 33 };
+  const D = { x0: pad, x1: 1536, y0: 726, y1: 812, h0: 10, h1: 33 };
   const DX = (h) => D.x0 + (h - D.h0) / (D.h1 - D.h0) * (D.x1 - D.x0);
-  txt(pad, 694, 'THE DAY  ·  WHO JOINED THE BOT, BY THE HOUR  ·  AND WHEN EACH PUSH WENT OUT', { class: 'g', 'font-size': 11, 'letter-spacing': '.13em' });
-  line(D.x0, D.y1, D.x1, D.y1, W.WHITE);
-  for (let h = D.h0; h <= D.h1; h++) {
-    const major = h % 3 === 0;
-    line(DX(h), D.y1, DX(h), D.y1 + (major ? 7 : 3), major ? W.WHITE : W.CARBON);
-    if (major) txt(DX(h), D.y1 + 21, String(h % 24).padStart(2, '0') + ':00', { class: 'g', 'font-size': 9.5, 'letter-spacing': '.1em', 'text-anchor': 'middle' });
+  line(pad, 692, 1536, 692, W.WHITE, { 'stroke-width': 2 });
+  txt(1536, 716, 'THE DAY  ·  WHO JOINED THE BOT, BY THE HOUR  ·  WHEN EACH PUSH WENT OUT', { 'font-size': 14, 'font-weight': 700, 'letter-spacing': '.12em', 'text-anchor': 'end' });
+  line(D.x0, D.y1, D.x1, D.y1, W.WHITE, { 'stroke-width': 2 });
+  for (let h = D.h0; h <= D.h1; h += 3) {
+    line(DX(h), D.y1, DX(h), D.y1 + 8, W.WHITE, { 'stroke-width': 1.5 });
+    txt(DX(h), D.y1 + 28, String(h % 24).padStart(2, '0') + ':00', { class: 'g', 'font-size': 13, 'font-weight': 700, 'letter-spacing': '.08em', 'text-anchor': 'middle' });
   }
   const maxJ = Math.max(...JOINS.map((j) => j[1]));
-  const joinBars = JOINS.map(([h, n]) => { const hh = (n / maxJ) * (D.y1 - D.y0); return el('rect', { x: DX(h) + 2, y: D.y1 - hh, width: DX(h + 1) - DX(h) - 4, height: hh, fill: W.AMBER, opacity: .85 }); });
-  txt(DX(17) + 6, D.y1 - 48, '73 IN AN HOUR · 15:00', { class: 'am', 'font-size': 9.5, 'font-weight': 700, 'letter-spacing': '.1em' });
+  const joinBars = JOINS.map(([h, n]) => { const hh = (n / maxJ) * (D.y1 - D.y0 - 20); return el('rect', { x: DX(h) + 2, y: D.y1 - hh, width: DX(h + 1) - DX(h) - 4, height: hh, fill: W.AMBER }); });
+  txt(DX(17) + 6, D.y1 - 42, '73 JOINED AT 15:00', { class: 'am', 'font-size': 15, 'font-weight': 700, 'letter-spacing': '.1em' });
   PUSHES.forEach((p) => {
     const x = DX(p.h), colour = p.peak >= 2 ? W.GREEN : W.GRAPHITE;
-    line(x, D.y0 - 2, x, D.y1, colour, { 'stroke-width': 1.2 });
-    txt(x, D.y0 - 6, '▲', { fill: colour, 'font-size': 10, 'text-anchor': 'middle', class: 'mark' });
+    line(x, D.y0 + 8, x, D.y1, colour, { 'stroke-width': 2 });
+    txt(x, D.y0 + 6, '▲', { fill: colour, 'font-size': 15, 'text-anchor': 'middle', class: 'mark' });
   });
-  const LAB = [['11:07', 'Maple', 0], ['13:55', 'AMD', 1], ['14:08', 'FRONTIER', 0], ['14:41', 'SWARM', 1], ['14:56', 'LONGCAT', 2], ['19:56', 'TWINE', 0], ['21:01', 'UNITY', 0]];
-  LAB.forEach(([t, s, lvl]) => { const p = PUSHES.find((x) => x.t === t); txt(DX(p.h) + 5, D.y0 - 18 - lvl * 11, s, { fill: p.peak >= 2 ? W.GREEN : W.GRAPHITE, 'font-size': 9, 'font-weight': 700, 'letter-spacing': '.06em' }); });
-  const sweep = el('rect', { x: D.x0, y: D.y0 - 4, width: 34, height: D.y1 - D.y0 + 4, fill: W.WHITE, opacity: 0 });
+  const LAB = [['11:07', 'MAPLE', 0], ['13:55', 'AMD', 1], ['14:08', 'FRONTIER', 0], ['14:41', 'SWARM', 1], ['14:56', 'LONGCAT', 2], ['19:56', 'TWINE', 0], ['21:01', 'UNITY', 0]];
+  LAB.forEach(([t, s, lvl]) => { const p = PUSHES.find((x) => x.t === t); txt(DX(p.h) + 7, D.y0 - 6 - lvl * 15, s, { fill: p.peak >= 2 ? W.GREEN : W.GRAPHITE, 'font-size': 12.5, 'font-weight': 700, 'letter-spacing': '.06em' }); });
+  const sweep = el('rect', { x: D.x0, y: D.y0, width: 40, height: D.y1 - D.y0, fill: W.WHITE, opacity: 0 });
 
   // ── foot
-  line(pad, 848, 1540, 848, W.CARBON);
-  txt(pad, 876, 'FOMORADAR.APP  ·  @FOMORADARRH_BOT  ·  OPEN SOURCE', { 'font-size': 11, 'letter-spacing': '.13em' });
-  txt(1540, 876, 'THE PEAK IS THE POOL’S HIGH AFTER THE MESSAGE  ·  RESEARCH, NOT FINANCIAL ADVICE', { class: 'g', 'font-size': 11, 'letter-spacing': '.13em', 'text-anchor': 'end' });
+  txt(pad, 866, 'FOMORADAR.APP  ·  @FOMORADARRH_BOT  ·  OPEN SOURCE', { 'font-size': 14, 'font-weight': 700, 'letter-spacing': '.12em' });
+  txt(1536, 866, 'EVERY FILL CHECKED AGAINST ITS RECEIPT  ·  NOT FINANCIAL ADVICE', { class: 'g', 'font-size': 13, 'letter-spacing': '.1em', 'text-anchor': 'end' });
 
-  // the scan: a thin light crossing the race from 1x to 10x, brightening what it touches
-  const scan = el('line', { x1: R.x0, y1: R.y0 - 4, x2: R.x0, y2: bottom + 4, stroke: W.WHITE, 'stroke-width': 1.2, opacity: 0 });
+  // the scan: a light crossing the race from 1x to 10x, brightening what it touches
+  const scan = el('line', { x1: R.x0, y1: R.y0 - 8, x2: R.x0, y2: bottom + 4, stroke: W.WHITE, 'stroke-width': 2, opacity: 0 });
 
-  // ── the brain, small, top right: turning, scanned, firing
+  // ── the brain, top right, as a silhouette: turning, scanned, firing
   const brainDraw = (() => {
-    const cv = document.getElementById('brain'), pr = window.devicePixelRatio || 1, Wc = 210, Hc = 150;
+    const cv = document.getElementById('brain'), pr = window.devicePixelRatio || 1, Wc = 330, Hc = 224;
     cv.width = Wc * pr; cv.height = Hc * pr; const c = cv.getContext('2d'); c.setTransform(pr, 0, 0, pr, 0, 0);
-    const BCX = Wc * .5, BCY = Hc * .5, BSCALE = 58, k = BSCALE / 200; let s2 = 7;
+    const BCX = Wc * .5, BCY = Hc * .5, BSCALE = 94, k = BSCALE / 150; let s2 = 7;
     const r2 = () => { s2 ^= s2 << 13; s2 >>>= 0; s2 ^= s2 >> 17; s2 ^= s2 << 5; s2 >>>= 0; return s2 / 4294967296; }; const rr = (a, b) => a + r2() * (b - a);
     const PTS = []; const push = (x, y, z, tint, w, b) => PTS.push({ x, y, z, ph: rr(0, 6.28), sp: rr(.25, .9), amp: rr(.003, .012), b, tint, w, fire: 0 });
     const hemiR = (u, v) => { const f = Math.cos(u), up = Math.cos(v); let R = 1; R *= 1 + .1 * f - .16 * f * f; R *= up > 0 ? 1 + .1 * up : 1 - .46 * Math.abs(up); R *= 1 + .2 * Math.max(0, -up) * Math.max(0, f) * 1.5; R *= 1 + .055 * Math.sin(u * 3 + v * 2); return R; };
     const gy = (u, v) => Math.sin(u * 7.5 + v * 4.2) * Math.sin(v * 5.5 - u * 2.1);
-    for (let i = 0; i < 2600; i++) { const side = r2() < .5 ? -1 : 1, u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), g = gy(u, v); if (r2() > .3 + .7 * ((g + 1) / 2)) continue; const sh = r2() < .82 ? rr(.9, 1) : rr(.45, .9), R = hemiR(u, v) * sh * (1 + g * .045); const x = Math.sin(v) * Math.cos(u) * .5 * R + side * .235; if (Math.abs(x) < .052) continue; push(x, Math.cos(v) * .385 * R - .045, Math.sin(v) * Math.sin(u) * .415 * R, 0, rr(.9, 2.1), clamp(.3 + ((g + 1) / 2) * .62 + rr(-.1, .1), .06, 1)); }
-    for (let i = 0; i < 700; i++) { const u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), sh = r2() < .8 ? rr(.88, 1) : rr(.5, .88), f = Math.sin(v * 22) * .5 + .5; if (r2() > .25 + .75 * f) continue; const R = (1 - .22 * Math.max(0, Math.cos(v))) * sh; push(Math.sin(v) * Math.cos(u) * .27 * R, Math.cos(v) * .138 * R + .362, Math.sin(v) * Math.sin(u) * .215 * R - .3, 1, rr(.6, 1.4), clamp(.34 + f * .5 + rr(-.08, .08), .1, 1)); }
-    for (let i = 0; i < 220; i++) { const t = r2(), w = .115 - t * .052, a = rr(0, 6.28), on = r2() < .75, q2 = on ? w : w * Math.sqrt(r2()); push(Math.cos(a) * q2, .36 + t * .46, Math.sin(a) * q2 - .075, 2, rr(.6, 1.3), clamp(.3 + (on ? .4 : .05) + rr(-.08, .08), .1, 1)); }
-    const TINT = [[180, 235, 255], [120, 255, 205], [150, 205, 255]]; let fireT = 0;
+    for (let i = 0; i < 5200; i++) { const side = r2() < .5 ? -1 : 1, u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), g = gy(u, v); if (r2() > .3 + .7 * ((g + 1) / 2)) continue; const sh = r2() < .82 ? rr(.9, 1) : rr(.45, .9), R = hemiR(u, v) * sh * (1 + g * .045); const x = Math.sin(v) * Math.cos(u) * .5 * R + side * .235; if (Math.abs(x) < .052) continue; push(x, Math.cos(v) * .385 * R - .045, Math.sin(v) * Math.sin(u) * .415 * R, 0, rr(.9, 2.1), clamp(.45 + ((g + 1) / 2) * .55 + rr(-.1, .1), .1, 1)); }
+    for (let i = 0; i < 1400; i++) { const u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), sh = r2() < .8 ? rr(.88, 1) : rr(.5, .88), f = Math.sin(v * 22) * .5 + .5; if (r2() > .25 + .75 * f) continue; const R = (1 - .22 * Math.max(0, Math.cos(v))) * sh; push(Math.sin(v) * Math.cos(u) * .27 * R, Math.cos(v) * .138 * R + .362, Math.sin(v) * Math.sin(u) * .215 * R - .3, 1, rr(.6, 1.4), clamp(.45 + f * .5 + rr(-.08, .08), .1, 1)); }
+    for (let i = 0; i < 400; i++) { const t = r2(), w = .115 - t * .052, a = rr(0, 6.28), on = r2() < .75, q2 = on ? w : w * Math.sqrt(r2()); push(Math.cos(a) * q2, .36 + t * .46, Math.sin(a) * q2 - .075, 2, rr(.6, 1.3), clamp(.4 + (on ? .4 : .05) + rr(-.08, .08), .1, 1)); }
+    const TINT = [[190, 240, 255], [120, 255, 205], [150, 205, 255]]; let fireT = 0;
     return (T, dt) => { fireT -= dt; if (fireT <= 0) { fireT = 1.1; const fo = [rr(-.4, .4), rr(-.3, .3), rr(-.3, .3)]; for (const p of PTS) if ((p.x - fo[0]) ** 2 + (p.y - fo[1]) ** 2 + (p.z - fo[2]) ** 2 < .05) p.fire = 1; }
       c.clearRect(0, 0, Wc, Hc); const yaw = T * .3, roll = Math.sin(T * .21) * .26, cy0 = Math.cos(yaw), sy0 = Math.sin(yaw), cr = Math.cos(roll), sr = Math.sin(roll);
       const scanD = ((T * .155) % 1) * 1.5 - .75, sa = T * .11, nx = Math.cos(sa), nz = Math.sin(sa);
       for (const p of PTS) { const br = 1 + Math.sin(T * p.sp + p.ph) * p.amp * 3.2, x = p.x * br, y = p.y * br, z = p.z * br; const Xr = x * cy0 + z * sy0; let Z = -x * sy0 + z * cy0; const Y = y * cr - Z * sr; Z = y * sr + Z * cr; const ps = 2.1 / (2.1 + Z * .9), sx = BCX + Xr * BSCALE * ps, sy = BCY + Y * BSCALE * ps, d = clamp((1.1 - Z) / 2.2, 0, 1);
-        p.fire *= .93; const sc2 = Math.abs(x * nx + z * nz - scanD) < .045 ? 1 : 0, a = clamp((.13 + p.b * .8) * (.42 + d * .58) + sc2 * .5 + p.fire * .5, 0, 1);
-        const tc = p.fire > .15 ? [0, 255, 133] : TINT[p.tint]; c.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},${a.toFixed(2)})`; const sz = Math.max(.6, p.w * (.55 + d * .85) * ps * k * (1 + sc2 * .6 + p.fire * .8)); c.fillRect(sx, sy, sz * 1.6, sz * 1.6); }
-      for (const sd of [-1, 1]) { const ex = BCX + sd * BSCALE * .17, ey = BCY - BSCALE * .06, ew = BSCALE * .052, eh = BSCALE * .066; c.fillStyle = 'rgba(2,5,10,.96)'; c.beginPath(); c.ellipse(ex, ey, ew, eh, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(150,220,255,.8)'; c.lineWidth = 1; c.stroke(); c.fillStyle = W.GREEN; c.beginPath(); c.arc(ex + ew * .3, ey - eh * .1, ew * .42, 0, 7); c.fill(); } };
+        p.fire *= .93; const sc2 = Math.abs(x * nx + z * nz - scanD) < .045 ? 1 : 0, a = clamp((.2 + p.b * .8) * (.5 + d * .5) + sc2 * .5 + p.fire * .5, 0, 1);
+        const tc = p.fire > .15 ? [0, 255, 133] : TINT[p.tint]; c.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},${a.toFixed(2)})`; const sz = Math.max(.9, p.w * (.55 + d * .85) * ps * k * (1 + sc2 * .6 + p.fire * .8)); c.fillRect(sx, sy, sz * 1.6, sz * 1.6); }
+      for (const sd of [-1, 1]) { const ex = BCX + sd * BSCALE * .17, ey = BCY - BSCALE * .06, ew = BSCALE * .052, eh = BSCALE * .066; c.fillStyle = 'rgba(2,5,10,.96)'; c.beginPath(); c.ellipse(ex, ey, ew, eh, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(150,220,255,.9)'; c.lineWidth = 1.4; c.stroke(); c.fillStyle = W.GREEN; c.beginPath(); c.arc(ex + ew * .3, ey - eh * .1, ew * .42, 0, 7); c.fill(); } };
   })();
 
   // ── the light: everything is already on the board; this is what moves
   const render = (t) => {
-    // the scan across the race, 1x to 10x, every seven seconds
     const sp = (t % 7) / 7, sx = R.x0 + sp * (R.x1 - R.x0);
-    scan.setAttribute('x1', sx); scan.setAttribute('x2', sx); scan.setAttribute('opacity', .45 + .35 * Math.sin(sp * Math.PI));
+    scan.setAttribute('x1', sx); scan.setAttribute('x2', sx); scan.setAttribute('opacity', .5 + .4 * Math.sin(sp * Math.PI));
     rows.forEach((r) => {
-      // the part of the bar the scan has passed glows for a moment, the peak label brightens
       const passed = clamp(sx - R.x0, 0, r.w), fresh = Math.max(0, 1 - (sx - R.x0 - r.w) / 90);
-      r.lit.setAttribute('width', passed); r.lit.setAttribute('opacity', sx < R.x0 + r.w ? .18 : .18 * clamp(fresh, 0, 1));
-      r.lab.setAttribute('opacity', sx > R.x0 + r.w && sx < R.x0 + r.w + 90 ? 1 : .85);
-      // energy running along the bars that made it
-      if (r.spark) { const u = ((t * .55 + r.phase) % 1); r.spark.setAttribute('x', R.x0 + u * Math.max(1, r.w - 26)); r.spark.setAttribute('opacity', .22 * Math.sin(u * Math.PI)); }
+      r.lit.setAttribute('width', passed); r.lit.setAttribute('opacity', sx < R.x0 + r.w ? .22 : .22 * clamp(fresh, 0, 1));
+      r.lab.setAttribute('opacity', sx > R.x0 + r.w && sx < R.x0 + r.w + 90 ? 1 : .88);
+      if (r.spark) { const u = ((t * .55 + r.phase) % 1); r.spark.setAttribute('x', R.x0 + u * Math.max(1, r.w - 34)); r.spark.setAttribute('opacity', .28 * Math.sin(u * Math.PI)); }
     });
-    // the reading cursor walks the rows, a second and a half each
     const ci = Math.floor(t / 1.5) % rows.length, cy = rows[ci].y;
-    cursor.setAttribute('y', cy - 22); cursor.setAttribute('opacity', .25 + .15 * Math.sin((t % 1.5) / 1.5 * Math.PI));
+    cursor.setAttribute('y', cy - R.rowH / 2 + 3); cursor.setAttribute('opacity', .3 + .2 * Math.sin((t % 1.5) / 1.5 * Math.PI));
     rows.forEach((r, i) => r.name.setAttribute('fill', i === ci ? (r.hit ? W.GREEN : W.WHITE) : W.WHITE));
-    // a light over the big numbers every nine seconds
-    const shp = (t % 9) / 9; shine.setAttribute('x', S.x - 40 + shp * 420); shine.setAttribute('opacity', shp < .35 ? .07 * Math.sin(shp / .35 * Math.PI) : 0);
-    stats[0].setAttribute('opacity', .88 + .12 * Math.sin(t * 1.6));
-    // the day: a sweep through the hours, the join wave shimmering under it
+    const shp = (t % 9) / 9; shine.setAttribute('x', S.x - 40 + shp * 440); shine.setAttribute('opacity', shp < .35 ? .08 * Math.sin(shp / .35 * Math.PI) : 0);
+    stats[0].setAttribute('opacity', .96 + .04 * Math.sin(t * 1.6));
     const dp = (t % 6) / 6, dx = D.x0 + dp * (D.x1 - D.x0);
-    sweep.setAttribute('x', dx); sweep.setAttribute('opacity', .06);
-    JOINS.forEach(([h], i) => { const bx = DX(h); const near = Math.max(0, 1 - Math.abs(dx - bx) / 60); joinBars[i].setAttribute('opacity', .8 + .2 * near); });
+    sweep.setAttribute('x', dx); sweep.setAttribute('opacity', .07);
+    JOINS.forEach(([h], i) => { const bx = DX(h); const near = Math.max(0, 1 - Math.abs(dx - bx) / 60); joinBars[i].setAttribute('opacity', .82 + .18 * near); });
   };
   let start = performance.now(), last = start;
   const loop = () => { const now = performance.now(), t = (now - start) / 1000, dt = Math.min(.05, (now - last) / 1000); last = now; render(t); brainDraw(4.33 + t, dt); requestAnimationFrame(loop); };
