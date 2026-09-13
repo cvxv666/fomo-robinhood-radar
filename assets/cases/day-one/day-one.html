@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOMO Radar — day one</title>
+<!--
+  The first day with subscribers, as one animated board: eight pushes race to their peak, five
+  cross 2x, one is caught as a honeypot, 271 people join in an afternoon. The numbers are the
+  day's own (12 Sep 2026, UTC), from the tape and the pool candles. ?still=1 shows the finished
+  board; REPLAY plays it again.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root { --black:#000; --white:#fff; --carbon:#606060; --graphite:#949494; --green:#00ff85; --crimson:#ff003d;
+          --amber:#ff8a00; --yellow:#fcff76; --violet:#6100ff; --cyan:#8fd9ff;
+          --sans:"Space Grotesk", system-ui, sans-serif; --mono:"JetBrains Mono", ui-monospace, monospace; }
+  html, body { margin:0; height:100%; background:var(--black); color:var(--white); overflow:hidden; }
+  .stage { position:fixed; inset:0; display:grid; place-items:center; }
+  .board { position:relative; width:1600px; height:900px; transform-origin:center center; background:var(--black); }
+  .board > svg { position:absolute; inset:0; width:1600px; height:900px; }
+  #brain { position:absolute; left:1330px; top:18px; width:210px; height:150px; }
+  text { fill:var(--white); font-family:var(--mono); }
+  .sans { font-family:var(--sans); } .b { font-weight:700; } .l { font-weight:300; }
+  .g { fill:var(--graphite); } .c { fill:var(--carbon); } .gr { fill:var(--green); } .cr { fill:var(--crimson); } .am { fill:var(--amber); } .ye { fill:var(--yellow); }
+  .led { animation:blink 2.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+  .replay { cursor:pointer; }
+  .replay:hover rect { stroke:var(--green); } .replay:hover text { fill:var(--green); }
+  @media (prefers-reduced-motion: reduce) { .led { animation:none; } }
+</style>
+</head>
+<body>
+<div class="stage"><div class="board" id="board"><svg id="art" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg"></svg><canvas id="brain"></canvas></div></div>
+<script>
+(() => {
+  const q = new URLSearchParams(location.search);
+  const reduced = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || q.has('still');
+  const board = document.getElementById('board');
+  const fit = () => { const s = Math.min(innerWidth / 1600, innerHeight / 900); board.style.transform = `scale(${s})`; };
+  addEventListener('resize', fit); fit();
+
+  // ── the day's own numbers, UTC. Peaks are the pool's high against the push price.
+  const PUSHES = [
+    { t: '11:07', h: 11.12, kind: 'LAUNCH', sym: 'Maple',    peak: 1.6,  now: 0.06 },
+    { t: '13:55', h: 13.92, kind: 'LAUNCH', sym: 'AMD',      peak: 2.22, now: 0.23 },
+    { t: '14:08', h: 14.14, kind: 'LAUNCH', sym: 'FRONTIER', peak: 4.05, now: 0.50, note: '5m 52s after the pool' },
+    { t: '14:11', h: 14.19, kind: 'BURST',  sym: 'FRONTIER', peak: 2.49, now: 0.33, note: '7 wallets · 16 s to the phone' },
+    { t: '14:41', h: 14.69, kind: 'LAUNCH', sym: 'SWARM',    peak: 7.86, now: 2.9 },
+    { t: '14:56', h: 14.93, kind: 'LAUNCH', sym: 'LONGCAT',  peak: 1.84, now: 0.45 },
+    { t: '19:56', h: 19.93, kind: 'LAUNCH', sym: 'TWINE',    peak: 2.5,  now: 0.88 },
+    { t: '21:01', h: 21.02, kind: 'LAUNCH', sym: 'UNITY',    peak: 1.25, now: 0.07 },
+    { t: '01:54', h: 25.9,  kind: 'LAUNCH', sym: 'STONKINU', peak: 7.37, now: 7.37, honeypot: true },
+  ];
+  const JOINS = [[12, 3], [13, 0], [14, 22], [15, 73], [16, 44], [17, 37], [18, 11], [19, 11], [20, 14], [21, 8], [22, 8], [23, 7], [24, 7], [25, 5], [26, 4], [27, 4], [28, 4], [29, 1], [30, 3], [31, 3], [32, 2]];
+  const REAL = PUSHES.filter((p) => !p.honeypot);
+  const HIT = REAL.filter((p) => p.peak >= 2);
+  const peaks = REAL.map((p) => p.peak).sort((a, b) => a - b);
+  const median = (peaks[3] + peaks[4]) / 2;
+  const STATS = [
+    { v: `${HIT.length}/${REAL.length}`, k: 'REACHED 2×', cls: 'gr', num: false },
+    { v: 7.86, k: 'BEST · SWARM · 5 WALLETS IN 3m 41s', cls: 'gr', fmt: (x) => x.toFixed(1) + '×' },
+    { v: median, k: 'MEDIAN PEAK', cls: '', fmt: (x) => x.toFixed(1) + '×' },
+    { v: 16, k: 'FILL → PHONE · BURST', cls: 'gr', fmt: (x) => Math.round(x) + ' s' },
+    { v: 271, k: 'JOINED IN A DAY', cls: 'ye', fmt: (x) => String(Math.round(x)) },
+    { v: 2, k: 'HONEYPOTS CAUGHT', cls: 'cr', fmt: (x) => String(Math.round(x)) },
+  ];
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('art');
+  const el = (tag, attrs = {}, parent = svg, text = null) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text !== null) e.textContent = text; parent.appendChild(e); return e; };
+  const txt = (x, y, s, attrs = {}, parent = svg) => el('text', { x, y, ...attrs }, parent, s);
+  const line = (x1, y1, x2, y2, stroke, attrs = {}, parent = svg) => el('line', { x1, y1, x2, y2, stroke, ...attrs }, parent);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const ease = (p) => 1 - Math.pow(1 - clamp(p, 0, 1), 3);
+  const W = { WHITE: '#fff', CARBON: '#606060', GRAPHITE: '#949494', GREEN: '#00ff85', CRIMSON: '#ff003d', AMBER: '#ff8a00', YELLOW: '#fcff76', VIOLET: '#6100ff', BLACK: '#000' };
+  const pad = 60;
+
+  // ── head
+  el('circle', { cx: pad + 4, cy: 56, r: 4, fill: W.GREEN, class: 'led' });
+  txt(pad + 18, 61, 'FOMO ROBINHOOD RADAR  ·  12 SEP 2026  ·  THE FIRST DAY WITH SUBSCRIBERS  ·  UTC', { class: 'g', 'font-size': 12, 'letter-spacing': '.13em' });
+  const title = txt(pad - 3, 132, '', { class: 'sans l', 'font-size': 66, 'letter-spacing': '.06em' });
+  const TITLE = 'FIVE OF EIGHT WENT 2×';
+  const sub = txt(pad, 164, 'eight pushes to the bot · every fill checked against its receipt · the peak is the pool’s, not ours', { class: 'g', 'font-size': 12.5, 'letter-spacing': '.06em', opacity: 0 });
+  line(pad, 186, 1540, 186, W.CARBON);
+
+  // ── the race: eight pushes from 1x to their peak, a 2x line to beat, on a log scale
+  const R = { x0: 330, x1: 1020, y0: 222, rowH: 46 };
+  const LMAX = Math.log(10);
+  const X = (m) => R.x0 + (Math.log(Math.max(1, m)) / LMAX) * (R.x1 - R.x0);
+  txt(pad, R.y0 - 14, 'THE PUSHES  ·  PEAK × THE PRICE AT THE MOMENT OF THE MESSAGE', { class: 'g', 'font-size': 11, 'letter-spacing': '.13em' });
+  for (const m of [1, 2, 3, 5, 10]) {
+    const isBar = m === 2;
+    line(X(m), R.y0, X(m), R.y0 + PUSHES.length * R.rowH - 6, isBar ? W.YELLOW : W.CARBON, { 'stroke-dasharray': '4 4', 'stroke-width': isBar ? 1.4 : 1 });
+    txt(X(m), R.y0 + PUSHES.length * R.rowH + 10, `${m}×` + (isBar ? '  THE BAR' : ''), { class: isBar ? 'ye' : 'g', 'font-size': 10, 'letter-spacing': '.1em', 'text-anchor': 'middle' });
+  }
+  const rows = PUSHES.map((p, i) => {
+    const y = R.y0 + i * R.rowH + 22, g = el('g', { opacity: 0 });
+    const colour = p.honeypot ? W.CRIMSON : p.peak >= 2 ? W.GREEN : W.GRAPHITE;
+    txt(pad, y + 4, p.t, { class: 'c', 'font-size': 11, 'letter-spacing': '.06em' }, g);
+    const pill = el('rect', { x: pad + 58, y: y - 8, width: p.kind === 'BURST' ? 52 : 62, height: 17, rx: 999, fill: 'none', stroke: p.kind === 'BURST' ? W.YELLOW : W.VIOLET }, g);
+    txt(pad + 58 + (p.kind === 'BURST' ? 26 : 31), y + 4, p.kind, { fill: p.kind === 'BURST' ? W.YELLOW : '#b48cff', 'font-size': 8.5, 'letter-spacing': '.12em', 'text-anchor': 'middle', 'font-weight': 700 }, g);
+    txt(pad + 136, y + 5, `$${p.sym}`, { fill: p.honeypot ? W.CRIMSON : W.WHITE, 'font-size': 15, 'font-weight': 700, 'letter-spacing': '.04em' }, g);
+    line(R.x0, y, R.x0, y, colour, { 'stroke-width': 1 }, g);  // the baseline tick
+    const bar = el('rect', { x: R.x0, y: y - 9, width: 0, height: 18, fill: colour, opacity: p.honeypot ? .55 : .9 }, g);
+    const lab = txt(R.x0 + 6, y + 4.5, '', { fill: colour, 'font-size': 13, 'font-weight': 700, 'letter-spacing': '.04em' }, g);
+    const nowT = el('line', { x1: R.x0, y1: y - 13, x2: R.x0, y2: y + 13, stroke: W.WHITE, 'stroke-width': 1.2, opacity: 0 }, g);
+    const nowL = txt(R.x0, y - 16, '', { class: 'g', 'font-size': 8.5, 'letter-spacing': '.06em', 'text-anchor': 'middle', opacity: 0 }, g);
+    const tick = txt(R.x1 + 14, y + 5, '', { fill: colour, 'font-size': 14, 'font-weight': 700, opacity: 0 }, g);
+    const note = txt(R.x0, y + 4, p.note || '', { class: 'g', 'font-size': 9.5, 'letter-spacing': '.04em', opacity: 0 }, g);
+    const strike = el('line', { x1: pad, y1: y, x2: R.x1, y2: y, stroke: W.CRIMSON, 'stroke-width': 1.4, opacity: 0 }, g);
+    const stamp = el('g', { opacity: 0 }, g);
+    el('rect', { x: R.x0 + 200, y: y - 11, width: 250, height: 22, fill: W.BLACK, stroke: W.CRIMSON, 'stroke-width': 1.2, transform: `rotate(-3 ${R.x0 + 325} ${y})` }, stamp);
+    txt(R.x0 + 325, y + 4, 'CAUGHT · NOBODY CAN SELL', { class: 'cr', 'font-size': 11, 'font-weight': 700, 'letter-spacing': '.14em', 'text-anchor': 'middle', transform: `rotate(-3 ${R.x0 + 325} ${y})` }, stamp);
+    return { p, g, bar, lab, nowT, nowL, tick, note, strike, stamp, y, colour };
+  });
+
+  // ── the stats column
+  const S = { x: 1130, y0: 236, gap: 82 };
+  line(S.x - 30, 208, S.x - 30, 700, W.CARBON);
+  const stats = STATS.map((s, i) => {
+    const y = S.y0 + i * S.gap, g = el('g', { opacity: 0 });
+    const vEl = txt(S.x, y + 22, '', { class: 'sans b ' + s.cls, 'font-size': 44, 'letter-spacing': '-.01em' }, g);
+    txt(S.x, y + 44, s.k, { class: 'g', 'font-size': 10.5, 'letter-spacing': '.14em' }, g);
+    return { ...s, g, vEl };
+  });
+
+  // ── the day: joins by the hour, and where the pushes fell
+  const D = { x0: pad, x1: 1540, y0: 748, y1: 826, h0: 10, h1: 33 };   // 10:00 UTC to 09:00 next day
+  const DX = (h) => D.x0 + (h - D.h0) / (D.h1 - D.h0) * (D.x1 - D.x0);
+  txt(pad, 694, 'THE DAY  ·  WHO JOINED THE BOT, BY THE HOUR  ·  AND WHEN EACH PUSH WENT OUT', { class: 'g', 'font-size': 11, 'letter-spacing': '.13em' });
+  line(D.x0, D.y1, D.x1, D.y1, W.WHITE);
+  for (let h = D.h0; h <= D.h1; h++) {
+    const major = h % 3 === 0;
+    line(DX(h), D.y1, DX(h), D.y1 + (major ? 7 : 3), major ? W.WHITE : W.CARBON);
+    if (major) txt(DX(h), D.y1 + 21, String(h % 24).padStart(2, '0') + ':00', { class: 'g', 'font-size': 9.5, 'letter-spacing': '.1em', 'text-anchor': 'middle' });
+  }
+  const maxJ = Math.max(...JOINS.map((j) => j[1]));
+  const joinBars = JOINS.map(([h, n]) => el('rect', { x: DX(h) + 2, y: D.y1, width: DX(h + 1) - DX(h) - 4, height: 0, fill: W.AMBER, opacity: .85 }));
+  const joinLab = txt(DX(17) + 6, D.y1 - 48, '73 IN AN HOUR · 15:00', { class: 'am', 'font-size': 9.5, 'font-weight': 700, 'letter-spacing': '.1em', opacity: 0 });
+  const marks = PUSHES.map((p) => {
+    const g = el('g', { opacity: 0 }), x = DX(p.h), colour = p.honeypot ? W.CRIMSON : p.peak >= 2 ? W.GREEN : W.GRAPHITE;
+    line(x, D.y0 - 2, x, D.y1, colour, { 'stroke-width': 1.2, 'stroke-dasharray': p.honeypot ? '3 3' : 'none' }, g);
+    txt(x, D.y0 - 6, p.honeypot ? '✕' : '▲', { fill: colour, 'font-size': 10, 'text-anchor': 'middle' }, g);
+    return g;
+  });
+  // labels, staggered so the 14:00 cluster still reads
+  const LAB = [['11:07', 'Maple', 0], ['13:55', 'AMD', 1], ['14:08', 'FRONTIER', 0], ['14:41', 'SWARM', 1], ['14:56', 'LONGCAT', 2], ['19:56', 'TWINE', 0], ['21:01', 'UNITY', 0], ['01:54', 'STONKINU', 0]];
+  const labs = LAB.map(([t, s, lvl]) => { const p = PUSHES.find((x) => x.t === t); return txt(DX(p.h) + 5, D.y0 - 18 - lvl * 11, s, { fill: p.honeypot ? W.CRIMSON : p.peak >= 2 ? W.GREEN : W.GRAPHITE, 'font-size': 9, 'font-weight': 700, 'letter-spacing': '.06em', opacity: 0 }); });
+
+  // ── foot and replay
+  line(pad, 848, 1540, 848, W.CARBON);
+  const foot = el('g', { opacity: 0 });
+  txt(pad, 876, 'FOMORADAR.APP  ·  @FOMORADARRH_BOT  ·  OPEN SOURCE', { 'font-size': 11, 'letter-spacing': '.13em' }, foot);
+  txt(1540, 876, 'THE PEAK IS THE POOL’S HIGH AFTER THE MESSAGE  ·  RESEARCH, NOT FINANCIAL ADVICE', { class: 'g', 'font-size': 11, 'letter-spacing': '.13em', 'text-anchor': 'end' }, foot);
+  const rp = el('g', { class: 'replay', opacity: 0 });
+  el('rect', { x: 1540 - 84, y: 196, width: 84, height: 20, rx: 999, fill: 'none', stroke: W.CARBON }, rp);
+  txt(1540 - 42, 210, '↻  REPLAY', { class: 'g', 'font-size': 9.5, 'letter-spacing': '.12em', 'text-anchor': 'middle' }, rp);
+
+  // ── the brain, small, top right: turning, scanned, firing
+  const brainDraw = (() => {
+    const cv = document.getElementById('brain'), pr = window.devicePixelRatio || 1, Wc = 210, Hc = 150;
+    cv.width = Wc * pr; cv.height = Hc * pr; const c = cv.getContext('2d'); c.setTransform(pr, 0, 0, pr, 0, 0);
+    const BCX = Wc * .5, BCY = Hc * .5, BSCALE = 58, k = BSCALE / 200; let s2 = 7;
+    const r2 = () => { s2 ^= s2 << 13; s2 >>>= 0; s2 ^= s2 >> 17; s2 ^= s2 << 5; s2 >>>= 0; return s2 / 4294967296; }; const rr = (a, b) => a + r2() * (b - a);
+    const PTS = []; const push = (x, y, z, tint, w, b) => PTS.push({ x, y, z, ph: rr(0, 6.28), sp: rr(.25, .9), amp: rr(.003, .012), b, tint, w, fire: 0 });
+    const hemiR = (u, v) => { const f = Math.cos(u), up = Math.cos(v); let R = 1; R *= 1 + .1 * f - .16 * f * f; R *= up > 0 ? 1 + .1 * up : 1 - .46 * Math.abs(up); R *= 1 + .2 * Math.max(0, -up) * Math.max(0, f) * 1.5; R *= 1 + .055 * Math.sin(u * 3 + v * 2); return R; };
+    const gy = (u, v) => Math.sin(u * 7.5 + v * 4.2) * Math.sin(v * 5.5 - u * 2.1);
+    for (let i = 0; i < 2600; i++) { const side = r2() < .5 ? -1 : 1, u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), g = gy(u, v); if (r2() > .3 + .7 * ((g + 1) / 2)) continue; const sh = r2() < .82 ? rr(.9, 1) : rr(.45, .9), R = hemiR(u, v) * sh * (1 + g * .045); const x = Math.sin(v) * Math.cos(u) * .5 * R + side * .235; if (Math.abs(x) < .052) continue; push(x, Math.cos(v) * .385 * R - .045, Math.sin(v) * Math.sin(u) * .415 * R, 0, rr(.9, 2.1), clamp(.3 + ((g + 1) / 2) * .62 + rr(-.1, .1), .06, 1)); }
+    for (let i = 0; i < 700; i++) { const u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), sh = r2() < .8 ? rr(.88, 1) : rr(.5, .88), f = Math.sin(v * 22) * .5 + .5; if (r2() > .25 + .75 * f) continue; const R = (1 - .22 * Math.max(0, Math.cos(v))) * sh; push(Math.sin(v) * Math.cos(u) * .27 * R, Math.cos(v) * .138 * R + .362, Math.sin(v) * Math.sin(u) * .215 * R - .3, 1, rr(.6, 1.4), clamp(.34 + f * .5 + rr(-.08, .08), .1, 1)); }
+    for (let i = 0; i < 220; i++) { const t = r2(), w = .115 - t * .052, a = rr(0, 6.28), on = r2() < .75, q2 = on ? w : w * Math.sqrt(r2()); push(Math.cos(a) * q2, .36 + t * .46, Math.sin(a) * q2 - .075, 2, rr(.6, 1.3), clamp(.3 + (on ? .4 : .05) + rr(-.08, .08), .1, 1)); }
+    const TINT = [[180, 235, 255], [120, 255, 205], [150, 205, 255]]; let fireT = 0;
+    return (T, dt) => { fireT -= dt; if (fireT <= 0) { fireT = 1.1; const fo = [rr(-.4, .4), rr(-.3, .3), rr(-.3, .3)]; for (const p of PTS) if ((p.x - fo[0]) ** 2 + (p.y - fo[1]) ** 2 + (p.z - fo[2]) ** 2 < .05) p.fire = 1; }
+      c.clearRect(0, 0, Wc, Hc); const yaw = T * .3, roll = Math.sin(T * .21) * .26, cy0 = Math.cos(yaw), sy0 = Math.sin(yaw), cr = Math.cos(roll), sr = Math.sin(roll);
+      const scanD = ((T * .155) % 1) * 1.5 - .75, sa = T * .11, nx = Math.cos(sa), nz = Math.sin(sa);
+      for (const p of PTS) { const br = 1 + Math.sin(T * p.sp + p.ph) * p.amp * 3.2, x = p.x * br, y = p.y * br, z = p.z * br; const Xr = x * cy0 + z * sy0; let Z = -x * sy0 + z * cy0; const Y = y * cr - Z * sr; Z = y * sr + Z * cr; const ps = 2.1 / (2.1 + Z * .9), sx = BCX + Xr * BSCALE * ps, sy = BCY + Y * BSCALE * ps, d = clamp((1.1 - Z) / 2.2, 0, 1);
+        p.fire *= .93; const sc2 = Math.abs(x * nx + z * nz - scanD) < .045 ? 1 : 0, a = clamp((.13 + p.b * .8) * (.42 + d * .58) + sc2 * .5 + p.fire * .5, 0, 1);
+        const tc = p.fire > .15 ? [0, 255, 133] : TINT[p.tint]; c.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},${a.toFixed(2)})`; const sz = Math.max(.6, p.w * (.55 + d * .85) * ps * k * (1 + sc2 * .6 + p.fire * .8)); c.fillRect(sx, sy, sz * 1.6, sz * 1.6); }
+      for (const sd of [-1, 1]) { const ex = BCX + sd * BSCALE * .17, ey = BCY - BSCALE * .06, ew = BSCALE * .052, eh = BSCALE * .066; c.fillStyle = 'rgba(2,5,10,.96)'; c.beginPath(); c.ellipse(ex, ey, ew, eh, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(150,220,255,.8)'; c.lineWidth = 1; c.stroke(); c.fillStyle = W.GREEN; c.beginPath(); c.arc(ex + ew * .3, ey - eh * .1, ew * .42, 0, 7); c.fill(); } };
+  })();
+
+  // ── the replay: one clock, everything a function of it
+  const T = { title: 0.1, sub: 1.0, race: 1.4, per: 0.62, stats: 6.0, statGap: 0.35, day: 6.4, joins: 8.0, end: 11.2 };
+  const render = (t) => {
+    const n = Math.floor(ease((t - T.title) / 1.2) * TITLE.length); title.textContent = TITLE.slice(0, n) + (n < TITLE.length && n > 0 ? '_' : '');
+    sub.setAttribute('opacity', ease((t - T.sub) / .5));
+    rows.forEach((r, i) => {
+      const t0 = T.race + i * T.per, p = ease((t - t0) / .55);
+      r.g.setAttribute('opacity', t >= t0 ? 1 : 0);
+      const m = 1 + (r.p.peak - 1) * p, w = X(m) - R.x0;
+      r.bar.setAttribute('width', Math.max(0, w));
+      r.lab.setAttribute('x', R.x0 + w + 8); r.lab.textContent = p > 0 ? `${m.toFixed(m < 10 ? 2 : 1)}×` : ''; r.note.setAttribute('x', R.x0 + w + 62);
+      const crossed = m >= 2 && r.p.peak >= 2;
+      r.bar.setAttribute('fill', r.p.honeypot ? W.CRIMSON : crossed ? W.GREEN : W.GRAPHITE);
+      r.lab.setAttribute('fill', r.p.honeypot ? W.CRIMSON : crossed ? W.GREEN : W.GRAPHITE);
+      const done = t >= t0 + .6;
+      r.tick.textContent = r.p.honeypot ? '' : r.p.peak >= 2 ? '✓' : '·';
+      r.tick.setAttribute('opacity', done ? 1 : 0); r.note.setAttribute('opacity', done ? 1 : 0);
+      const nx = X(Math.max(1, r.p.now)); r.nowT.setAttribute('x1', nx); r.nowT.setAttribute('x2', nx); r.nowL.setAttribute('x', nx); r.nowL.textContent = `now ${r.p.now.toFixed(2)}×`;
+      const showNow = done && !r.p.honeypot && r.p.now > 1; r.nowT.setAttribute('opacity', showNow ? .9 : 0); r.nowL.setAttribute('opacity', showNow ? 1 : 0);
+      if (r.p.honeypot) { const s = ease((t - t0 - .9) / .3); r.strike.setAttribute('opacity', s); r.strike.setAttribute('x2', pad + (R.x1 - pad) * s); r.stamp.setAttribute('opacity', ease((t - t0 - 1.2) / .25)); r.stamp.setAttribute('transform', `scale(${1.4 - .4 * ease((t - t0 - 1.2) / .25)})`); r.stamp.style.transformOrigin = `${R.x0 + 325}px ${r.y}px`; }
+    });
+    stats.forEach((s, i) => { const p = ease((t - T.stats - i * T.statGap) / .8); s.g.setAttribute('opacity', p > 0 ? 1 : 0); s.vEl.textContent = s.num === false ? `${Math.round(HIT.length * p)}/${REAL.length}` : s.fmt(s.v * p); });
+    marks.forEach((m, i) => m.setAttribute('opacity', t >= T.race + i * T.per + .3 ? 1 : 0));
+    labs.forEach((l) => l.setAttribute('opacity', t >= T.day + 1.5 ? 1 : 0));
+    JOINS.forEach(([h, n], i) => { const p = ease((t - T.joins - i * .06) / .5); joinBars[i].setAttribute('height', (n / maxJ) * (D.y1 - D.y0) * p); joinBars[i].setAttribute('y', D.y1 - (n / maxJ) * (D.y1 - D.y0) * p); });
+    joinLab.setAttribute('opacity', ease((t - T.joins - 1.2) / .4));
+    foot.setAttribute('opacity', ease((t - T.end + 1.2) / .5));
+    rp.setAttribute('opacity', t >= T.end ? 1 : 0);
+  };
+  let start = performance.now(), raf = 0, last = performance.now();
+  const loop = () => { const now = performance.now(), t = (now - start) / 1000, dt = Math.min(.05, (now - last) / 1000); last = now; render(Math.min(t, T.end)); brainDraw(4.33 + t, dt); raf = requestAnimationFrame(loop); };
+  const play = () => { cancelAnimationFrame(raf); start = performance.now(); last = start; raf = requestAnimationFrame(loop); };
+  rp.addEventListener('click', play);
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => { if (reduced) { render(T.end); brainDraw(4.33, 0); } else play(); });
+})();
+</script>
+</body>
+</html>
