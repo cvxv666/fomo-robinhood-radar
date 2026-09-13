@@ -17,8 +17,8 @@
    "#ffffff"
   ],
   [
-   "ALERT 17m 33s AFTER THE POOL",
-   "#00ff85"
+   "HONEYPOT · A SELL REVERTS",
+   "#ff003d"
   ]
  ],
  "peak_multiple": 7.4,
@@ -234,9 +234,9 @@
   {
    "index": 20,
    "multiple": 7.37,
-   "label": "NOW · 7.4× · THE HIGH",
-   "sub": "5.5 h after the alert, still there",
-   "colour": "#00ff85",
+   "label": "7.4× · NOBODY CAN SELL",
+   "sub": "a transfer to the pool reverts · caught 07:34",
+   "colour": "#ff003d",
    "dx": -22,
    "dy": -30
   }
@@ -253,11 +253,11 @@
    "#00ff85"
   ],
   [
-   "ALERT → PEAK",
-   "still there",
-   "#fcff76"
+   "SELL PROBE",
+   "reverts",
+   "#ff003d"
   ]
  ],
- "foot_left": "TWENTY SECONDS FROM THE FILL TO YOUR PHONE  ·  EVERY FILL CHECKED AGAINST ITS RECEIPT",
+ "foot_left": "THE ONE THAT GOT THROUGH  ·  A SELL PROBE NOW RUNS BEFORE EVERY LAUNCH AND BURST",
  "foot_right": "FOMORADAR.APP  ·  @FOMORADARRH_BOT  ·  NOT FINANCIAL ADVICE"
 }
