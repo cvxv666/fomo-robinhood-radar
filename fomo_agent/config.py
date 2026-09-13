@@ -113,6 +113,27 @@ class Settings:
     telegram_launch_max_age_min: int = field(default_factory=lambda: _int("TELEGRAM_LAUNCH_MAX_AGE_MIN", 60))
     # how long the watcher waits after the RPC rate-limits it; one tick is enough to clear it
     watch_rate_limit_wait_s: int = field(default_factory=lambda: _int("WATCH_RATE_LIMIT_WAIT_S", 25))
+    # PRO access: the alerts and the live feeds, paid for in the token and burned. A price of 0
+    # means no gate at all - everything is open, which is how a fresh checkout and the tests run.
+    # See pipeline/pro.py.
+    pro_price_usd: float = field(default_factory=lambda: _float("PRO_PRICE_USD", 0))
+    pro_days: int = field(default_factory=lambda: _int("PRO_DAYS", 30))
+    # the token a subscription is paid in; empty falls back to the site's PUBLIC_TOKEN_CA
+    pro_token: str = field(default_factory=lambda: (_env("PRO_TOKEN") or _env("PUBLIC_TOKEN_CA")).lower())
+    pro_token_symbol: str = field(default_factory=lambda: _env("PUBLIC_TOKEN_SYMBOL", "FOMOBRAIN"))
+    pro_burn_address: str = field(default_factory=lambda: _env("PRO_BURN_ADDRESS", "0x000000000000000000000000000000000000dEaD"))
+    # a quote is good for this long; the amount in it is the receipt, so it is exact and unique
+    pro_quote_ttl_min: int = field(default_factory=lambda: _int("PRO_QUOTE_TTL_MIN", 30))
+    # a payment claimed by hash is accepted this far under the dollar price (the price moved)
+    pro_price_tolerance: float = field(default_factory=lambda: _float("PRO_PRICE_TOLERANCE", 0.03))
+    # the token's price is asked of the market again when the stored one is older than this
+    pro_price_max_age_s: int = field(default_factory=lambda: _int("PRO_PRICE_MAX_AGE_S", 600))
+    # unix time: everyone subscribed before it keeps PRO for free until it; 0 is no grace
+    pro_grace_until: int = field(default_factory=lambda: _int("PRO_GRACE_UNTIL", 0))
+    # days of PRO a new chat gets on /start; 0 is none
+    pro_trial_days: int = field(default_factory=lambda: _int("PRO_TRIAL_DAYS", 0))
+    # the bot's @name, for links from the site to it
+    telegram_bot_name: str = field(default_factory=lambda: _env("TELEGRAM_BOT_NAME", "fomoradarRH_bot").lstrip("@"))
     telegram_alert_window_h: int = field(default_factory=lambda: _int("TELEGRAM_ALERT_WINDOW_H", 6))
     telegram_alert_interval_s: int = field(default_factory=lambda: _int("TELEGRAM_ALERT_INTERVAL_S", 120))
     # never tell the same chat about the same token twice inside this window

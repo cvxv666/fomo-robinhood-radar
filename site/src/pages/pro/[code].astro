@@ -1,0 +1,155 @@
+---
+/**
+ * One quote as a page: the exact amount and the address, each with a copy button, a clock, and
+ * a status that flips to PAID on its own. The bot hands the link out with the quote; the page
+ * polls /api/pro/<code> every eight seconds until the burn is on the books. Nothing here
+ * identifies the chat - a code is a code.
+ */
+import Base from '../../layouts/Base.astro';
+import { get } from '../../lib/api';
+
+type Quote = {
+  code: string; usd: number; price: number; tokens: number; symbol: string; token: string;
+  burn_address: string; days: number; created_at: number; expires_at: number;
+  status: 'open' | 'paid' | 'expired'; tx: string | null; paid_until: number | null; now: number; bot: string;
+};
+const code = (Astro.params.code ?? '').toUpperCase();
+const q = /^[A-Z2-9]{5}$/.test(code) ? await get<Quote>(`/api/pro/${code}`) : null;
+if (!q) return new Response(null, { status: 404 });
+const when = (ts: number) => new Date(ts * 1000).toUTCString().replace(/:\d\d GMT$/, ' UTC');
+const short = `${q.burn_address.slice(0, 8)}…${q.burn_address.slice(-6)}`;
+---
+<Base title={`PRO · ${q.tokens.toLocaleString('en-US')} $${q.symbol} — FOMO Robinhood Radar`} section="pro" noindex={true}
+      description={`Quote ${q.code}: ${q.tokens} $${q.symbol} to the burn address for ${q.days} days of PRO.`}>
+  <div class="pagehead"><h1>PRO · <span class="mono">{q.code}</span></h1></div>
+  <p class="subhead">${q.usd} for {q.days} days, paid in ${q.symbol} and burned</p>
+
+  <section class="quote" id="quote" data-code={q.code} data-status={q.status} data-expires={q.expires_at} data-now={q.now}>
+    <div class="status" id="status">
+      <span class="led" aria-hidden="true"></span>
+      <span class="txt" id="status-txt">
+        {q.status === 'paid' ? `paid · PRO until ${q.paid_until ? when(q.paid_until) : '—'}`
+          : q.status === 'expired' ? 'expired · ask the bot for a new quote'
+          : 'waiting for the burn'}
+      </span>
+      <span class="clock mono" id="clock"></span>
+    </div>
+
+    <div class="field">
+      <span class="label">01 · Send exactly</span>
+      <button class="box" type="button" data-copy={String(q.tokens)} title="Copy the amount">
+        <span class="amount">{q.tokens.toLocaleString('en-US')}</span>
+        <span class="sym">${q.symbol}</span>
+      </button>
+      <div class="row">
+        <button class="btn copy" type="button" data-copy={String(q.tokens)}><span class="idle">Copy amount</span><span class="done">Copied</span></button>
+        <span class="hint">as a whole number: <code>{q.tokens}</code></span>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="label">02 · To this address, on Robinhood Chain</span>
+      <button class="box" type="button" data-copy={q.burn_address} title="Copy the burn address">
+        <code class="full">{q.burn_address}</code>
+        <code class="short" aria-hidden="true">{short}</code>
+      </button>
+      <div class="row">
+        <button class="btn copy" type="button" data-copy={q.burn_address}><span class="idle">Copy address</span><span class="done">Copied</span></button>
+        <span class="hint">the standard burn address — nothing comes back out</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="label">03 · Then nothing</span>
+      <p class="line">The radar reads every block. The burn lands, this page turns green, the bot says so, and the alerts and the live feeds are on for {q.days} days. Sent a different amount? Tell the bot <code>/claim</code> and the transaction hash.</p>
+    </div>
+
+    <p class="fine">Quoted at ${q.price.toPrecision(3)} per ${q.symbol} · token <code>{q.token}</code> · the amount is yours alone, that is how the burn is matched to you.</p>
+  </section>
+</Base>
+
+<style>
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  .quote { border: 1px solid #ffffff; padding: 24px 26px; display: grid; gap: 22px; margin-top: 8px; }
+  .quote.is-paid { border-color: #00ff85; }
+  .quote.is-expired { border-color: #606060; }
+  .status { display: flex; align-items: center; gap: 10px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #ff8a00; }
+  .led { width: 8px; height: 8px; background: #ff8a00; animation: blink 1.6s ease-in-out infinite; }
+  .is-paid .status { color: #00ff85; }
+  .is-paid .led { background: #00ff85; animation: none; }
+  .is-expired .status { color: #606060; }
+  .is-expired .led { background: #606060; animation: none; }
+  .clock { margin-left: auto; color: #949494; letter-spacing: 0.06em; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) { .led { animation: none; } }
+  .field { display: grid; gap: 10px; }
+  .label { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #949494; }
+  .box { display: flex; align-items: baseline; gap: 12px; width: 100%; text-align: left; cursor: pointer; border: 1px solid #ffffff; background: none; color: #fff; padding: 14px 16px; font: inherit; }
+  .box:hover { border-color: #00ff85; color: #00ff85; }
+  .amount { font-size: clamp(34px, 6vw, 56px); font-weight: 300; letter-spacing: 0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .sym { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; letter-spacing: 0.1em; color: #949494; }
+  .box code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; letter-spacing: 0.02em; word-break: break-all; background: none; padding: 0; }
+  .box .short { display: none; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .copy { position: relative; min-width: 128px; text-align: center; }
+  .copy .done { display: none; color: #00ff85; }
+  .copy.is-done { border-color: #00ff85; }
+  .copy.is-done .idle { display: none; }
+  .copy.is-done .done { display: inline; }
+  .hint { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; color: #606060; }
+  .line { font-size: 15px; color: #c8c8c8; margin: 0; max-width: 64ch; }
+  .fine { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10.5px; color: #606060; margin: 0; max-width: none; word-break: break-all; }
+  @media (max-width: 480px) { .box .full { display: none; } .box .short { display: inline; } }
+</style>
+
+<script>
+  const root = document.getElementById('quote') as HTMLElement;
+  const status = document.getElementById('status-txt') as HTMLElement;
+  const clock = document.getElementById('clock') as HTMLElement;
+  const code = root.dataset.code ?? '';
+  let state = root.dataset.status ?? 'open';
+  let expires = Number(root.dataset.expires ?? 0);
+  // the server's clock, carried forward locally: a phone's clock is whatever the phone says
+  const skew = Number(root.dataset.now ?? 0) - Math.floor(Date.now() / 1000);
+  const nowS = () => Math.floor(Date.now() / 1000) + skew;
+
+  const copy = async (text: string): Promise<boolean> => {
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch { /* fall through */ }
+    const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch { ok = false; } ta.remove(); return ok;
+  };
+  document.querySelectorAll<HTMLElement>('#quote [data-copy]').forEach((el) => {
+    el.addEventListener('click', async () => {
+      const text = el.dataset.copy ?? ''; if (!text) return;
+      const ok = await copy(text);
+      const btn = el.closest('.field')?.querySelector<HTMLElement>('.copy');
+      if (ok && btn) { btn.classList.add('is-done'); window.setTimeout(() => btn.classList.remove('is-done'), 1600); }
+    });
+  });
+
+  const paint = () => {
+    root.classList.toggle('is-paid', state === 'paid');
+    root.classList.toggle('is-expired', state === 'expired');
+    if (state === 'open') {
+      const left = expires - nowS();
+      if (left <= 0) { state = 'expired'; status.textContent = 'expired · ask the bot for a new quote'; clock.textContent = ''; paint(); return; }
+      clock.textContent = `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')} left`;
+    } else clock.textContent = '';
+  };
+  const when = (ts: number) => new Date(ts * 1000).toUTCString().replace(/:\d\d GMT$/, ' UTC');
+  const poll = async () => {
+    if (state !== 'open') return;
+    try {
+      const r = await fetch(`/api/pro/${code}`, { headers: { accept: 'application/json' }, cache: 'no-store' });
+      if (!r.ok) return;
+      const q = await r.json();
+      if (q.status === 'paid') { state = 'paid'; status.textContent = `paid · PRO until ${q.paid_until ? when(q.paid_until) : '—'}`; }
+      else if (q.status === 'expired') { state = 'expired'; status.textContent = 'expired · ask the bot for a new quote'; }
+      expires = q.expires_at;
+      paint();
+    } catch { /* next time */ }
+  };
+  paint();
+  window.setInterval(paint, 1000);
+  window.setInterval(poll, 8000);
+</script>

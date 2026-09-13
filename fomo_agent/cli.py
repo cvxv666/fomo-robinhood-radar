@@ -383,6 +383,42 @@ def sell_check_cmd(mint: str = typer.Argument(..., help="token address"),
     typer.echo(check(conn, mint.lower(), force=force))
 
 
+@app.command("pro")
+def pro_cmd(
+    grant: str = typer.Option(None, "--grant", help="chat id to hand PRO to by hand"),
+    days: int = typer.Option(None, "--days", help="with --grant: how many days (default PRO_DAYS)"),
+    claim: str = typer.Option(None, "--claim", help="with --grant: attach this burn tx to the chat instead"),
+) -> None:
+    """PRO in numbers - paid chats, open quotes, unclaimed burns - or a manual grant for support."""
+    from .pipeline import pro
+
+    conn = db.connect()
+    try:
+        if grant:
+            if claim:
+                ok, why = pro.claim(conn, grant, claim)
+                typer.echo(f"{'ok' if ok else 'no'}: {why}")
+            else:
+                end = pro.grant(conn, grant, days or settings.pro_days)
+                typer.echo(f"chat {grant}: PRO until {pro._date(end)}")
+            return
+        now = db.now()
+        one = lambda q, *a: conn.execute(q, a).fetchone()[0]  # noqa: E731
+        typer.echo({
+            "enabled": pro.enabled(), "usd": settings.pro_price_usd, "days": settings.pro_days,
+            "price": pro.price_now(conn) if pro.enabled() else None,
+            "paid_now": one("SELECT COUNT(*) FROM bot_subscribers WHERE active=1 AND paid_until > ?", now),
+            "expiring_3d": one("SELECT COUNT(*) FROM bot_subscribers WHERE active=1 AND paid_until BETWEEN ? AND ?", now, now + 3 * 86400),
+            "quotes_open": one("SELECT COUNT(*) FROM pro_quotes WHERE status='open' AND expires_at > ?", now),
+            "payments": one("SELECT COUNT(*) FROM pro_payments WHERE chat_id IS NOT NULL"),
+            "unclaimed": [dict(r) for r in conn.execute("SELECT tx, frm, tokens, ts FROM pro_payments WHERE chat_id IS NULL ORDER BY ts DESC LIMIT 10")],
+            "burned_tokens": one("SELECT COALESCE(SUM(tokens), 0) FROM pro_payments"),
+            "burned_usd": one("SELECT COALESCE(SUM(usd), 0) FROM pro_payments"),
+        })
+    finally:
+        conn.close()
+
+
 @app.command("verify-fills")
 def verify_fills_cmd(
     days: int = typer.Option(7, "--days", help="how far back to fetch receipts for"),

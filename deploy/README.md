@@ -23,7 +23,7 @@ Xvfb, the one piece that would make fomo collection fully unattended.
 | `radar-health.timer` | what is quietly broken, pushed to the bot at 07:40 | — |
 | `radar-digest.timer` | the day in one message to every subscriber, 18:00 | — |
 | `radar-heartbeat.timer` | pings `HEARTBEAT_URL` every 10 min **while the checks pass** | — |
-| `radar-watch` | the chain every 20 s: new blocks, their fills, and a burst pushed the moment it forms | — |
+| `radar-watch` | the chain every 20 s: new blocks, their fills, a burst pushed the moment it forms, and PRO burns credited (`pipeline/pro.py`) | — |
 | `radar-fomo.timer` | the 24h fomo board over HTTP, every 2 h, 1 credit | — |
 | `radar-fomo-slow.timer` | the 7d board and a page of notes, every 8 h, 6 credits | — |
 | `radar-xvfb` / `radar-wm` / `radar-browser` / `radar-crx` | the signed-in Chrome that used to collect fomo — **disabled**, see below | — |

@@ -1,0 +1,88 @@
+---
+/**
+ * PRO, explained once: what it is, what it costs, how it is paid. The exact amount is handed out
+ * by the bot (a quote is one chat's), so this page ends with a button into it.
+ */
+import Base from '../../layouts/Base.astro';
+import { get } from '../../lib/api';
+
+type Terms = {
+  enabled: boolean; usd: number; days: number; token: string; symbol: string;
+  burn_address: string; price: number | null; bot: string;
+};
+const t = await get<Terms>('/api/pro');
+const enabled = !!t?.enabled;
+const symbol = t?.symbol ?? 'FOMOBRAIN';
+const bot = t?.bot ?? 'fomoradarRH_bot';
+const approx = t?.price ? Math.ceil(t.usd / t.price) : null;
+---
+<Base title="PRO — FOMO Robinhood Radar" section="pro" noindex={false}
+      description={`The alerts and the live feeds of FOMO Robinhood Radar, paid in $${symbol} and burned.`}>
+  <div class="pagehead"><h1>PRO</h1></div>
+  <p class="subhead">the alerts and the live feeds, paid in the token and burned</p>
+
+  {enabled ? (
+    <section class="pro">
+      <div class="terms">
+        <div class="big"><span class="usd">${t!.usd}</span><span class="per">/ {t!.days} days</span></div>
+        <p class="line">
+          Paid in <strong>${symbol}</strong> at the pool price when you ask
+          {approx ? <span> — about <strong>{approx.toLocaleString('en-US')}</strong> right now</span> : null}.
+          Sent to the burn address. Nothing comes back out.
+        </p>
+        <a class="btn go" href={`https://t.me/${bot}?start=pro`}>Open the bot → /pro</a>
+      </div>
+
+      <ol class="steps">
+        <li><span class="n">01</span><div><b>Ask the bot for a price.</b> <code>/pro</code> answers with an exact number of ${symbol} — yours alone, good for half an hour.</div></li>
+        <li><span class="n">02</span><div><b>Send exactly that amount</b> to <code class="addr">{t!.burn_address}</code> from any wallet on Robinhood Chain. The amount is the receipt: no wallet to connect, nothing to sign.</div></li>
+        <li><span class="n">03</span><div><b>Done within a minute.</b> The radar reads every block; the burn lands, the bot confirms, the alerts and the feeds are on for {t!.days} days. Pay again any time — the days stack.</div></li>
+      </ol>
+
+      <div class="what">
+        <div>
+          <h3>PRO</h3>
+          <ul>
+            <li>a <b>burst</b> the moment it forms — several trusted wallets in one token inside minutes</li>
+            <li>a <b>launch</b> while it is still early</li>
+            <li><code>/hot</code> <code>/signals</code> <code>/fresh</code> <code>/exits</code>, live, whenever you ask</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Free, always</h3>
+          <ul>
+            <li><code>/top</code> — the leaderboard, ranked by judgement</li>
+            <li>any token address or trader handle, answered</li>
+            <li>one digest a day</li>
+            <li>this site</li>
+          </ul>
+        </div>
+      </div>
+      <p class="fine">Typed a round number instead? <code>/claim</code> with the transaction hash attaches it. Every burn is public on the chain; this is research, not financial advice.</p>
+    </section>
+  ) : (
+    <p style="font-size:16px">There is no PRO tier yet — everything in the bot is open. <a href={`https://t.me/${bot}`}>@{bot}</a></p>
+  )}
+</Base>
+
+<style>
+  .pro { display: grid; gap: 28px; margin-top: 8px; }
+  .terms { border: 1px solid #00ff85; padding: 26px 28px; display: grid; gap: 14px; }
+  .big { display: flex; align-items: baseline; gap: 12px; }
+  .usd { font-size: clamp(44px, 7vw, 72px); font-weight: 300; letter-spacing: 0.02em; line-height: 1; color: #00ff85; }
+  .per { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #949494; }
+  .line { font-size: 16px; color: #949494; margin: 0; max-width: 60ch; }
+  .line strong { color: #fff; font-weight: 500; }
+  .go { justify-self: start; }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .steps li { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: start; font-size: 15px; color: #c8c8c8; border-top: 1px solid #2a2a2a; padding-top: 12px; }
+  .steps b { color: #fff; font-weight: 500; }
+  .n { font-family: "JetBrains Mono", ui-monospace, monospace; color: #00ff85; font-size: 18px; }
+  .addr { word-break: break-all; }
+  .what { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .what h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; font-family: "JetBrains Mono", ui-monospace, monospace; color: #949494; }
+  .what ul { margin: 0; padding-left: 18px; font-size: 14px; color: #c8c8c8; display: grid; gap: 6px; }
+  .what b { color: #fff; font-weight: 500; }
+  .fine { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; color: #606060; max-width: none; }
+  @media (max-width: 640px) { .what { grid-template-columns: 1fr; } }
+</style>

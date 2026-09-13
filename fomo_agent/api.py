@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse, Response
 
 from . import db
 from .config import settings
-from .pipeline import analyze
+from .pipeline import analyze, pro
 from .sources.rpc import QUOTE_TOKENS
 
 log = logging.getLogger(__name__)
@@ -119,6 +119,7 @@ _responses_lock = threading.Lock()
 # them runs the query and the other fifty-nine wait for that answer instead of running it too
 _inflight: dict[str, "asyncio.Future[None]"] = {}
 UNCACHED = ("/api/health",)
+UNCACHED_PREFIX = ("/api/pro",)   # a payment page polls for "paid"; a ten-second-old answer is a wrong one
 
 
 def _cached(key: str):
@@ -133,7 +134,7 @@ def _cached(key: str):
 @app.middleware("http")
 async def remember_responses(request: Request, call_next):
     if request.method != "GET" or not request.url.path.startswith("/api/") \
-            or request.url.path in UNCACHED:
+            or request.url.path in UNCACHED or request.url.path.startswith(UNCACHED_PREFIX):
         return await call_next(request)
     key = str(request.url)
     if (hit := _cached(key)) is not None:
@@ -290,6 +291,37 @@ def candles_for(pool: str, chain_name: str, span: str) -> list[list[float]]:
 
 
 # ---------------------------------------------------------------- routes
+
+@app.get("/api/pro", tags=["meta"])
+def pro_terms(conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    """What PRO costs and where it is paid: the terms the /pro page shows before there is a quote."""
+    return {"enabled": pro.enabled(), "usd": settings.pro_price_usd, "days": settings.pro_days,
+            "token": settings.pro_token, "symbol": settings.pro_token_symbol,
+            "burn_address": settings.pro_burn_address, "price": pro.price_now(conn) if pro.enabled() else None,
+            "bot": settings.telegram_bot_name}
+
+
+@app.get("/api/pro/{code}", tags=["meta"])
+def pro_quote(code: str, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    """One quote by its code: the exact amount, the address, the deadline, and whether it has
+    been paid. Read by the payment page, which polls it until `status` says paid. The chat id
+    stays inside; a code is what the bot handed one person and nothing else."""
+    if not pro.enabled():
+        raise HTTPException(404, "no PRO tier")
+    q = pro.quote_by_code(conn, code)
+    if q is None:
+        raise HTTPException(404, "no such quote")
+    now = db.now()
+    status = q["status"]
+    if status == "open" and q["expires_at"] <= now:
+        status = "expired"
+    return {"code": q["code"], "usd": q["usd"], "price": q["price"], "tokens": q["tokens"],
+            "symbol": settings.pro_token_symbol, "token": settings.pro_token,
+            "burn_address": settings.pro_burn_address, "days": settings.pro_days,
+            "created_at": q["created_at"], "expires_at": q["expires_at"], "status": status,
+            "tx": q["tx"], "paid_until": q["paid_until"], "now": now,
+            "bot": settings.telegram_bot_name}
+
 
 @app.get("/api/health", tags=["meta"])
 def health(conn: sqlite3.Connection = Depends(get_conn)) -> dict:

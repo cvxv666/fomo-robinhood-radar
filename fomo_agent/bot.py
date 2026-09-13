@@ -23,7 +23,7 @@ import httpx
 
 from . import db
 from .config import settings
-from .pipeline import analyze
+from .pipeline import analyze, pro
 
 log = logging.getLogger(__name__)
 
@@ -509,6 +509,79 @@ early, and one digest a day. /stop turns them off, /start turns them back on.
 
 Research, not financial advice."""
 
+HELP_PRO = """<b>FOMO ROBINHOOD RADAR</b>
+<i>which fomo.family traders on Robinhood Chain actually know what they are doing</i>
+
+<b>Send me anything:</b>
+· a token address → who holds it, at what cost, and what they said
+· a trader's handle → the verdict and their open book
+
+<b>Free:</b> /top — the leaderboard, ranked by judgement — and one digest a day.
+
+<b>PRO — the alerts and the live feeds:</b>
+· a <b>burst</b> the moment it forms, a <b>launch</b> while it is still early
+· /hot /signals /fresh /exits whenever you ask
+/pro — {days} days for ${usd}, paid in ${symbol} and burned. {state}
+
+Research, not financial advice."""
+
+
+def help_text(conn, chat_id, now: int | None = None) -> str:
+    """The help, with the PRO line in it once there is a gate: what is free, what is not, and
+    where this chat stands."""
+    if not pro.enabled():
+        return HELP
+    now = now or db.now()
+    end = pro.paid_until(conn, chat_id)
+    if end and end > now:
+        state = f"This chat: PRO until {pro._date(end)}."
+    elif pro.entitled(conn, chat_id, now):
+        state = f"This chat: free until {pro._date(settings.pro_grace_until)}, then /pro."
+    else:
+        state = "This chat: free tier."
+    return HELP_PRO.format(days=settings.pro_days, usd=f"{settings.pro_price_usd:g}",
+                           symbol=settings.pro_token_symbol, state=state)
+
+
+PRO_ONLY = "This feed is <b>PRO</b>. /pro — {days} days for ${usd} in ${symbol}, burned. Free: /top and the daily digest."
+
+
+def fmt_quote(q: dict, now: int | None = None) -> str:
+    """The exact amount, the address, the deadline, the page — in that order, each on its own
+    line, so a phone can long-press any one of them."""
+    now = now or db.now()
+    end = pro.paid_until(q.get("_conn"), q["chat_id"]) if q.get("_conn") else None
+    mins = max(1, (q["expires_at"] - now) // 60)
+    lines = [f"<b>PRO · {settings.pro_days} DAYS · ${q['usd']:g} IN ${esc(settings.pro_token_symbol)}</b>", ""]
+    if end and end > now:
+        lines.append(f"PRO is on until {pro._date(end)}. Paying again adds {settings.pro_days} days.\n")
+    lines += [
+        "Send <b>exactly</b>",
+        f"<code>{q['tokens']}</code> ${esc(settings.pro_token_symbol)}",
+        "to",
+        f"<code>{esc(settings.pro_burn_address)}</code>",
+        f"within {mins} minutes, from any wallet on Robinhood Chain.",
+        "",
+        "The amount is the receipt: it is how I know it was you. It is burned on arrival, "
+        "and I confirm here within a minute. Nothing is refundable.",
+    ]
+    if settings.public_site_url:
+        lines.append(f"\nThe same on a page, with copy buttons and a live status: "
+                     f"{settings.public_site_url}/pro/{q['code']}")
+    lines.append(f"\nSent a different amount? <code>/claim tx-hash</code>. "
+                 f"Price now: ${q['price']:.8g} per ${esc(settings.pro_token_symbol)}.")
+    return "\n".join(lines)
+
+
+def fmt_notice(kind: str, end: int | None) -> str:
+    when = pro._date(end)
+    if kind == "expired":
+        return (f"PRO ended {when}. The alerts and the live feeds are off for this chat; "
+                f"/top and the digest stay. /pro to come back — {settings.pro_days} days for "
+                f"${settings.pro_price_usd:g} in ${settings.pro_token_symbol}.")
+    left = "three days" if kind == "3d" else "one day"
+    return f"PRO ends in {left} ({when}). /pro to add {settings.pro_days} days; paying early loses nothing, the days stack."
+
 # what the menu button offers - the short list, in the order somebody new would want it
 COMMANDS = [
     ("hot", "several trusted wallets entering one token right now"),
@@ -516,6 +589,7 @@ COMMANDS = [
     ("fresh", "launches the cohort is entering early"),
     ("exits", "where the cohort is getting out"),
     ("top", "the leaderboard, by judgement"),
+    ("pro", "the alerts and the live feeds, paid in the token"),
     ("stop", "stop the alerts"),
     ("help", "what this is and what to send"),
 ]
@@ -548,6 +622,8 @@ def subscribe(conn, chat_id, username: str | None, min_conviction: float | None 
                 mark_sent(conn, chat_id, t["mint"])
         except Exception:  # noqa: BLE001 - a feed that cannot answer must not block a subscription
             log.warning("could not quiet the backlog for %s", chat_id, exc_info=True)
+    if existed is None and pro.enabled() and settings.pro_trial_days > 0:
+        pro.grant(conn, chat_id, settings.pro_trial_days)
     return existed is None
 
 
@@ -613,6 +689,20 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
     return out
 
 
+def notify(conn, tg: Telegram) -> int:
+    """PRO ending soon, or just ended: one line each, once per paid period."""
+    sent = 0
+    for chat_id, kind in pro.reminders(conn):
+        try:
+            tg.send(chat_id, fmt_notice(kind, pro.paid_until(conn, chat_id)))
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            log.warning("pro notice to %s failed: %s", chat_id, e)
+            if gone(e):
+                unsubscribe(conn, chat_id)
+    return sent
+
+
 def broadcast(conn, tg: Telegram) -> dict:
     """Push everything each subscriber has not already been told about."""
     stats = {"subscribers": 0, "sent": 0, "launches": 0, "skipped": 0, "errors": 0}
@@ -622,7 +712,10 @@ def broadcast(conn, tg: Telegram) -> dict:
     stats["subscribers"] = len(subs)
     items = due(conn)
     quiet = settings.telegram_realert_hours * 3600
+    now = db.now()
     for sub in subs:
+        if not pro.entitled_row(sub, now):
+            continue
         for kind, t, text in items:
             if already_sent(conn, sub["chat_id"], t["mint"], quiet):
                 stats["skipped"] += 1
@@ -644,11 +737,11 @@ def broadcast(conn, tg: Telegram) -> dict:
 
 # ---------------------------------------------------------------- commands
 
-def status_text(conn) -> str:
+def status_text(conn, chat_id=None) -> str:
     def q(sql: str, *args) -> int:
         return conn.execute(sql, args).fetchone()[0]
 
-    return "<b>DATABASE</b>\n" + rows([
+    out = "<b>DATABASE</b>\n" + rows([
         ("traders", f"{q('SELECT COUNT(*) FROM traders'):,}"),
         ("scored", f"{q('SELECT COUNT(*) FROM traders WHERE score IS NOT NULL'):,}"),
         ("follow", f"{q('SELECT COUNT(*) FROM traders WHERE status=?', 'active'):,}"),
@@ -656,6 +749,17 @@ def status_text(conn) -> str:
         ("positions", f"{q('SELECT COUNT(*) FROM fomo_positions'):,}"),
         ("subscribers", f"{q('SELECT COUNT(*) FROM bot_subscribers WHERE active=1'):,}"),
     ], width=15)
+    if chat_id is not None and pro.enabled():
+        end = pro.paid_until(conn, chat_id)
+        now = db.now()
+        if end and end > now:
+            line = f"PRO until {pro._date(end)} ({(end - now) // 86400} days left)"
+        elif pro.entitled(conn, chat_id, now):
+            line = f"free until {pro._date(settings.pro_grace_until)}"
+        else:
+            line = "free tier — /pro for the alerts and the live feeds"
+        out += f"\n\n<b>THIS CHAT</b>\n{line}"
+    return out
 
 
 def handle_text(conn, text: str, chat_id, username: str | None) -> str:
@@ -675,11 +779,31 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
         # day; the alerts are the product, and asking people to opt in twice is how a bot with
         # a hundred readers has three subscribers.
         subscribe(conn, chat_id, username)
-        return HELP
+        if args and args[0].lower() == "pro" and pro.enabled():
+            return handle_text(conn, "/pro", chat_id, username)   # the site's button: t.me/<bot>?start=pro
+        return help_text(conn, chat_id)
     if cmd == "/help":
-        return HELP
+        return help_text(conn, chat_id)
     if cmd == "/status":
-        return status_text(conn)
+        return status_text(conn, chat_id)
+    if cmd == "/pro":
+        if not pro.enabled():
+            return "There is no PRO tier yet: everything here is open. /help"
+        q = pro.quote(conn, chat_id)
+        if q is None:
+            return "No price for the token right now, so no quote. Try again in a minute."
+        q["_conn"] = conn
+        return fmt_quote(q)
+    if cmd == "/claim":
+        if not pro.enabled():
+            return "There is nothing to claim: everything here is open. /help"
+        if not args:
+            return "Send it as <code>/claim 0x…</code> with the transaction hash of your burn."
+        ok, why = pro.claim(conn, chat_id, args[0])
+        return ("✓ " if ok else "") + esc(why)
+    if cmd in ("/signals", "/hot", "/fresh", "/exits") and not pro.entitled(conn, chat_id):
+        return PRO_ONLY.format(days=settings.pro_days, usd=f"{settings.pro_price_usd:g}",
+                               symbol=esc(settings.pro_token_symbol))
     if cmd == "/health":
         from .pipeline.health import report
 
@@ -717,6 +841,10 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
         # pushed any more, so it is accepted and means nothing
         floor = float(args[0]) if args and args[0].replace(".", "", 1).isdigit() else None
         fresh = subscribe(conn, chat_id, username, floor)
+        if pro.enabled() and not pro.entitled(conn, chat_id):
+            return ("You are in. The alerts and the live feeds are <b>PRO</b>: " +
+                    PRO_ONLY.format(days=settings.pro_days, usd=f"{settings.pro_price_usd:g}", symbol=esc(settings.pro_token_symbol))
+                    .replace("This feed is <b>PRO</b>. ", ""))
         return (("Alerts are on." if fresh else "Alerts were already on.") +
                 " You will hear about:\n"
                 "· a <b>burst</b> — several trusted wallets entering one token inside minutes, "
@@ -814,5 +942,9 @@ def run(conn, tg: Telegram | None = None, once: bool = False) -> dict:
                 stats["broadcasts"] += 1
             except Exception as e:  # noqa: BLE001
                 log.warning("broadcast failed: %s", e)
+            try:
+                notify(conn, tg)
+            except Exception as e:  # noqa: BLE001
+                log.warning("pro notices failed: %s", e)
         if once:
             return stats

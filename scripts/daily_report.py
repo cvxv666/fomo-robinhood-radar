@@ -61,6 +61,21 @@ out("BOT", {"active": n1("SELECT COUNT(*) FROM bot_subscribers WHERE active=1"),
             "new_24h": n1("SELECT COUNT(*) FROM bot_subscribers WHERE subscribed_at >= ?", since), "messages_24h": len(rows),
             "chats_pushed_24h": n1("SELECT COUNT(DISTINCT chat_id) FROM bot_sent WHERE ts >= ?", since), "subs_by_hour": subs_by_hour})
 
+# ── 2b. PRO: who pays, what burned
+try:
+    from fomo_agent.pipeline import pro as _pro
+    out("PRO", {"enabled": _pro.enabled(), "usd": settings.pro_price_usd, "grace_until": settings.pro_grace_until,
+                "paid_now": n1("SELECT COUNT(*) FROM bot_subscribers WHERE active=1 AND paid_until > ?", now),
+                "expiring_3d": n1("SELECT COUNT(*) FROM bot_subscribers WHERE active=1 AND paid_until BETWEEN ? AND ?", now, now + 3 * 86400),
+                "payments_24h": n1("SELECT COUNT(*) FROM pro_payments WHERE chat_id IS NOT NULL AND ts >= ?", since),
+                "burned_24h": {"tokens": n1("SELECT COALESCE(SUM(tokens),0) FROM pro_payments WHERE ts >= ?", since),
+                               "usd": n1("SELECT COALESCE(SUM(usd),0) FROM pro_payments WHERE ts >= ?", since)},
+                "burned_total": {"tokens": n1("SELECT COALESCE(SUM(tokens),0) FROM pro_payments"), "usd": n1("SELECT COALESCE(SUM(usd),0) FROM pro_payments")},
+                "quotes_24h": n1("SELECT COUNT(*) FROM pro_quotes WHERE created_at >= ?", since),
+                "unclaimed": [dict(r) for r in conn.execute("SELECT tx, frm, tokens, ts FROM pro_payments WHERE chat_id IS NULL ORDER BY ts DESC LIMIT 5")]})
+except Exception as e:  # noqa: BLE001
+    out("PRO", {"error": str(e)})
+
 # ── 3. the site
 raw = subprocess.run(["journalctl", "-u", "caddy", "--since", "24 hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
 BOT = re.compile(r"bot|crawl|spider|python|httpx|node|curl|go-http|java|okhttp|FomoPilot|Paper|Tracker|copytrader|fishmice|dime-|wget|axios|scrapy|Headless|LinkPreview", re.I)

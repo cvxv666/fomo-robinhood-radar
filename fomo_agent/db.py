@@ -223,6 +223,27 @@ MIGRATIONS: dict[int, str] = {
     ALTER TABLE tokens ADD COLUMN sell_checked_at INTEGER;
     ALTER TABLE tokens ADD COLUMN sell_note TEXT;
     """,
+    20: """
+    -- PRO access, paid in the token and burned. A quote is an exact amount of tokens for one
+    -- chat: the amount is the receipt. A payment is one burn transaction, credited to a chat
+    -- once and never again; one with no chat is a burn nobody has claimed yet. See pipeline/pro.py.
+    ALTER TABLE bot_subscribers ADD COLUMN paid_until INTEGER;
+    ALTER TABLE bot_subscribers ADD COLUMN pro_notice TEXT;
+    CREATE TABLE IF NOT EXISTS pro_quotes(
+      code TEXT PRIMARY KEY,
+      chat_id TEXT NOT NULL, usd REAL NOT NULL, price REAL NOT NULL,
+      tokens INTEGER NOT NULL, tokens_min REAL NOT NULL,
+      created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open', tx TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_pro_quotes_chat ON pro_quotes(chat_id, status);
+    CREATE TABLE IF NOT EXISTS pro_payments(
+      tx TEXT PRIMARY KEY,
+      chat_id TEXT, frm TEXT, tokens REAL NOT NULL, usd REAL, ts INTEGER NOT NULL,
+      days INTEGER, source TEXT, block INTEGER, code TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_pro_payments_chat ON pro_payments(chat_id, ts);
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

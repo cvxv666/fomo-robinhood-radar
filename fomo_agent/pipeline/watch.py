@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from .. import db
 from ..config import settings
 from ..sources.rpc import CHAIN, RobinhoodRPC, RpcError
+from . import pro
 from .hot import hot_now, record
 from .provenance import classify
 from .track import TRACKED
@@ -86,6 +87,11 @@ def tick(conn: sqlite3.Connection, w: Watch, now: int | None = None) -> dict:
     stats["blocks"] = head - first + 1
     w.ticks += 1
     w.fills += stats["fills"]
+    # the same blocks hold the subscription burns: one more request, only while there is a gate
+    paid = pro.settle(conn, w.rpc, first, head, now)
+    if paid:
+        stats["paid"] = len(paid)
+        confirm(conn, paid)
 
     burning = hot_now(conn, CHAIN, delta=settings.hot_delta, window_s=settings.hot_window_min * 60,
                       min_wallets=settings.hot_min_wallets,
@@ -134,12 +140,33 @@ def name(conn: sqlite3.Connection, burning: list[dict]) -> int:
     return named
 
 
+def confirm(conn: sqlite3.Connection, paid: list[dict]) -> int:
+    """Tell each chat its burn landed. The credit is already on the books; a message that fails
+    is a message that fails, the next /status says the same thing."""
+    from ..bot import Telegram, gone, unsubscribe
+
+    if not settings.telegram_bot_token:
+        return 0
+    tg, sent = Telegram(), 0
+    for p in paid:
+        try:
+            tg.send(p["chat_id"], f"✓ {p['tokens']:,.0f} ${settings.pro_token_symbol} burned. "
+                                  f"PRO until {pro._date(p['paid_until'])}. The alerts and the live feeds are on.")
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            log.warning("pro confirmation to %s failed: %s", p["chat_id"], e)
+            if gone(e):
+                unsubscribe(conn, p["chat_id"])
+    return sent
+
+
 def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
     """Tell every subscriber about each burst once. Lazy import: the bot needs a token, this does
     not, and a watcher with no bot configured is still a faster tape."""
     from ..bot import Telegram, fmt_hot, subscribers, already_sent, mark_sent, gone, unsubscribe
 
-    subs = subscribers(conn)
+    now = db.now()
+    subs = [s for s in subscribers(conn) if pro.entitled_row(s, now)]
     if not subs or not settings.telegram_bot_token:
         return 0
     tg = Telegram()

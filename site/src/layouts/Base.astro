@@ -7,7 +7,7 @@ interface Props {
   title: string;
   description: string;
   /** Which nav item is current */
-  section?: 'signals' | 'fresh' | 'exits' | 'leaderboard' | 'about' | null;
+  section?: 'signals' | 'fresh' | 'exits' | 'leaderboard' | 'about' | 'pro' | null;
   /** Keep this page out of search results (thin or address-specific pages) */
   noindex?: boolean;
 }
@@ -69,6 +69,7 @@ const repo = import.meta.env.PUBLIC_REPO_URL ?? '';
         <a href="/exits" aria-current={section === 'exits' ? 'page' : undefined}>exits</a>
         <a href="/leaderboard" aria-current={section === 'leaderboard' ? 'page' : undefined}>leaderboard</a>
         <a href="/about" aria-current={section === 'about' ? 'page' : undefined}>about</a>
+        <a href="/pro" aria-current={section === 'pro' ? 'page' : undefined}>pro</a>
       </nav>
     </header>
 
