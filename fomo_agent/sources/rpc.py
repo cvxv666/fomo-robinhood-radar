@@ -163,6 +163,7 @@ class RobinhoodRPC:
         self._fetched_at = 0.0
         self._failed: str | None = None
         self._max_span: int | None = None   # blocks per eth_getLogs the node has been seen to answer
+        self._known: set[str] = set()       # transactions the tape already holds; see skip_known
         self._probes: dict[int, int] = {}   # block -> timestamp, for dating an arbitrary moment
         self._decimals: dict[str, int] = {}  # token -> decimals; constant, so cached for the run
 
@@ -418,6 +419,14 @@ class RobinhoodRPC:
             self._wallets = wallets
             self._fetched_at = 0.0
 
+    def skip_known(self, txs: set[str]) -> None:
+        """Transactions already on the tape: their receipts are not fetched again. The watcher
+        writes nearly every fill within a tick of it landing, so the fifteen-minute pass over
+        the same blocks used to spend hundreds of receipt calls confirming what it already had -
+        and got rate-limited for it. With the tape's own hashes handed over, the pass pays only
+        for the fills the watcher missed."""
+        self._known = {t.lower() for t in txs}
+
     def scan(self, wallets: list[str], first: int, last: int) -> dict[str, list[Trade]]:
         """Every routed fill in one block range, priced and sized, keyed by wallet.
 
@@ -443,7 +452,7 @@ class RobinhoodRPC:
             first_ts = self.block_timestamp(first)
             per_block = (last_ts - first_ts) / max(last - first, 1)
 
-        txs = list(fills)
+        txs = [tx for tx in fills if tx not in self._known]
         receipts = self.batch("eth_getTransactionReceipt", [[tx] for tx in txs]) if txs else []
         price = self.weth_price()
         # position sizes, not just dollar sizes: how much of a name a wallet still holds is what
@@ -464,9 +473,9 @@ class RobinhoodRPC:
                 ts=int(last_ts - (last - f["block"]) * per_block), source="rpc",
                 kind=fill_kind(receipt, self.routers) if receipt else None,
             ))
-        log.info("rpc scan: blocks %d..%d (%.1fh), %d transfers, %d fills, %d priced, %d requests",
+        log.info("rpc scan: blocks %d..%d (%.1fh), %d transfers, %d fills (%d already on the tape), %d priced, %d requests",
                  first, last, (last - first) * per_block / 3600,
-                 len(transfers), len(txs), priced, self.requests)
+                 len(transfers), len(txs), len(fills) - len(txs), priced, self.requests)
         return dict(out)
 
     def windows(self, back_to_ts: int, head: int | None = None, span: int | None = None):

@@ -138,6 +138,13 @@ def test_get_trades_costs_two_log_queries_and_two_batches(logs, receipt, monkeyp
     rpc.get_trades(wallet, "robinhood")
     assert len(sent) == before
 
+    # told the tape already has every one of these, a fresh scan fetches no receipts at all
+    rpc.skip_known({t.sig.split(":")[0] for t in trades})
+    rpc._fetched_at = 0.0
+    sent.clear()
+    assert rpc.get_trades(wallet, "robinhood") == []
+    assert not [p for p in sent if isinstance(p, list) and p[0]["method"] == "eth_getTransactionReceipt"]
+
 
 def test_a_range_the_node_will_not_answer_whole_is_asked_in_halves(monkeypatch):
     """The public node caps an answer at 10,000 logs. A range over the cap comes back as an

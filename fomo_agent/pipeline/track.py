@@ -124,6 +124,15 @@ def track_all(conn: sqlite3.Connection, trackers: list[Tracker] | None = None, l
                 prime([r["address"] for r in rows if t.supports(r["chain"] or "solana")])
             except Exception as e:  # noqa: BLE001 - a source that cannot prime is simply skipped
                 log.warning("prime %s failed: %s", type(t).__name__, e)
+        # a source that fetches receipts is told which fills the tape already holds (the watcher
+        # wrote them within a tick), so it pays only for what is new
+        skip = getattr(t, "skip_known", None)
+        if skip:
+            try:
+                since = db.now() - int(settings.rpc_window_blocks * 0.1 * 2) - 3600
+                skip({r[0].split(":")[0] for r in conn.execute("SELECT sig FROM trades WHERE ts >= ? AND source='rpc'", (since,))})
+            except Exception as e:  # noqa: BLE001 - without it the pass merely pays for every receipt
+                log.warning("known fills for %s unavailable: %s", type(t).__name__, e)
         # a source that reads token sizes needs each token's base unit; it is a constant, so hand
         # over what earlier passes already learned rather than let it re-ask the chain
         load = getattr(t, "load_decimals", None)
