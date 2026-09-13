@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOMOBRAIN flywheel simulation</title>
+<!--
+  The flywheel, run forward month by month on numbers you pick: subscriptions paid in the
+  token and burned, creator fees feeding the algo's deposit, the algo's profit split between
+  compounding and buyback-and-burn. Every road ends at burn. The pool is a constant-product
+  AMM seeded with today's price and depth, so buys move the price the way they would on chain,
+  and sellers take a share of every buy back out - burn is only what the market sells you.
+  Hypothetical throughout. ?still=1 holds the final month without motion.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root { --black:#000; --white:#fff; --carbon:#606060; --graphite:#949494; --line:#2a2a2a; --green:#00ff85; --crimson:#ff003d;
+          --amber:#ff8a00; --yellow:#fcff76; --violet:#6100ff; --lilac:#a884ff; --cyan:#8fd9ff;
+          --sans:"Space Grotesk", system-ui, sans-serif; --mono:"JetBrains Mono", ui-monospace, monospace; }
+  html, body { margin:0; height:100%; background:var(--black); color:var(--white); overflow:hidden; font-family:var(--mono); }
+  .stage { position:fixed; inset:0; display:grid; place-items:center; }
+  .board { position:relative; width:1600px; height:900px; transform-origin:center center; background:var(--black); overflow:hidden; }
+  .board > canvas { position:absolute; left:0; top:0; width:1600px; height:900px; pointer-events:none; }
+  #brain { position:absolute; left:660px; top:418px; width:240px; height:164px; pointer-events:none; }
+  .frame { position:absolute; inset:14px; border:2px solid var(--white); pointer-events:none; }
+  .abs { position:absolute; }
+  .eyebrow { left:40px; top:48px; font-size:15px; font-weight:700; letter-spacing:.14em; }
+  .eyebrow .led { display:inline-block; width:11px; height:11px; background:var(--green); margin-right:12px; vertical-align:-1px; animation:blink 2.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+  .title { left:38px; top:78px; font-family:var(--sans); font-weight:700; font-size:66px; letter-spacing:.01em; line-height:1; white-space:nowrap; }
+  .title b { color:var(--green); font-weight:700; }
+  .sub { left:40px; top:160px; font-size:13px; font-weight:700; letter-spacing:.09em; color:var(--graphite); white-space:nowrap; }
+  .sub b { color:var(--white); }
+  .rule { position:absolute; left:40px; right:40px; height:2px; background:var(--white); }
+  .sub { top:158px; }
+
+  /* controls */
+  #panel { left:40px; top:226px; width:352px; }
+  .ctl { position:relative; height:52px; }
+  .ctl label { position:absolute; left:0; top:0; font-size:11px; font-weight:700; letter-spacing:.12em; color:var(--graphite); }
+  .ctl output { position:absolute; right:0; top:-3px; font-size:15px; font-weight:700; color:var(--white); font-variant-numeric:tabular-nums; }
+  .ctl input[type=range] { position:absolute; left:0; top:24px; width:352px; height:18px; margin:0; -webkit-appearance:none; appearance:none; background:transparent; pointer-events:auto; }
+  .ctl input[type=range]::-webkit-slider-runnable-track { height:2px; background:var(--carbon); }
+  .ctl input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; margin-top:-6px; background:var(--green); border:0; border-radius:0; cursor:pointer; }
+  .ctl input[type=range]::-moz-range-track { height:2px; background:var(--carbon); }
+  .ctl input[type=range]::-moz-range-thumb { width:14px; height:14px; background:var(--green); border:0; border-radius:0; cursor:pointer; }
+  .ctl input[type=range]:focus-visible { outline:1px solid var(--yellow); outline-offset:6px; }
+  .ctl.hot output { color:var(--green); }
+  .group { font-size:10px; font-weight:700; letter-spacing:.18em; color:var(--carbon); height:22px; padding-top:6px; }
+
+  /* transport */
+  #transport { left:1180px; top:48px; width:380px; height:176px; }
+  #month { position:absolute; right:0; top:2px; text-align:right; }
+  #month .k { font-size:11px; font-weight:700; letter-spacing:.16em; color:var(--graphite); }
+  #month .v { font-family:var(--sans); font-weight:700; font-size:92px; line-height:.9; color:var(--green); font-variant-numeric:tabular-nums; }
+  #month .v small { font-size:34px; color:var(--white); }
+  .btns { position:absolute; left:0; top:106px; display:flex; gap:8px; }
+  button { font:700 11px/1 var(--mono); letter-spacing:.14em; color:var(--white); background:var(--black); border:1.5px solid var(--white); padding:9px 12px; cursor:pointer; }
+  button:hover, button.on { background:var(--white); color:var(--black); }
+  button:focus-visible { outline:1px solid var(--yellow); outline-offset:3px; }
+  #scrub { position:absolute; left:0; top:154px; width:380px; height:18px; margin:0; -webkit-appearance:none; appearance:none; background:transparent; }
+  #scrub::-webkit-slider-runnable-track { height:2px; background:var(--carbon); }
+  #scrub::-webkit-slider-thumb { -webkit-appearance:none; width:10px; height:18px; margin-top:-8px; background:var(--white); border:0; }
+  #scrub::-moz-range-track { height:2px; background:var(--carbon); }
+  #scrub::-moz-range-thumb { width:10px; height:18px; background:var(--white); border:0; border-radius:0; }
+
+  /* tiles */
+  .tile { position:absolute; width:214px; height:104px; border-top:2px solid var(--white); }
+  .tile .k { position:absolute; left:0; top:10px; font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--graphite); }
+  .tile .v { position:absolute; left:-2px; top:34px; font-family:var(--sans); font-weight:700; font-size:54px; line-height:1; letter-spacing:-.01em; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .tile .d { position:absolute; left:0; bottom:6px; font-size:11px; letter-spacing:.08em; color:var(--graphite); white-space:nowrap; }
+  .cr { color:var(--crimson); } .gr { color:var(--green); } .am { color:var(--amber); } .li { color:var(--lilac); } .ye { color:var(--yellow); }
+  .ct { position:absolute; font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--white); }
+  .ct span { color:var(--graphite); font-weight:400; }
+
+  /* ledger */
+  #ledger { left:456px; top:790px; width:600px; font-size:12.5px; font-weight:700; letter-spacing:.06em; white-space:nowrap; }
+  #ledger span { color:var(--graphite); font-weight:400; }
+  #months { left:456px; top:816px; width:600px; height:58px; }
+  .mo { position:absolute; bottom:0; width:40px; text-align:center; font-size:11px; font-weight:700; color:var(--carbon); letter-spacing:.06em; }
+  .mo i { display:block; margin:0 auto 6px; width:22px; background:var(--carbon); }
+  .mo.past { color:var(--graphite); } .mo.past i { background:var(--crimson); opacity:.55; }
+  .mo.now { color:var(--white); } .mo.now i { background:var(--crimson); }
+  @media (prefers-reduced-motion: reduce) { .eyebrow .led { animation:none; } }
+</style>
+</head>
+<body>
+<div class="stage"><div class="board" id="board">
+  <canvas id="art"></canvas>
+  <canvas id="brain"></canvas>
+  <div class="frame"></div>
+
+  <div class="abs eyebrow"><span class="led"></span>FOMOBRAIN  ·  FLYWHEEL SIMULATOR  ·  HYPOTHETICAL NUMBERS, NOT A FORECAST</div>
+  <div class="abs title">FLYWHEEL, <b>RUN FORWARD</b></div>
+  <div class="abs sub">SUBSCRIPTIONS PAID IN THE TOKEN AND <b>BURNED</b>  ·  CREATOR FEES FEED THE ALGO  ·  PROFIT SPLITS INTO <b>COMPOUND</b> AND <b>BUYBACK + BURN</b></div>
+  <div class="abs sub" style="top:178px">SEEDED WITH TODAY'S POOL  ·  PRICE <b>$0.000336</b>  ·  DEPTH <b>$28K</b>  ·  SUPPLY <b>1B</b>  ·  DRAG ANY SLIDER, THE WHEEL RE-RUNS</div>
+  <div class="rule" style="top:204px"></div>
+
+  <div class="abs" id="panel">
+    <div class="group">SIGNALS</div>
+    <div class="ctl"><label>SUBSCRIPTION $ / MONTH</label><output id="o-sub"></output><input type="range" id="sub" min="5" max="100" step="1" value="20"></div>
+    <div class="ctl"><label>SUBSCRIBERS AT START</label><output id="o-subs0"></output><input type="range" id="subs0" min="50" max="5000" step="10" value="300"></div>
+    <div class="ctl"><label>SUBSCRIBER GROWTH % / MONTH</label><output id="o-growth"></output><input type="range" id="growth" min="0" max="100" step="1" value="25"></div>
+    <div class="group">ALGO</div>
+    <div class="ctl"><label>TRADING DEPOSIT $</label><output id="o-deposit"></output><input type="range" id="deposit" min="5000" max="500000" step="1000" value="50000"></div>
+    <div class="ctl"><label>ALGO RETURN % / MONTH</label><output id="o-roi"></output><input type="range" id="roi" min="0" max="1000" step="10" value="500"></div>
+    <div class="ctl"><label>CAPACITY $ · COMPOUNDING STOPS HERE</label><output id="o-capacity"></output><input type="range" id="capacity" min="50000" max="5000000" step="10000" value="500000"></div>
+    <div class="ctl"><label>REINVESTED % · REST BUYS + BURNS</label><output id="o-split"></output><input type="range" id="split" min="0" max="100" step="5" value="50"></div>
+    <div class="group">TOKEN</div>
+    <div class="ctl"><label>TOKEN VOLUME $ / DAY</label><output id="o-volume"></output><input type="range" id="volume" min="0" max="10000000" step="50000" value="2000000"></div>
+    <div class="ctl"><label>CREATOR FEE % OF VOLUME → DEPOSIT</label><output id="o-fee"></output><input type="range" id="fee" min="0" max="2" step="0.05" value="0.5"></div>
+    <div class="ctl"><label>SELLERS ABSORB % OF EACH BUY</label><output id="o-absorb"></output><input type="range" id="absorb" min="0" max="95" step="5" value="70"></div>
+    <div class="ctl"><label>MONTHS</label><output id="o-months"></output><input type="range" id="months" min="6" max="24" step="1" value="12"></div>
+  </div>
+
+  <div class="abs" id="transport">
+    <div id="month"><div class="k">MONTH</div><div class="v"><span id="m-now">00</span><small id="m-of"> / 12</small></div></div>
+    <input type="range" id="scrub" min="0" max="1200" step="1" value="0" aria-label="scrub the timeline">
+    <div class="btns"><button id="play" class="on">PAUSE</button><button id="reset">RESET</button><button data-speed="1" class="sp">1×</button><button data-speed="2" class="sp on">2×</button><button data-speed="4" class="sp">4×</button></div>
+  </div>
+
+  <div class="tile" style="left:1100px;top:222px"><div class="k">SUPPLY BURNED</div><div class="v cr" id="t-burned"></div><div class="d" id="t-burned-d"></div></div>
+  <div class="tile" style="left:1346px;top:222px"><div class="k">TOKEN PRICE</div><div class="v gr" id="t-price"></div><div class="d" id="t-price-d"></div></div>
+  <div class="tile" style="left:1100px;top:346px"><div class="k">ALGO DEPOSIT</div><div class="v am" id="t-dep"></div><div class="d" id="t-dep-d"></div></div>
+  <div class="tile" style="left:1346px;top:346px"><div class="k">BURNED · USD SPENT</div><div class="v" id="t-usd"></div><div class="d" id="t-usd-d"></div></div>
+  <div class="ct" style="left:1100px;top:480px">SUPPLY  <span>·  WHAT IS LEFT vs WHAT BURNED</span></div>
+  <div class="ct" style="left:1100px;top:676px">PRICE ×  <span>·  AND DEPOSIT, LOG SCALE</span></div>
+
+  <div class="abs" id="ledger"></div>
+  <div class="abs" id="months"></div>
+</div></div>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const q = new URLSearchParams(location.search);
+  const reduced = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || q.has('still');
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const board = $('board');
+  const fit = () => { const s = Math.min(innerWidth / 1600, innerHeight / 900); board.style.transform = `scale(${s})`; };
+  addEventListener('resize', fit); fit();
+  const C = { white:'#fff', carbon:'#606060', graphite:'#949494', line:'#2a2a2a', green:'#00ff85', crimson:'#ff003d', amber:'#ff8a00', yellow:'#fcff76', violet:'#6100ff', lilac:'#a884ff', cyan:'#8fd9ff' };
+
+  // ── today, from the pool: the seed of every run
+  const TODAY = { price: 0.000336, supply: 1e9, poolUsd: 14000 };
+
+  // ── formatting
+  const short = (v, d = 1) => { const a = Math.abs(v), f = (x, u) => x.toFixed(d).replace(/\.0+$/, '') + u; if (a >= 1e15) return v.toExponential(1); if (a >= 1e12) return f(v / 1e12, 'T'); if (a >= 1e9) return f(v / 1e9, 'B'); if (a >= 1e6) return f(v / 1e6, 'M'); if (a >= 1e3) return f(v / 1e3, 'K'); return a < 10 ? v.toFixed(d).replace(/\.0$/, '') : v.toFixed(0); };
+  const usd = (v) => '$' + short(v);
+  const mult = (v) => (v < 10 ? v.toFixed(1) : v < 1000 ? v.toFixed(0) : short(v)) + '×';
+  const int = (v) => Math.round(v).toLocaleString('en-US');
+  const price = (p) => p < 0.01 ? '$' + p.toPrecision(3) : p < 100 ? '$' + p.toFixed(2) : usd(p);
+
+  // ── the model: months, in order, each one a full turn of the wheel
+  const P = {};
+  const IDS = ['sub', 'subs0', 'growth', 'deposit', 'roi', 'capacity', 'split', 'volume', 'fee', 'absorb', 'months'];
+  const FMT = { sub: (v) => '$' + v, subs0: int, growth: (v) => v + '%', deposit: usd, roi: (v) => v + '%', capacity: usd, split: (v) => v + '%', volume: usd, fee: (v) => v.toFixed(2) + '%', absorb: (v) => v + '%', months: (v) => v };
+  const read = () => { for (const id of IDS) { P[id] = parseFloat($(id).value); $('o-' + id).textContent = FMT[id](P[id]); } };
+  function simulate() {
+    let R = TODAY.poolUsd, T = TODAY.poolUsd / TODAY.price, supply = TODAY.supply, subs = P.subs0, dep = P.deposit, burnedTok = 0, burnedUsd = 0;
+    const buy = (u) => { if (u <= 0) return 0; const out = T * u / (R + u); R += u; T -= out; return out; };
+    const sell = (u) => { if (u <= 0) return; u = Math.min(u, R * .9); const tin = T * u / (R - u); R -= u; T += tin; };
+    const rows = [{ m: 0, price: R / T, supply, subs, dep, burnedTok, burnedUsd, fees: 0, profit: 0, reinvest: 0, buyback: 0, subsRev: 0, pool: R }];
+    for (let m = 1; m <= P.months; m++) {
+      const subsRev = subs * P.sub;                          // signals, paid in the token: bought on the market, then burned
+      const fees = P.volume * 30 * P.fee / 100; dep += fees; // creator fees land in the deposit ...
+      const over = Math.max(0, dep - P.capacity); dep -= over; // ... until it is full; then they burn too
+      const deployed = Math.min(dep, P.capacity), profit = deployed * P.roi / 100;
+      const reinvest = dep >= P.capacity ? 0 : Math.min(profit * P.split / 100, P.capacity - dep);
+      const buyback = profit - reinvest + over; dep += reinvest;   // what does not compound is bought back and burned
+      const buys = subsRev + buyback, tok = buy(buys); burnedTok += tok; burnedUsd += buys; supply -= tok;
+      sell(buys * P.absorb / 100);                           // holders sell into the strength; burn is only what they hand over
+      subs = Math.round(subs * (1 + P.growth / 100));
+      rows.push({ m, price: R / T, supply, subs, dep, burnedTok, burnedUsd, fees, profit, reinvest, buyback, subsRev, pool: R });
+    }
+    return rows;
+  }
+  let ROWS = [];
+  const rerun = () => { read(); ROWS = simulate(); $('m-of').textContent = ' / ' + P.months; $('scrub').max = P.months * 100; buildMonths(); };
+
+  // ── time: the wheel turns at `speed` months per 2.5 s; the scrubber holds the same clock
+  let tau = 0, playing = !reduced, speed = 2;
+  const lerp = (a, b, f) => a + (b - a) * f, glerp = (a, b, f) => (a > 0 && b > 0) ? Math.exp(lerp(Math.log(a), Math.log(b), f)) : lerp(a, b, f);
+  const at = (t) => { const k = clamp(Math.floor(t), 0, P.months), f = t - k, a = ROWS[k], b = ROWS[Math.min(k + 1, P.months)];
+    const g = {}; for (const key of ['price', 'supply', 'dep', 'burnedTok', 'burnedUsd', 'pool']) g[key] = glerp(a[key], b[key], f); g.subs = lerp(a.subs, b.subs, f); g.k = k; g.f = f; g.row = ROWS[Math.min(k + 1, P.months)]; return g; };
+
+  // ── the wheel: six places on a ring, the brain at the hub, roads with traffic proportional to the money on them
+  const cx = 780, cy = 500, RR = 205, RI = 148;
+  const rad = (d) => d * Math.PI / 180;
+  const onRing = (deg, r = RR) => [cx + Math.cos(rad(deg)) * r, cy + Math.sin(rad(deg)) * r];
+  const ST = { trades: 200, deposit: 260, algo: 320, split: 20, burn: 80 };
+  const SIG = [492, 738];
+  const arc = (a0, a1, r, cw) => (u) => { let d = cw ? ((a1 - a0 + 360) % 360) : -((a0 - a1 + 360) % 360); return onRing(a0 + d * u, r); };
+  const line = (p0, p1) => (u) => [lerp(p0[0], p1[0], u), lerp(p0[1], p1[1], u)];
+  const ROADS = {
+    fees:     { path: arc(ST.trades, ST.deposit, RR, true),  col: C.amber,   key: 'fees' },
+    profit:   { path: arc(ST.algo, ST.split, RR, true),      col: C.green,   key: 'profit' },
+    buyback:  { path: arc(ST.split, ST.burn, RR, true),      col: C.crimson, key: 'buyback' },
+    reinvest: { path: arc(ST.split, ST.deposit, RI, false),  col: C.green,   key: 'reinvest' },
+    deploy:   { path: arc(ST.deposit, ST.algo, RR, true),    col: C.amber,   key: 'deployed' },
+    subs:     { path: line(SIG, onRing(ST.burn)),            col: C.lilac,   key: 'subsRev' },
+    loop:     { path: arc(ST.burn, ST.trades, RR, true),     col: C.white,   key: null },
+  };
+  const parts = []; let burnGlow = 0, spawnAcc = {};
+  const rate = (flow) => flow <= 0 ? 0 : clamp(3 + 5 * Math.log10(flow / 1000), 0, 34);
+
+  // ── canvas
+  const cv = $('art'), pr = Math.min(2, window.devicePixelRatio || 1); cv.width = 1600 * pr; cv.height = 900 * pr; const c = cv.getContext('2d'); c.setTransform(pr, 0, 0, pr, 0, 0);
+  const font = (px, b = 700, sans = false) => c.font = `${b} ${px}px ${sans ? '"Space Grotesk"' : '"JetBrains Mono"'}, monospace`;
+  const text = (s, x, y, col = C.white, px = 12, align = 'left', b = 700, sans = false) => { font(px, b, sans); c.fillStyle = col; c.textAlign = align; c.textBaseline = 'alphabetic'; c.fillText(s, x, y); };
+  const strokePath = (path, col, w, dash, off = 0, alpha = 1) => { c.beginPath(); for (let i = 0; i <= 60; i++) { const [x, y] = path(i / 60); i ? c.lineTo(x, y) : c.moveTo(x, y); } c.strokeStyle = col; c.globalAlpha = alpha; c.lineWidth = w; c.setLineDash(dash); c.lineDashOffset = off; c.stroke(); c.setLineDash([]); c.globalAlpha = 1; };
+
+  function drawWheel(t, dt, g) {
+    const row = g.row, flows = { fees: row.fees, profit: row.profit, buyback: row.buyback, reinvest: row.reinvest, deployed: Math.min(g.dep, P.capacity), subsRev: row.subsRev };
+    // traffic
+    if (!reduced) for (const [name, rd] of Object.entries(ROADS)) {
+      const r = rd.key ? rate(flows[rd.key]) : 2.5; spawnAcc[name] = (spawnAcc[name] || 0) + r * dt * (speed / 2);
+      while (spawnAcc[name] >= 1) { spawnAcc[name] -= 1; parts.push({ road: name, u: 0, v: (.16 + Math.random() * .1) * (speed / 2), w: 2.4 + Math.random() * 2.2, j: (Math.random() - .5) * 10 }); }
+    }
+    for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.u += p.v * dt; if (p.u >= 1) { if (p.road === 'buyback' || p.road === 'subs') burnGlow = Math.min(1.6, burnGlow + .12); parts.splice(i, 1); } }
+    burnGlow *= Math.pow(.25, dt);
+    // ring + roads
+    c.beginPath(); c.arc(cx, cy, RR, 0, 7); c.strokeStyle = C.line; c.lineWidth = 14; c.stroke();
+    c.beginPath(); c.arc(cx, cy, RR, 0, 7); c.strokeStyle = C.carbon; c.lineWidth = 1.5; c.stroke();
+    c.beginPath(); c.arc(cx, cy, RI, rad(ST.split), rad(ST.deposit), true); c.strokeStyle = C.line; c.lineWidth = 8; c.stroke();
+    strokePath(ROADS.subs.path, C.line, 10, []);
+    for (const [name, rd] of Object.entries(ROADS)) { const on = rd.key ? flows[rd.key] > 0 : true; strokePath(rd.path, rd.col, on ? 2 : 1, on ? [8, 10] : [2, 8], -t * 40 * (speed / 2), on ? .75 : .3); }
+    // the loop that closes: fewer tokens, the same buyers
+    text('FEWER TOKENS  ·  THE SAME BUYERS  ·  MORE TRADES', cx, cy + 118, C.graphite, 10.5, 'center');
+    // traffic on the roads
+    for (const p of parts) { const rd = ROADS[p.road], [x, y] = rd.path(p.u); const [x2, y2] = rd.path(Math.min(1, p.u + .01)); const nx = -(y2 - y), ny = x2 - x, nl = Math.hypot(nx, ny) || 1;
+      c.fillStyle = rd.col; c.globalAlpha = p.road === 'loop' ? .35 : .95; c.fillRect(x + nx / nl * p.j - p.w / 2, y + ny / nl * p.j - p.w / 2, p.w, p.w); }
+    c.globalAlpha = 1;
+    // stations
+    const st = (deg, col, size = 16) => { const [x, y] = onRing(deg); c.fillStyle = C.black; c.fillRect(x - size / 2 - 3, y - size / 2 - 3, size + 6, size + 6); c.fillStyle = col; c.fillRect(x - size / 2, y - size / 2, size, size); return [x, y]; };
+    const [tx, ty] = st(ST.trades, C.amber); text('TRADES', tx - 22, ty - 4, C.white, 14, 'right'); text('FEE  ' + usd(row.fees) + ' / MO', tx - 22, ty + 14, C.amber, 11.5, 'right');
+    const [dx, dy] = st(ST.deposit, C.amber); text('DEPOSIT', dx, dy - 30, C.white, 14, 'center'); text(usd(g.dep) + (g.dep >= P.capacity - 1 ? '  ·  AT CAPACITY' : ''), dx, dy - 13, C.amber, 11.5, 'center');
+    const [ax, ay] = st(ST.algo, C.green); text('ALGO', ax + 22, ay - 6, C.white, 14, 'left'); text('+' + usd(row.profit) + ' / MO', ax + 22, ay + 12, C.green, 11.5, 'left');
+    const [sx, sy] = st(ST.split, C.white); text('SPLIT', sx + 22, sy - 6, C.white, 14, 'left'); text(P.split + ' / ' + (100 - P.split), sx + 22, sy + 12, C.graphite, 11.5, 'left');
+    const [bx, by] = onRing(ST.burn);
+    const glow = c.createRadialGradient(bx, by, 4, bx, by, 60 + burnGlow * 40); glow.addColorStop(0, `rgba(255,0,61,${(.35 + burnGlow * .4).toFixed(2)})`); glow.addColorStop(1, 'rgba(255,0,61,0)'); c.fillStyle = glow; c.beginPath(); c.arc(bx, by, 60 + burnGlow * 40, 0, 7); c.fill();
+    st(ST.burn, C.crimson, 20 + burnGlow * 6); text('BURN', bx, by + 44, C.white, 15, 'center'); text(usd(row.buyback + row.subsRev) + ' / MO  ·  ' + (row.buyback + row.subsRev > 0 ? short((row.buyback + row.subsRev) / g.price, 1) + ' TOKENS' : '—'), bx, by + 62, C.crimson, 11.5, 'center');
+    c.fillStyle = C.black; c.fillRect(SIG[0] - 11, SIG[1] - 11, 22, 22); c.fillStyle = C.lilac; c.fillRect(SIG[0] - 8, SIG[1] - 8, 16, 16);
+    text('SIGNALS', SIG[0] + 18, SIG[1] - 2, C.white, 14, 'left'); text(int(g.subs) + ' SUBS × $' + P.sub + '  =  ' + usd(row.subsRev) + ' / MO', SIG[0] + 18, SIG[1] + 15, C.lilac, 11.5, 'left');
+    // the ring's own pulse: the hub's halo breathes with the month's burn
+    const halo = c.createRadialGradient(cx, cy, 60, cx, cy, 140); halo.addColorStop(0, `rgba(0,255,133,${(.05 + .05 * Math.sin(t * 1.4)).toFixed(3)})`); halo.addColorStop(1, 'rgba(0,255,133,0)'); c.fillStyle = halo; c.beginPath(); c.arc(cx, cy, 140, 0, 7); c.fill();
+  }
+
+  // ── charts, right column
+  const CH = { x0: 1100, x1: 1560, ay0: 496, ay1: 650, by0: 692, by1: 846 };
+  function drawCharts(g) {
+    const N = P.months, X = (m) => CH.x0 + (m / N) * (CH.x1 - CH.x0);
+    // A: supply. what burned stacks up from the floor, in crimson; what is left sits above it
+    c.strokeStyle = C.line; c.lineWidth = 1; for (const f of [0, .5, 1]) { const y = CH.ay1 - f * (CH.ay1 - CH.ay0); c.beginPath(); c.moveTo(CH.x0, y); c.lineTo(CH.x1, y); c.stroke(); }
+    c.beginPath(); c.moveTo(CH.x0, CH.ay1); for (let m = 0; m <= N; m++) c.lineTo(X(m), CH.ay1 - (ROWS[m].supply / TODAY.supply) * (CH.ay1 - CH.ay0)); c.lineTo(CH.x1, CH.ay1); c.closePath(); c.fillStyle = 'rgba(255,255,255,.10)'; c.fill();
+    c.beginPath(); c.moveTo(CH.x0, CH.ay1); for (let m = 0; m <= N; m++) c.lineTo(X(m), CH.ay1 - (ROWS[m].burnedTok / TODAY.supply) * (CH.ay1 - CH.ay0)); c.lineTo(CH.x1, CH.ay1); c.closePath(); c.fillStyle = 'rgba(255,0,61,.55)'; c.fill();
+    c.beginPath(); for (let m = 0; m <= N; m++) { const y = CH.ay1 - (ROWS[m].burnedTok / TODAY.supply) * (CH.ay1 - CH.ay0); m ? c.lineTo(X(m), y) : c.moveTo(X(m), y); } c.strokeStyle = C.crimson; c.lineWidth = 2.5; c.stroke();
+    text('1B', CH.x0 - 6, CH.ay0 + 4, C.graphite, 10.5, 'right'); text('0', CH.x0 - 6, CH.ay1 + 4, C.graphite, 10.5, 'right');
+    const bp = g.burnedTok / TODAY.supply; text(('BURNED ' + (bp * 100).toFixed(1) + '%'), CH.x0 + 6, Math.min(CH.ay1 - 6, CH.ay1 - bp * (CH.ay1 - CH.ay0) - 8), C.crimson, 11.5, 'left'); text('LEFT ' + short(g.supply), CH.x0 + 6, CH.ay0 + 14, C.graphite, 11.5, 'left');
+    // B: price and deposit, log
+    const lo = Math.log10(Math.max(1e-9, 1)), series = [['price', C.green, (r) => r.price / TODAY.price], ['dep', C.amber, (r) => r.dep / P.deposit]];
+    let hi = 1; for (const r of ROWS) hi = Math.max(hi, r.price / TODAY.price, r.dep / P.deposit); const LH = Math.log10(hi * 1.6) - lo || 1;
+    const Y = (v) => CH.by1 - ((Math.log10(Math.max(1, v)) - lo) / LH) * (CH.by1 - CH.by0);
+    c.strokeStyle = C.line; c.lineWidth = 1; for (let e = 0; e <= Math.ceil(Math.log10(hi * 1.6)); e++) { const y = Y(Math.pow(10, e)); c.beginPath(); c.moveTo(CH.x0, y); c.lineTo(CH.x1, y); c.stroke(); text((e === 0 ? '1' : e < 4 ? String(Math.pow(10, e)) : '1e' + e) + '×', CH.x0 - 6, y + 4, C.graphite, 10.5, 'right'); }
+    for (const [key, col, fn] of series) { c.beginPath(); for (let m = 0; m <= N; m++) { const y = Y(fn(ROWS[m])); m ? c.lineTo(X(m), y) : c.moveTo(X(m), y); } c.strokeStyle = col; c.lineWidth = 2.5; c.stroke(); }
+    // the cursor: where the wheel is now, on both charts
+    const cxr = X(g.k + g.f); c.strokeStyle = C.yellow; c.lineWidth = 2; c.setLineDash([6, 6]); c.beginPath(); c.moveTo(cxr, CH.ay0 - 6); c.lineTo(cxr, CH.ay1); c.moveTo(cxr, CH.by0 - 6); c.lineTo(cxr, CH.by1); c.stroke(); c.setLineDash([]);
+    for (const [key, col, fn] of series) { const v = key === 'price' ? g.price / TODAY.price : g.dep / P.deposit; c.fillStyle = col; c.fillRect(cxr - 5, Y(v) - 5, 10, 10); }
+    text('PRICE ' + mult(g.price / TODAY.price), CH.x0 + 6, CH.by0 + 12, C.green, 11.5, 'left'); text('DEPOSIT ' + mult(g.dep / P.deposit), CH.x0 + 6, CH.by0 + 28, C.amber, 11.5, 'left');
+    for (let m = 0; m <= N; m += N > 12 ? 4 : 2) { text('M' + m, X(m), CH.by1 + 16, C.carbon, 10.5, m === 0 ? 'left' : m === N ? 'right' : 'center'); }
+  }
+
+  // ── the month strip and the tiles
+  let moEls = [];
+  function buildMonths() { const box = $('months'); box.innerHTML = ''; moEls = []; const N = P.months, w = 600 / N, maxB = Math.max(1, ...ROWS.map((r) => r.buyback + r.subsRev));
+    for (let m = 1; m <= N; m++) { const d = document.createElement('div'); d.className = 'mo'; d.style.left = ((m - 1) * w) + 'px'; d.style.width = w + 'px'; const b = ROWS[m].buyback + ROWS[m].subsRev; d.innerHTML = `<i style="height:${Math.max(2, Math.log10(1 + b) / Math.log10(1 + maxB) * 34).toFixed(0)}px;width:${Math.max(6, w - 18).toFixed(0)}px"></i>${m}`; box.appendChild(d); moEls.push(d); } }
+  function tiles(g) {
+    const bp = g.burnedTok / TODAY.supply * 100;
+    $('t-burned').textContent = bp.toFixed(bp < 10 ? 2 : 1) + '%'; $('t-burned-d').textContent = short(g.burnedTok, 1) + ' OF 1B TOKENS';
+    const px = g.price / TODAY.price; $('t-price').textContent = mult(px); $('t-price-d').textContent = price(g.price) + '  ·  FDV ' + usd(g.price * g.supply);
+    $('t-dep').textContent = usd(g.dep); $('t-dep-d').textContent = mult(g.dep / P.deposit) + ' START' + (g.dep >= P.capacity - 1 ? '  ·  FULL, ALL BURNS' : '  ·  ' + P.split + '% COMPOUNDS');
+    $('t-usd').textContent = usd(g.burnedUsd); $('t-usd-d').textContent = 'TO 0x…dEaD  ·  ' + int(g.subs) + ' SUBS';
+    const r = g.row; $('ledger').innerHTML = `M${String(Math.min(P.months, g.k + 1)).padStart(2, '0')}  <span>SUBS</span> ${int(r.subs)}  <span>FEES</span> ${usd(r.fees)}  <span>PROFIT</span> ${usd(r.profit)}  <span>COMPOUND</span> ${usd(r.reinvest)}  <span>BURN</span> <b class="cr">${usd(r.buyback + r.subsRev)}</b>`;
+    $('m-now').textContent = String(Math.min(P.months, g.k + (g.f > 0 ? 1 : 0))).padStart(2, '0');
+    moEls.forEach((d, i) => { d.className = 'mo' + (i + 1 < g.k + 1 ? ' past' : i + 1 === Math.min(P.months, g.k + 1) ? ' now' : ''); });
+  }
+
+  // ── the brain at the hub
+  const brainDraw = (() => {
+    const bcv = $('brain'), Wc = 240, Hc = 164; bcv.width = Wc * pr; bcv.height = Hc * pr; const b = bcv.getContext('2d'); b.setTransform(pr, 0, 0, pr, 0, 0);
+    const BCX = Wc * .5, BCY = Hc * .5, BSCALE = 70, k = BSCALE / 150; let s2 = 7;
+    const r2 = () => { s2 ^= s2 << 13; s2 >>>= 0; s2 ^= s2 >> 17; s2 ^= s2 << 5; s2 >>>= 0; return s2 / 4294967296; }; const rr = (a, z) => a + r2() * (z - a);
+    const PTS = []; const push = (x, y, z, tint, w, br) => PTS.push({ x, y, z, ph: rr(0, 6.28), sp: rr(.25, .9), amp: rr(.003, .012), b: br, tint, w, fire: 0 });
+    const hemiR = (u, v) => { const f = Math.cos(u), up = Math.cos(v); let R = 1; R *= 1 + .1 * f - .16 * f * f; R *= up > 0 ? 1 + .1 * up : 1 - .46 * Math.abs(up); R *= 1 + .2 * Math.max(0, -up) * Math.max(0, f) * 1.5; R *= 1 + .055 * Math.sin(u * 3 + v * 2); return R; };
+    const gy = (u, v) => Math.sin(u * 7.5 + v * 4.2) * Math.sin(v * 5.5 - u * 2.1);
+    for (let i = 0; i < 4200; i++) { const side = r2() < .5 ? -1 : 1, u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), g = gy(u, v); if (r2() > .3 + .7 * ((g + 1) / 2)) continue; const sh = r2() < .82 ? rr(.9, 1) : rr(.45, .9), R = hemiR(u, v) * sh * (1 + g * .045); const x = Math.sin(v) * Math.cos(u) * .5 * R + side * .235; if (Math.abs(x) < .052) continue; push(x, Math.cos(v) * .385 * R - .045, Math.sin(v) * Math.sin(u) * .415 * R, 0, rr(.9, 2.1), clamp(.45 + ((g + 1) / 2) * .55 + rr(-.1, .1), .1, 1)); }
+    for (let i = 0; i < 1100; i++) { const u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), sh = r2() < .8 ? rr(.88, 1) : rr(.5, .88), f = Math.sin(v * 22) * .5 + .5; if (r2() > .25 + .75 * f) continue; const R = (1 - .22 * Math.max(0, Math.cos(v))) * sh; push(Math.sin(v) * Math.cos(u) * .27 * R, Math.cos(v) * .138 * R + .362, Math.sin(v) * Math.sin(u) * .215 * R - .3, 1, rr(.6, 1.4), clamp(.45 + f * .5 + rr(-.08, .08), .1, 1)); }
+    for (let i = 0; i < 300; i++) { const t = r2(), w = .115 - t * .052, a = rr(0, 6.28), on = r2() < .75, q2 = on ? w : w * Math.sqrt(r2()); push(Math.cos(a) * q2, .36 + t * .46, Math.sin(a) * q2 - .075, 2, rr(.6, 1.3), clamp(.4 + (on ? .4 : .05) + rr(-.08, .08), .1, 1)); }
+    const TINT = [[190, 240, 255], [120, 255, 205], [150, 205, 255]]; let fireT = 0;
+    return (T, dt, heat) => { fireT -= dt; if (fireT <= 0) { fireT = clamp(1.4 - heat * .9, .25, 1.4); const fo = [rr(-.4, .4), rr(-.3, .3), rr(-.3, .3)]; for (const p of PTS) if ((p.x - fo[0]) ** 2 + (p.y - fo[1]) ** 2 + (p.z - fo[2]) ** 2 < .05) p.fire = 1; }
+      b.clearRect(0, 0, Wc, Hc); const yaw = T * .3, roll = Math.sin(T * .21) * .26, cy0 = Math.cos(yaw), sy0 = Math.sin(yaw), cr = Math.cos(roll), sr = Math.sin(roll);
+      const scanD = ((T * .155) % 1) * 1.5 - .75, sa = T * .11, nx = Math.cos(sa), nz = Math.sin(sa);
+      for (const p of PTS) { const br = 1 + Math.sin(T * p.sp + p.ph) * p.amp * 3.2, x = p.x * br, y = p.y * br, z = p.z * br; const Xr = x * cy0 + z * sy0; let Z = -x * sy0 + z * cy0; const Y = y * cr - Z * sr; Z = y * sr + Z * cr; const ps = 2.1 / (2.1 + Z * .9), sx = BCX + Xr * BSCALE * ps, sy = BCY + Y * BSCALE * ps, d = clamp((1.1 - Z) / 2.2, 0, 1);
+        p.fire *= .93; const sc2 = Math.abs(x * nx + z * nz - scanD) < .045 ? 1 : 0, a = clamp((.2 + p.b * .8) * (.5 + d * .5) + sc2 * .5 + p.fire * .5, 0, 1);
+        const tc = p.fire > .15 ? [0, 255, 133] : TINT[p.tint]; b.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},${a.toFixed(2)})`; const sz = Math.max(.8, p.w * (.55 + d * .85) * ps * k * (1 + sc2 * .6 + p.fire * .8)); b.fillRect(sx, sy, sz * 1.6, sz * 1.6); }
+      for (const sd of [-1, 1]) { const ex = BCX + sd * BSCALE * .17, ey = BCY - BSCALE * .06, ew = BSCALE * .052, eh = BSCALE * .066; b.fillStyle = 'rgba(2,5,10,.96)'; b.beginPath(); b.ellipse(ex, ey, ew, eh, 0, 0, 7); b.fill(); b.strokeStyle = 'rgba(150,220,255,.9)'; b.lineWidth = 1.2; b.stroke(); b.fillStyle = C.green; b.beginPath(); b.arc(ex + ew * .3, ey - eh * .1, ew * .42, 0, 7); b.fill(); } };
+  })();
+
+  // ── wiring
+  for (const id of IDS) $(id).addEventListener('input', () => { rerun(); tau = Math.min(tau, P.months); });
+  $('play').addEventListener('click', () => { playing = !playing; $('play').textContent = playing ? 'PAUSE' : 'PLAY'; $('play').classList.toggle('on', playing); });
+  $('reset').addEventListener('click', () => { tau = 0; parts.length = 0; });
+  document.querySelectorAll('.sp').forEach((b) => b.addEventListener('click', () => { speed = +b.dataset.speed; document.querySelectorAll('.sp').forEach((x) => x.classList.toggle('on', x === b)); }));
+  $('scrub').addEventListener('input', () => { tau = +$('scrub').value / 100; });
+  addEventListener('keydown', (e) => { if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') { e.preventDefault(); $('play').click(); } });
+  rerun();
+  if (reduced) { tau = P.months; playing = false; $('play').textContent = 'PLAY'; $('play').classList.remove('on'); }
+
+  let last = performance.now(), T0 = last;
+  const frame = (now) => {
+    const dt = Math.min(.05, (now - last) / 1000), t = (now - T0) / 1000; last = now;
+    if (playing) { tau += dt * speed / 2.5; if (tau >= P.months) { tau = P.months; playing = false; $('play').textContent = 'REPLAY'; $('play').classList.remove('on'); } }
+    if (document.activeElement !== $('scrub')) $('scrub').value = Math.round(tau * 100);
+    if ($('play').textContent === 'REPLAY' && playing) { $('play').textContent = 'PAUSE'; $('play').classList.add('on'); }
+    const g = at(tau);
+    c.clearRect(0, 0, 1600, 900);
+    drawWheel(t, dt, g); drawCharts(g); tiles(g);
+    const heat = clamp(Math.log10(1 + (g.row.buyback + g.row.subsRev)) / 7, 0, 1);
+    brainDraw(4.33 + t * (reduced ? 0 : 1), dt, heat);
+    if (!reduced) requestAnimationFrame(frame);
+  };
+  $('play').addEventListener('click', () => { if (tau >= P.months && playing) { tau = 0; parts.length = 0; } });
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => requestAnimationFrame(frame));
+})();
+</script>
+</body>
+</html>
