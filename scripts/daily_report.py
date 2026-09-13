@@ -1,0 +1,118 @@
+"""The day in numbers, printed as JSON blocks: what was pushed and what became of it, who read
+the site and the bot, and how the software is. Runs on the server inside the app's venv:
+
+    ssh $RADAR_HOST 'cd /opt/fomoradar/app && set -a && . ./.env && set +a && \
+        /opt/fomoradar/venv/bin/python /tmp/daily_report.py'
+
+Every block is one line, `KEY {json}`, so a caller can pick what it needs.
+"""
+import collections, json, re, subprocess, sys, time
+sys.path.insert(0, "/opt/fomoradar/app")
+from fomo_agent import db  # noqa: E402
+from fomo_agent.config import settings  # noqa: E402
+from fomo_agent.pipeline import hot  # noqa: E402
+from fomo_agent.pipeline.digest import _pool_candles  # noqa: E402
+from fomo_agent.pipeline.provenance import seeded  # noqa: E402
+from fomo_agent.pipeline.health import report as health_report  # noqa: E402
+from fomo_agent.pipeline.collect_api import spent_this_month  # noqa: E402
+
+conn = db.connect(settings.db_path)
+now = db.now(); since = now - 86400
+hhmm = lambda ts: time.strftime("%H:%M", time.gmtime(ts))  # noqa: E731
+n1 = lambda q, *a: conn.execute(q, a).fetchone()[0]  # noqa: E731
+out = lambda k, v: print(k, json.dumps(v, ensure_ascii=False, default=str))  # noqa: E731
+
+# ── 1. what went to telegram, and what became of it
+rows = conn.execute("SELECT chat_id, mint, ts FROM bot_sent WHERE ts >= ? ORDER BY ts", (since,)).fetchall()
+pushes = {}
+for r in rows:
+    key = r["mint"]; kind = "burst" if key.startswith("hot:") else "launch"; mint = key.split(":", 1)[-1]
+    p = pushes.setdefault((kind, mint), {"kind": kind, "mint": mint, "ts": r["ts"], "chats": set()})
+    p["chats"].add(r["chat_id"]); p["ts"] = min(p["ts"], r["ts"])
+candles_for = _pool_candles(conn)
+report = []
+for p in sorted(pushes.values(), key=lambda p: p["ts"]):
+    mint, ts = p["mint"], p["ts"]
+    tk = conn.execute("SELECT symbol, sellable, sell_note FROM tokens WHERE mint=?", (mint,)).fetchone()
+    sym = (tk["symbol"] if tk else None) or mint[:8]
+    b = conn.execute("SELECT px, conviction, wallets FROM bursts WHERE mint=? AND ts BETWEEN ? AND ? ORDER BY ts LIMIT 1", (mint, ts - 600, ts + 60)).fetchone()
+    px = b["px"] if b and b["px"] else None
+    if px is None:
+        last = conn.execute("SELECT usd_value / token_amount p FROM trades WHERE mint=? AND ts<=? AND usd_value>0 AND token_amount>0 ORDER BY ts DESC LIMIT 1", (mint, ts)).fetchone()
+        px = last["p"] if last else None
+    cds = candles_for(mint)
+    o = hot.outcome(conn, mint, ts, px, 86400, now, cds)
+    best, nowx = o["best"], o["now"]
+    verdict = ("honeypot" if tk and tk["sellable"] == 0 else "open" if now - ts < 6 * 3600 and (best or 0) < 2 else
+               "reached 2x" if (best or 0) >= 2 else "failed" if (nowx or 0) < 0.5 and (best or 0) < 1.5 else "flat")
+    report.append({"t": hhmm(ts), "kind": p["kind"], "sym": sym, "mint": mint, "chats": len(p["chats"]), "best": best, "now": nowx,
+                   "candles": bool(cds), "seeded": seeded(conn, mint, now)["seeded"], "unsellable": bool(tk and tk["sellable"] == 0),
+                   "conv": b["conviction"] if b else None, "wallets": b["wallets"] if b else None, "age_h": round((now - ts) / 3600, 1), "verdict": verdict})
+out("PUSHES", report)
+out("PUSH_TOTALS", {"pushes": len(report), "launch": sum(r["kind"] == "launch" for r in report), "burst": sum(r["kind"] == "burst" for r in report),
+                    "reached_2x": sum(r["verdict"] == "reached 2x" for r in report), "failed": sum(r["verdict"] == "failed" for r in report),
+                    "flat": sum(r["verdict"] == "flat" for r in report), "open": sum(r["verdict"] == "open" for r in report),
+                    "honeypot": sum(r["verdict"] == "honeypot" for r in report), "bursts_recorded": n1("SELECT COUNT(*) FROM bursts WHERE ts >= ?", since)})
+out("UNSELLABLE_24H", [dict(r) for r in conn.execute("SELECT symbol, mint, sell_note FROM tokens WHERE sellable = 0 AND sell_checked_at >= ?", (since,))])
+
+# ── 2. the bot's people
+subs_by_hour = sorted(collections.Counter(time.strftime("%d %H", time.gmtime(r[0])) for r in conn.execute("SELECT subscribed_at FROM bot_subscribers WHERE subscribed_at >= ?", (since,))).items())
+out("BOT", {"active": n1("SELECT COUNT(*) FROM bot_subscribers WHERE active=1"), "inactive": n1("SELECT COUNT(*) FROM bot_subscribers WHERE active=0"),
+            "new_24h": n1("SELECT COUNT(*) FROM bot_subscribers WHERE subscribed_at >= ?", since), "messages_24h": len(rows),
+            "chats_pushed_24h": n1("SELECT COUNT(DISTINCT chat_id) FROM bot_sent WHERE ts >= ?", since), "subs_by_hour": subs_by_hour})
+
+# ── 3. the site
+raw = subprocess.run(["journalctl", "-u", "caddy", "--since", "24 hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
+BOT = re.compile(r"bot|crawl|spider|python|httpx|node|curl|go-http|java|okhttp|FomoPilot|Paper|Tracker|copytrader|fishmice|dime-|wget|axios|scrapy|Headless|LinkPreview", re.I)
+ips, humans, api_ips, st = set(), set(), set(), collections.Counter()
+paths, human_hours, uas = collections.Counter(), collections.Counter(), collections.Counter()
+pages = human_pages = 0; durs = []; byh = collections.defaultdict(lambda: {"n": 0, "0": 0, "429": 0, "502": 0, "d": []})
+for line in raw.splitlines():
+    try: m = json.loads(line)
+    except Exception: continue
+    if "status" not in m or "request" not in m: continue
+    r = m["request"]; ip = r.get("client_ip", "?"); ua = (r.get("headers", {}).get("User-Agent") or ["?"])[0]; uri = r.get("uri", "").split("?")[0]
+    ips.add(ip); st[m["status"]] += 1; h = time.strftime("%H", time.gmtime(m["ts"])); b = byh[h]; b["n"] += 1
+    if m["status"] == 0: b["0"] += 1
+    if m["status"] == 429: b["429"] += 1
+    if m["status"] == 502: b["502"] += 1
+    is_page = m["status"] == 200 and not uri.startswith(("/api", "/_astro", "/favicon", "/robots", "/sitemap")) and not uri.endswith((".css", ".js", ".png", ".svg", ".ico", ".xml", ".txt", ".webp", ".jpg"))
+    human = not BOT.search(ua) and "Mozilla" in ua
+    if uri.startswith("/api"): api_ips.add(ip)
+    if BOT.search(ua): uas[ua[:40]] += 1
+    if is_page:
+        pages += 1; paths[re.sub(r"^/(token|trader)/.*", r"/\1/*", uri)] += 1; b["d"].append(m["duration"])
+        if human: human_pages += 1; humans.add(ip); human_hours[h] += 1
+hours_tbl = []
+for h in sorted(byh):
+    b = byh[h]; d = sorted(b["d"]); hours_tbl.append({"h": h, "req": b["n"], "st0": b["0"], "429": b["429"], "502": b["502"], "page_p95_ms": round(d[int(len(d) * .95)] * 1000) if d else None})
+out("SITE", {"requests": sum(st.values()), "ips": len(ips), "human_ips_on_pages": len(humans), "pages": pages, "human_pages": human_pages, "api_ips": len(api_ips),
+             "status": dict(st.most_common(6)), "top_paths": paths.most_common(8), "peak_human_hour": human_hours.most_common(1), "bots": uas.most_common(6), "hours": hours_tbl})
+
+# ── 4. the software and the data
+units = subprocess.run(["systemctl", "show", "radar-api", "radar-site", "radar-bot", "radar-watch", "radar-receive", "caddy", "-p", "Id,ActiveState,NRestarts"], capture_output=True, text=True).stdout
+out("UNITS", [dict(kv.split("=", 1) for kv in blk.split("\n") if "=" in kv) for blk in units.strip().split("\n\n")])
+out("HEALTH", health_report(conn))
+out("FOMOAPI", {"spent": spent_this_month(conn), "cap": settings.fomoapi_monthly_credits})
+out("DATA", {"trades_24h": n1("SELECT COUNT(*) FROM trades WHERE ts >= ?", since),
+             "kinds_24h": dict(conn.execute("SELECT COALESCE(kind,'trade'), COUNT(*) FROM trades WHERE ts >= ? GROUP BY 1", (since,)).fetchall()),
+             "tokens_new_24h": n1("SELECT COUNT(*) FROM tokens WHERE first_seen_at >= ?", since),
+             "traders": dict(conn.execute("SELECT status, COUNT(*) FROM traders GROUP BY status").fetchall()),
+             "unscored": n1("SELECT COUNT(*) FROM traders WHERE score IS NULL AND status IN ('tracking','active','watch')"),
+             "resolution": {"users": n1("SELECT COUNT(*) FROM fomo_users"), "resolved": n1("SELECT COUNT(*) FROM fomo_users WHERE onchain_address IS NOT NULL"),
+                            "resolved_24h": n1("SELECT COUNT(*) FROM fomo_users WHERE onchain_address IS NOT NULL AND onchain_at >= ?", since),
+                            "with_swaps_to_try": n1("SELECT COUNT(*) FROM fomo_users u WHERE onchain_address IS NULL AND EXISTS (SELECT 1 FROM fomo_swaps s WHERE s.user_id=u.user_id)")},
+             "runs_24h": dict(conn.execute("SELECT kind, COUNT(*) FROM runs WHERE started_at >= ? GROUP BY kind", (since,)).fetchall()),
+             "last_trade_age_min": round((now - n1("SELECT MAX(ts) FROM trades")) / 60, 1),
+             "db_mb": round(__import__("os").path.getsize(settings.db_path) / 1e6, 1)})
+logs = {}
+for u in ("radar-api", "radar-bot", "radar-watch", "radar-collect", "radar-fomo", "radar-fomo-slow"):
+    j = subprocess.run(["journalctl", "-u", u, "--since", "24 hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
+    warns = [l for l in j.splitlines() if re.search(r"WARNING|ERROR|Traceback", l)]
+    kinds = collections.Counter(re.sub(r"\d[\d:,.\- ]*", "#", re.sub(r"0x[0-9a-f]+", "0x…", w.split("WARNING")[-1].split("ERROR")[-1]))[:70] for w in warns)
+    logs[u] = {"lines": len(j.splitlines()), "warn_err": len(warns), "top": kinds.most_common(3)}
+out("LOGS", logs)
+w = subprocess.run(["journalctl", "-u", "radar-watch", "--since", "24 hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
+out("WATCH", {"ticks_with_fills": len(re.findall(r"watch: \{", w)), "fills": sum(int(x) for x in re.findall(r"'fills': (\d+)", w)),
+              "rate_limited": len(re.findall(r"rate limited", w)), "bursts_pushed": sum(int(x) for x in re.findall(r"'sent': (\d+)", w)),
+              "not_pushed_unsellable": len(re.findall(r"not pushed", w))})
