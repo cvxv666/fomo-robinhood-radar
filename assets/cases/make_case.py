@@ -132,6 +132,8 @@ def render(case: dict, w: int = 1600, h: int = 900) -> None:
                 text(d, xx, axis_y + 21, hhmm(tick), mono(S(9.5)), GRAPHITE, track=1, anchor="c")
         tick += 60
     for c in (2, 4, 6):
+        if c > cmax:
+            continue   # a level above the plot would land in the heading
         yy = Y(c)
         colour = YELLOW if c == case["burst_bar"] else CARBON
         hairline(d, tl_x0, yy, tl_x1, yy, colour, dashed=True)
@@ -190,7 +192,7 @@ def render(case: dict, w: int = 1600, h: int = 900) -> None:
     hairline(d, pad, 566, w - pad, 566, CARBON)
 
     # ── what followed: hourly candles, times the alert price ───────────────────────────────
-    text(d, pad, 592, f"WHAT FOLLOWED  ·  HOURLY  ·  × THE ALERT PRICE OF {case['entry_px']}",
+    text(d, pad, 592, f"WHAT FOLLOWED  ·  {case.get('candle_label', 'HOURLY')}  ·  × THE ALERT PRICE OF {case['entry_px']}",
          mono(S(11)), GRAPHITE, track=1.4)
     c_x0, c_x1, c_y0, c_y1 = pad + 30, w - pad - 170, 612, 796
     candles = case["candles"]
@@ -199,7 +201,9 @@ def render(case: dict, w: int = 1600, h: int = 900) -> None:
     slot = (c_x1 - c_x0) / n
     CY = lambda m: c_y1 - (m / ymax) * (c_y1 - c_y0)  # noqa: E731
     hairline(d, c_x0, c_y1, c_x1, c_y1, WHITE)
-    for m in (1, 5, 10):
+    for m in (1, 2, 5, 10, 20):
+        if m > ymax or (m == 2 and ymax > 6):
+            continue   # a level above the chart would be drawn into the section over it
         hairline(d, c_x0, CY(m), c_x1, CY(m), CARBON, dashed=True)
         text(d, c_x0 - 6, CY(m) + 4, f"{m}×", mono(S(9)), GRAPHITE, track=0.6, anchor="r")
     for i, (ts, o, hi, lo, cl) in enumerate(candles):
