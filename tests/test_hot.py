@@ -251,6 +251,26 @@ def test_the_pool_candles_correct_a_tape_that_held_through_the_run(tmp_path):
     assert plain["best"] == 1.5, "without candles the tape is the only witness"
 
 
+def test_a_mispriced_tape_row_does_not_beat_the_candles(tmp_path):
+    """One FRONTIER sell carried a dollar leg four times the pool's price that minute and read as
+    9.3x against a real 4x. With candles that agree with the fill, the pool's high is the peak."""
+    conn = db.connect(tmp_path / "m.db")
+    now = db.now()
+    seed(conn, now)
+    h = hot.hot_now(conn, "robinhood", delta=1.5, window_s=30 * 60, min_wallets=3, now=now)[0]
+    hot.record(conn, h, quiet_s=3600, chain="robinhood")
+    with db.tx(conn):   # a sell at 18.6 per token while the pool never traded above 8
+        db.insert_trade(conn, sig="odd", address=W[1], chain="robinhood", mint=TOKEN, side="sell",
+                        usd_value=614.0, token_amount=33.0, ts=now + 600, source="rpc")
+    burst_ts = h["last_ts"]
+    candles = [[burst_ts - 600, 1.9, 8.0, 1.8, 6.0, 900.0], [burst_ts + 3000, 6.0, 7.0, 4.0, 4.5, 500.0]]
+    r = hot.recent(conn, "robinhood", hours=24, now=now + 4 * 3600,
+                   candles_for=lambda mint: candles if mint == TOKEN else None)[0]
+    assert r["best"] == 4.0, "the pool's high, not the odd fill"
+    plain = hot.recent(conn, "robinhood", hours=24, now=now + 4 * 3600)[0]
+    assert plain["best"] == 9.3, "with no candles the tape is all there is, odd rows included"
+
+
 def test_a_burst_with_no_tape_after_it_is_unmeasured_not_flat(tmp_path):
     conn = db.connect(tmp_path / "r.db")
     now = db.now()

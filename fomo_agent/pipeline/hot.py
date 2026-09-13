@@ -161,11 +161,12 @@ def outcome(conn: sqlite3.Connection, mint: str, ts: int, px: float | None,
             candles: list[list[float]] | None = None) -> dict:
     """What the price did after a burst, in the price the cohort itself paid.
 
-    Two witnesses. The tape: every tracked fill inside the horizon, which is exact and biased low
-    — a cohort that holds through a run leaves no fill at the top, and the first live burst read
-    1.9x on the tape while the token did 22x. And the pool's own candles, when the caller has
-    them: the high since the burst is what the price actually did. `best` is the greater of the
-    two, `last` the tape's most recent fill, `now` the candle close if there is one and the stored
+    Two witnesses. The tape: every tracked fill inside the horizon, which is exact for the fills
+    it has and biased low — a cohort that holds through a run leaves no fill at the top, and the
+    first live burst read 1.9x on the tape while the token did 22x. And the pool's own candles,
+    when the caller has them and they agree with the fill price: then the high since the burst is
+    `best`, and the tape's peak is not consulted, because a single mispriced row can beat it.
+    `last` is the tape's most recent fill, `now` the candle close if there is one and the stored
     quote otherwise. None means nothing to measure with, which is not the same as 1.0.
     """
     now = now or db.now()
@@ -188,8 +189,10 @@ def outcome(conn: sqlite3.Connection, mint: str, ts: int, px: float | None,
     if since and not (0.2 <= since[0][1] / px <= 5):
         since = []
     if since:
-        high = max(c[2] for c in since) / px
-        best = max(best or 0.0, high)
+        # with candles that agree with the fill, the pool's high is the answer and the tape is
+        # not consulted for the peak: a tape row can be mispriced - one FRONTIER sell carried a
+        # dollar leg four times the pool's price that minute and read as 9.3x against a real 4x
+        best = max(c[2] for c in since) / px
         quote = since[-1][4] / px
     return {
         "best": round(best, 2) if best is not None else None,
