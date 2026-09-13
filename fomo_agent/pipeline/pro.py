@@ -222,6 +222,12 @@ def settle(conn: sqlite3.Connection, rpc: RobinhoodRPC, from_block: int, to_bloc
     if not enabled():
         return []
     now = now or db.now()
+    # Nobody waiting for a burn to be matched, nothing to read: the watcher's RPC allowance is
+    # thin and the endpoint already throttles it. A burn made with no quote at all is still
+    # credited when its owner sends the hash - /claim fetches the receipt itself.
+    if not conn.execute("SELECT 1 FROM pro_quotes WHERE status IN ('open', 'expired') AND expires_at > ? LIMIT 1",
+                        (now - CLAIM_GRACE_S,)).fetchone():
+        return []
     try:
         found = burns(rpc, from_block, to_block)
     except (RpcError, Exception) as e:  # noqa: BLE001

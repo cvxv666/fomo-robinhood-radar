@@ -183,6 +183,20 @@ def test_notices_are_sent_through_the_bot(conn):
     assert bot.notify(conn, tg) == 1 and "one day" in tg.sent[0][1]
 
 
+def test_settle_asks_the_chain_only_while_a_quote_is_waiting(conn):
+    class RPC:
+        calls = 0
+
+        def call(self, method, params):
+            RPC.calls += 1
+            return []
+
+    assert pro.settle(conn, RPC(), 1, 2) == [] and RPC.calls == 0, "no quote, no request"
+    pro.quote(conn, "42")
+    pro.settle(conn, RPC(), 1, 2)
+    assert RPC.calls == 1
+
+
 def test_settle_reads_burns_and_confirms(conn, monkeypatch):
     q = pro.quote(conn, "42")
 
