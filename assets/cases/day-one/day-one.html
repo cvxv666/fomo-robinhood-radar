@@ -131,7 +131,7 @@
   const D = { x0: pad, x1: 1536, y0: 726, y1: 812, h0: 10, h1: 33 };
   const DX = (h) => D.x0 + (h - D.h0) / (D.h1 - D.h0) * (D.x1 - D.x0);
   line(pad, 692, 1536, 692, W.WHITE, { 'stroke-width': 2 });
-  txt(1536, 716, 'THE DAY  ·  WHO JOINED THE BOT, BY THE HOUR  ·  WHEN EACH PUSH WENT OUT', { 'font-size': 14, 'font-weight': 700, 'letter-spacing': '.12em', 'text-anchor': 'end' });
+  txt(1536, 716, 'JOINS BY THE HOUR  ·  WHEN EACH PUSH WENT OUT', { 'font-size': 14, 'font-weight': 700, 'letter-spacing': '.12em', 'text-anchor': 'end' });
   line(D.x0, D.y1, D.x1, D.y1, W.WHITE, { 'stroke-width': 2 });
   for (let h = D.h0; h <= D.h1; h += 3) {
     line(DX(h), D.y1, DX(h), D.y1 + 8, W.WHITE, { 'stroke-width': 1.5 });
@@ -145,8 +145,11 @@
     line(x, D.y0 + 8, x, D.y1, colour, { 'stroke-width': 2 });
     txt(x, D.y0 + 6, '▲', { fill: colour, 'font-size': 15, 'text-anchor': 'middle', class: 'mark' });
   });
-  const LAB = [['11:07', 'MAPLE', 0], ['13:55', 'AMD', 1], ['14:08', 'FRONTIER', 0], ['14:41', 'SWARM', 1], ['14:56', 'LONGCAT', 2], ['19:56', 'TWINE', 0], ['21:01', 'UNITY', 0]];
-  LAB.forEach(([t, s, lvl]) => { const p = PUSHES.find((x) => x.t === t); txt(DX(p.h) + 7, D.y0 - 6 - lvl * 15, s, { fill: p.peak >= 2 ? W.GREEN : W.GRAPHITE, 'font-size': 12.5, 'font-weight': 700, 'letter-spacing': '.06em' }); });
+  // one label per push where there is room; the four inside one hour share a line, in order
+  const LAB = [['11:07', 'MAPLE'], ['19:56', 'TWINE'], ['21:01', 'UNITY']];
+  LAB.forEach(([t, s]) => { const p = PUSHES.find((x) => x.t === t); txt(DX(p.h) + 7, D.y0 - 4, s, { fill: p.peak >= 2 ? W.GREEN : W.GRAPHITE, 'font-size': 12.5, 'font-weight': 700, 'letter-spacing': '.06em' }); });
+  const cluster = txt(DX(13.92) + 7, D.y0 - 4, '', { 'font-size': 12.5, 'font-weight': 700, 'letter-spacing': '.06em' });
+  [['AMD', W.GREEN], ['  ·  ', W.CARBON], ['FRONTIER ×2', W.GREEN], ['  ·  ', W.CARBON], ['SWARM', W.GREEN], ['  ·  ', W.CARBON], ['LONGCAT', W.GRAPHITE]].forEach(([w, c]) => el('tspan', { fill: c }, cluster, w));
   const sweep = el('rect', { x: D.x0, y: D.y0, width: 40, height: D.y1 - D.y0, fill: W.WHITE, opacity: 0 });
 
   // ── foot
