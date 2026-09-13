@@ -42,6 +42,7 @@ class Watch:
     ticks: int = 0
     fills: int = 0
     alerts: int = 0
+    burns: pro.Cursor = field(default_factory=pro.Cursor)
 
 
 def roster(conn: sqlite3.Connection) -> list[str]:
@@ -87,8 +88,8 @@ def tick(conn: sqlite3.Connection, w: Watch, now: int | None = None) -> dict:
     stats["blocks"] = head - first + 1
     w.ticks += 1
     w.fills += stats["fills"]
-    # the same blocks hold the subscription burns: one more request, only while there is a gate
-    paid = pro.settle(conn, w.rpc, first, head, now)
+    # the same chain holds the subscription burns: one more request, only while a quote waits
+    paid = w.burns.advance(conn, w.rpc, head, now)
     if paid:
         stats["paid"] = len(paid)
         confirm(conn, paid)

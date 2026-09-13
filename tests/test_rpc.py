@@ -137,6 +137,44 @@ def test_get_trades_costs_two_log_queries_and_two_batches(logs, receipt, monkeyp
     assert len(sent) == before
 
 
+def test_a_range_the_node_will_not_answer_whole_is_asked_in_halves(monkeypatch):
+    """The public node caps an answer at 10,000 logs. A range over the cap comes back as an
+    error; the client halves it until every piece is answered, and the pieces add up."""
+    asked = []
+
+    def fake_post(self, payload):
+        f, t = int(payload["params"][0]["fromBlock"], 16), int(payload["params"][0]["toBlock"], 16)
+        asked.append((f, t))
+        if t - f > 250:
+            return {"error": {"code": -32000, "message": "logs matched by query exceeds limit of 10000"}}
+        return {"result": [{"block": b} for b in range(f, t + 1)]}
+
+    monkeypatch.setattr(RobinhoodRPC, "_post", fake_post)
+    rpc = RobinhoodRPC(url="http://offline")
+    got = rpc.logs(1, 1000, topics=["0xabc"])
+    assert [g["block"] for g in got] == list(range(1, 1001)), "every block once, in order"
+    assert len(asked) == 7, "one refused, two halves refused, four quarters answered"
+
+
+def test_a_failed_scan_is_not_retried_for_every_wallet(monkeypatch):
+    """Four hundred wallets asked after one failed scan used to cost eight hundred requests."""
+    calls = []
+
+    def fake_post(self, payload):
+        calls.append(payload["method"])
+        if payload["method"] == "eth_blockNumber":
+            return {"result": hex(1_000_000)}
+        return {"error": {"code": -32000, "message": "rate limited"}}
+
+    monkeypatch.setattr(RobinhoodRPC, "_post", fake_post)
+    rpc = RobinhoodRPC(url="http://offline")
+    rpc.prime(["0x" + "a" * 40, "0x" + "b" * 40])
+    for w in ("0x" + "a" * 40, "0x" + "b" * 40):
+        with pytest.raises(Exception):
+            rpc.get_trades(w, "robinhood")
+    assert calls.count("eth_getLogs") == 1, "the second wallet got the remembered failure"
+
+
 def test_supports_only_its_own_chain():
     rpc = RobinhoodRPC(url="http://offline")
     assert rpc.supports("robinhood") and not rpc.supports("solana")

@@ -187,11 +187,11 @@ def test_settle_asks_the_chain_only_while_a_quote_is_waiting(conn):
     class RPC:
         calls = 0
 
-        def call(self, method, params):
+        def logs(self, a, b, **flt):
             RPC.calls += 1
             return []
 
-    assert pro.settle(conn, RPC(), 1, 2) == [] and RPC.calls == 0, "no quote, no request"
+    assert pro.settle(conn, RPC(), 1, 2) == (True, []) and RPC.calls == 0, "no quote, no request"
     pro.quote(conn, "42")
     pro.settle(conn, RPC(), 1, 2)
     assert RPC.calls == 1
@@ -201,12 +201,35 @@ def test_settle_reads_burns_and_confirms(conn, monkeypatch):
     q = pro.quote(conn, "42")
 
     class RPC:
-        def call(self, method, params):
-            assert method == "eth_getLogs" and params[0]["address"] == TOKEN
+        def logs(self, a, b, **flt):
+            assert flt["address"] == TOKEN
             return [{"address": TOKEN, "topics": ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
                                                   "0x" + "0" * 24 + WALLET[2:], "0x" + "0" * 24 + DEAD[2:]],
                      "data": hex(q["tokens"] * 10 ** 18), "transactionHash": "0x" + "77" * 32, "logIndex": "0x0", "blockNumber": "0x64"}]
 
-    paid = pro.settle(conn, RPC(), 90, 100)
-    assert len(paid) == 1 and paid[0]["chat_id"] == "42"
-    assert pro.settle(conn, RPC(), 90, 100) == [], "the same log again credits nothing"
+    ok, paid = pro.settle(conn, RPC(), 90, 100)
+    assert ok and len(paid) == 1 and paid[0]["chat_id"] == "42"
+    assert pro.settle(conn, RPC(), 90, 100) == (True, []), "the same log again credits nothing"
+
+
+def test_the_cursor_moves_only_on_a_read_that_worked(conn):
+    pro.quote(conn, "42")
+    asked = []
+
+    class RPC:
+        fail = True
+
+        def logs(self, a, b, **flt):
+            asked.append((a, b))
+            if RPC.fail:
+                raise RuntimeError("rate limited")
+            return []
+
+    c = pro.Cursor()
+    c.advance(conn, RPC(), 100_000)
+    assert c.block == 0 and asked[-1] == (100_000 - pro.LOOKBACK_BLOCKS, 100_000), "a fresh process looks back, and a failed read leaves the cursor"
+    RPC.fail = False
+    c.advance(conn, RPC(), 100_000)
+    assert c.block == 100_000
+    c.advance(conn, RPC(), 100_050)
+    assert asked[-1] == (100_001, 100_050), "then only what is new"

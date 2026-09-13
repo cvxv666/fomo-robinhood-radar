@@ -161,6 +161,7 @@ class RobinhoodRPC:
         self._wallets: list[str] = []
         self._fills: dict[str, list[Trade]] = {}
         self._fetched_at = 0.0
+        self._failed: str | None = None
         self._probes: dict[int, int] = {}   # block -> timestamp, for dating an arbitrary moment
         self._decimals: dict[str, int] = {}  # token -> decimals; constant, so cached for the run
 
@@ -187,6 +188,30 @@ class RobinhoodRPC:
         if "error" in body:
             raise RpcError(f"{method}: {body['error'].get('message')}")
         return body["result"]
+
+    @staticmethod
+    def _too_big(e: Exception) -> bool:
+        """The node refusing a range for its size, not for our rate: split it and ask again."""
+        s = str(e).lower()
+        return "exceeds limit" in s or "timed out" in s or "too many" in s or "response size" in s
+
+    def logs(self, from_block: int, to_block: int, **flt) -> list:
+        """`eth_getLogs` over a range, halving the range as often as the node demands.
+
+        On 2026-09-10 the public node began capping an answer at 10,000 logs; on the 13th the
+        roster's two 200k-block calls crossed it and every wallet's tracking failed - four
+        hundred wallets, eight hundred requests, no fills, and the watcher starved behind them.
+        A range the node will not answer whole is answered in halves, and the halves in halves;
+        the depth is logarithmic, so a day of the roster costs a dozen calls, not a thousand.
+        """
+        try:
+            return self.call("eth_getLogs", [{"fromBlock": hex(from_block), "toBlock": hex(to_block), **flt}])
+        except RpcError as e:
+            if from_block >= to_block or not self._too_big(e):
+                raise
+            mid = (from_block + to_block) // 2
+            log.info("rpc: %d..%d too big for one answer (%s), splitting", from_block, to_block, str(e)[:60])
+            return self.logs(from_block, mid, **flt) + self.logs(mid + 1, to_block, **flt)
 
     def batch(self, method: str, args: list[list], size: int | None = None) -> list:
         """One HTTP round trip per `size` calls; results come back aligned with `args`."""
@@ -318,10 +343,7 @@ class RobinhoodRPC:
         window_s = settings.resolve_window_s if window_s is None else window_s
         centre = self.block_at(ts)
         span = max(int(window_s / 0.1), 1)
-        raw = self.call("eth_getLogs", [{
-            "fromBlock": hex(max(centre - span, 1)), "toBlock": hex(centre + span),
-            "address": norm_addr(token), "topics": [TRANSFER_TOPIC],
-        }])
+        raw = self.logs(max(centre - span, 1), centre + span, address=norm_addr(token), topics=[TRANSFER_TOPIC])
         makers = set()
         for t in (parse_transfer(e) for e in raw):
             if t is None:
@@ -336,9 +358,7 @@ class RobinhoodRPC:
         """Every Transfer in the range where any of `wallets` is the sender (or the receiver)."""
         topics: list = [TRANSFER_TOPIC, None, None]
         topics[1 if outgoing else 2] = [topic_for(w) for w in wallets]
-        raw = self.call("eth_getLogs", [{
-            "fromBlock": hex(from_block), "toBlock": hex(to_block), "topics": topics,
-        }])
+        raw = self.logs(from_block, to_block, topics=topics)
         return [t for t in (parse_transfer(e) for e in raw) if t]
 
     def weth_price(self) -> float | None:
@@ -447,13 +467,23 @@ class RobinhoodRPC:
     def _load(self) -> None:
         if not self._wallets:
             raise RpcError("RobinhoodRPC.prime() must be called with the wallets to index")
-        if self._fills and time.monotonic() - self._fetched_at < settings.rpc_min_interval_s:
-            return
+        if time.monotonic() - self._fetched_at < settings.rpc_min_interval_s:
+            if self._failed is not None:
+                # the scan for this pass already failed: every wallet asked after it gets the
+                # same answer without another two requests each
+                raise RpcError(f"scan failed earlier this pass: {self._failed}")
+            if self._fills:
+                return
 
         head = self.block_number()
         first = max(head - settings.rpc_window_blocks, 0)
-        self._fills = self.scan(self._wallets, first, head)
         self._fetched_at = time.monotonic()
+        try:
+            self._fills = self.scan(self._wallets, first, head)
+            self._failed = None
+        except Exception as e:  # noqa: BLE001 - remembered, then re-raised for the caller
+            self._failed = str(e)[:160]
+            raise
 
     def get_trades(self, address: str, chain: str = CHAIN, since_ts: int | None = None) -> list[Trade]:
         if chain != CHAIN:

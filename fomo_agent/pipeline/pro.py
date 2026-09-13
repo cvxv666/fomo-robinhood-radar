@@ -179,10 +179,8 @@ def tokens_of(raw: int) -> float:
 
 def burns(rpc: RobinhoodRPC, from_block: int, to_block: int) -> list[dict]:
     """Every transfer of the token to the burn address in the range: one eth_getLogs."""
-    raw = rpc.call("eth_getLogs", [{
-        "fromBlock": hex(from_block), "toBlock": hex(to_block),
-        "address": settings.pro_token, "topics": [TRANSFER_TOPIC, None, topic_for(settings.pro_burn_address)],
-    }])
+    raw = rpc.logs(from_block, to_block, address=settings.pro_token,
+                   topics=[TRANSFER_TOPIC, None, topic_for(settings.pro_burn_address)])
     return [t for t in (parse_transfer(e) for e in raw) if t]
 
 
@@ -214,25 +212,36 @@ def record(conn: sqlite3.Connection, t: dict, ts: int, now: int | None = None) -
     return payment
 
 
-def settle(conn: sqlite3.Connection, rpc: RobinhoodRPC, from_block: int, to_block: int,
-           now: int | None = None) -> list[dict]:
-    """Read the burns in the range and credit what matches. Returns the payments credited to a
-    chat - the caller tells them. Never raises: a failed read is retried by the next tick, and
-    `/claim` catches anything a gap swallowed."""
-    if not enabled():
-        return []
+def waiting(conn: sqlite3.Connection, now: int | None = None) -> bool:
+    """Is any quote still able to be matched - open, or expired inside the claim grace."""
     now = now or db.now()
-    # Nobody waiting for a burn to be matched, nothing to read: the watcher's RPC allowance is
-    # thin and the endpoint already throttles it. A burn made with no quote at all is still
-    # credited when its owner sends the hash - /claim fetches the receipt itself.
-    if not conn.execute("SELECT 1 FROM pro_quotes WHERE status IN ('open', 'expired') AND expires_at > ? LIMIT 1",
-                        (now - CLAIM_GRACE_S,)).fetchone():
-        return []
+    return conn.execute("SELECT 1 FROM pro_quotes WHERE status IN ('open', 'expired') AND expires_at > ? LIMIT 1",
+                        (now - CLAIM_GRACE_S,)).fetchone() is not None
+
+
+LOOKBACK_BLOCKS = 72_000   # two hours at a block a tenth of a second: where a fresh process starts reading
+
+
+def settle(conn: sqlite3.Connection, rpc: RobinhoodRPC, from_block: int, to_block: int,
+           now: int | None = None) -> tuple[bool, list[dict]]:
+    """Read the burns in the range and credit what matches: (read ok, payments credited).
+
+    The caller keeps a cursor and moves it only on ok, so a range the node refused is asked
+    for again next time rather than lost; the filter is one token to one address, so even a
+    long catch-up is one call. Never raises. `/claim` catches anything that still slips."""
+    if not enabled():
+        return True, []
+    now = now or db.now()
+    # Nobody waiting for a burn to be matched, nothing to read: the RPC allowance is thin and
+    # the endpoint already throttles it. A burn made with no quote at all is still credited
+    # when its owner sends the hash - /claim fetches the receipt itself.
+    if not waiting(conn, now):
+        return True, []
     try:
         found = burns(rpc, from_block, to_block)
     except (RpcError, Exception) as e:  # noqa: BLE001
         log.warning("pro: could not read burns %d-%d: %s", from_block, to_block, e)
-        return []
+        return False, []
     credited = []
     for t in found:
         p = record(conn, t, now, now)
@@ -241,7 +250,25 @@ def settle(conn: sqlite3.Connection, rpc: RobinhoodRPC, from_block: int, to_bloc
             log.info("pro: %s paid %s tokens, chat %s until %s", p["frm"], p["tokens"], p["chat_id"], p["paid_until"])
         elif p:
             log.info("pro: unclaimed burn of %s tokens from %s (%s)", p["tokens"], p["frm"], p["tx"])
-    return credited
+    return True, credited
+
+
+class Cursor:
+    """Where a process has read burns up to. Two processes run one each - the watcher on every
+    tick, the bot on its alert timer - so a burn is seen even while one of them is waiting out
+    a rate limit; `record` keys on the transaction, so the second sighting is nothing."""
+
+    def __init__(self) -> None:
+        self.block = 0
+
+    def advance(self, conn: sqlite3.Connection, rpc: RobinhoodRPC, head: int, now: int | None = None) -> list[dict]:
+        start = self.block + 1 if self.block else max(head - LOOKBACK_BLOCKS, 0)
+        if start > head:
+            return []
+        ok, paid = settle(conn, rpc, start, head, now)
+        if ok:
+            self.block = head
+        return paid
 
 
 def claim(conn: sqlite3.Connection, chat_id, tx: str, rpc: RobinhoodRPC | None = None,

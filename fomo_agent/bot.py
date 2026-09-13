@@ -689,6 +689,30 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
     return out
 
 
+class Burns:
+    """The bot's own look at the burn address, on the alert timer: the watcher sees a burn
+    within a tick when the RPC lets it, and this is the second pair of eyes for when it does
+    not. Lazy: no RPC client until there is a gate, none of the allowance until a quote waits."""
+
+    def __init__(self) -> None:
+        self.rpc = None
+        self.cursor = pro.Cursor()
+
+    def look(self, conn) -> int:
+        if not pro.enabled() or not pro.waiting(conn):
+            return 0
+        if self.rpc is None:
+            from .sources.rpc import RobinhoodRPC
+            self.rpc = RobinhoodRPC()
+            self.rpc.limiter.max = max(2, settings.watch_rpc_max_per_min // 3)
+        head, _ = self.rpc.head()
+        paid = self.cursor.advance(conn, self.rpc, head)
+        if paid:
+            from .pipeline.watch import confirm
+            confirm(conn, paid)
+        return len(paid)
+
+
 def notify(conn, tg: Telegram) -> int:
     """PRO ending soon, or just ended: one line each, once per paid period."""
     sent = 0
@@ -924,6 +948,7 @@ def run(conn, tg: Telegram | None = None, once: bool = False) -> dict:
     # alert interval - a fresh CI runner, a just-rebooted server - zero would mean waiting
     # out the interval before the first broadcast instead of sending it at once
     offset, last_alert = 0, float("-inf")
+    burns = Burns()
     while True:
         try:
             for u in tg.updates(offset) or []:
@@ -946,5 +971,9 @@ def run(conn, tg: Telegram | None = None, once: bool = False) -> dict:
                 notify(conn, tg)
             except Exception as e:  # noqa: BLE001
                 log.warning("pro notices failed: %s", e)
+            try:
+                burns.look(conn)
+            except Exception as e:  # noqa: BLE001 - the watcher is the first pair of eyes
+                log.warning("pro burn check failed: %s", e)
         if once:
             return stats
