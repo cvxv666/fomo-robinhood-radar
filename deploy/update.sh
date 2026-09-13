@@ -102,7 +102,7 @@ sudo -u radar env PUBLIC_SITE_URL="$SITE_URL" PUBLIC_REPO_URL="$REPO_URL"   PUBL
 # stop plus one node start - a few seconds. The bot and the receiver follow on their own; a
 # Telegram poll that has to be re-issued is not something anybody sees.
 systemctl restart radar-api radar-site
-systemctl restart radar-bot radar-receive
+systemctl restart radar-bot radar-receive radar-watch
 sleep 5
 for u in radar-api radar-site radar-bot radar-watch; do printf '   %-12s %s\n' "$u" "$(systemctl is-active $u)"; done
 REMOTE
