@@ -181,6 +181,12 @@ def outcome(conn: sqlite3.Connection, mint: str, ts: int, px: float | None,
     quote = cur["price_usd"] / px if cur and cur["price_usd"] else None
     # a candle that contains the burst counts: its high may be after the burst, its open before
     since = [c for c in (candles or []) if c[0] >= ts - 3600 and c[0] <= ts + horizon_s]
+    # candles in some other unit than the fill - a pool whose OHLCV comes back off by thousands
+    # happened once and would have put a 4,000x on the scorecard - are not evidence: when the
+    # candle nearest the burst does not agree with the cohort's own price within a factor of
+    # five, the tape is the only witness
+    if since and not (0.2 <= since[0][1] / px <= 5):
+        since = []
     if since:
         high = max(c[2] for c in since) / px
         best = max(best or 0.0, high)

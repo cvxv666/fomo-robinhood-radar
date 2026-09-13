@@ -72,6 +72,8 @@ class Settings:
     # Robinhood Chain's own public JSON-RPC: keyless, and two requests cover the whole roster.
     # Blocks land every ~0.1s, so 200k blocks is ~5.6h and is the widest window it will serve.
     rpc_url: str = field(default_factory=lambda: _env("RPC_URL", "https://rpc.mainnet.chain.robinhood.com"))
+    # more endpoints, comma-separated; when the first rate-limits, the next is asked before giving up
+    rpc_urls: list[str] = field(default_factory=lambda: [u.strip() for u in _env("RPC_URLS", "").split(",") if u.strip()])
     rpc_user_agent: str = field(default_factory=lambda: _env(
         "RPC_USER_AGENT",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -103,6 +105,10 @@ class Settings:
     # Heat floor for a pushed launch. Measured over a live day: 1.0 is 28 messages, 2.0 is six,
     # 3.0 is three. Six a day is a feed somebody reads; thirty is one they mute.
     telegram_min_heat: float = field(default_factory=lambda: _float("TELEGRAM_MIN_HEAT", 2.0))
+    # a launch is pushed only while it is one: this long after the first trusted wallet went in
+    telegram_launch_max_age_min: int = field(default_factory=lambda: _int("TELEGRAM_LAUNCH_MAX_AGE_MIN", 60))
+    # how long the watcher waits after the RPC rate-limits it; one tick is enough to clear it
+    watch_rate_limit_wait_s: int = field(default_factory=lambda: _int("WATCH_RATE_LIMIT_WAIT_S", 25))
     telegram_alert_window_h: int = field(default_factory=lambda: _int("TELEGRAM_ALERT_WINDOW_H", 6))
     telegram_alert_interval_s: int = field(default_factory=lambda: _int("TELEGRAM_ALERT_INTERVAL_S", 120))
     # never tell the same chat about the same token twice inside this window

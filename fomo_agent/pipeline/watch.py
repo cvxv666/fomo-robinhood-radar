@@ -180,8 +180,8 @@ def run(conn: sqlite3.Connection, once: bool = False, rpc: RobinhoodRPC | None =
             if s["fills"] or s["hot"]:
                 log.info("watch: %s", s)
         except RpcError as e:
-            log.warning("watch: rpc says %s — waiting a minute", e)
-            time.sleep(60)
+            log.warning("watch: rpc says %s — waiting %ss", e, settings.watch_rate_limit_wait_s)
+            time.sleep(settings.watch_rate_limit_wait_s)
         except Exception as e:  # noqa: BLE001 - a bad tick is a missed tick, not a dead watcher
             log.exception("watch tick failed: %s", e)
         if once:

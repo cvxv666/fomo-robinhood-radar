@@ -236,20 +236,32 @@ def test_subscribe_is_idempotent_and_carries_a_threshold(conn):
     assert bot.subscribers(conn) == []
 
 
-def test_broadcast_respects_each_subscriber_threshold(conn, monkeypatch):
-    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
-    bot.subscribe(conn, "low", None, min_conviction=0.5)     # gets it
-    bot.subscribe(conn, "high", None, min_conviction=99.0)   # too demanding
-    tg = FakeTelegram()
+def a_launch(mint="0x" + "e" * 40, sym="HOT", age_s=600, heat=4.2):
+    return {"mint": mint, "sym": sym, "heat": heat, "buyers": 5, "avg_score": 80.0, "lead_minutes": 6.0,
+            "age_h": 0.3, "usd": 21_000.0, "liq": 90_000.0, "who": ["ace", "mid"], "scores": [88, 74],
+            "first_ts": db.now() - age_s, "last_ts": db.now() - 60}
 
+
+def test_signals_are_not_pushed_launches_are(conn, monkeypatch):
+    """The fixture has a signal ($PONS, conviction well over any floor). Nobody is pushed it: the
+    signal feed answers /signals and nothing else. A launch goes to everyone, whatever number they
+    once gave /subscribe."""
+    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
+    bot.subscribe(conn, "low", None, min_conviction=0.5)
+    bot.subscribe(conn, "high", None, min_conviction=99.0)
+    assert bot.broadcast(conn, FakeTelegram())["sent"] == 0
+
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
+    tg = FakeTelegram()
     stats = bot.broadcast(conn, tg)
-    assert stats["subscribers"] == 2 and stats["sent"] == 1
-    assert tg.sent[0][0] == "low" and "$PONS" in tg.sent[0][1]
+    assert stats["subscribers"] == 2 and stats["sent"] == 2 and stats["launches"] == 2
+    assert all("$HOT" in text for _, text in tg.sent)
 
 
 def test_the_same_token_is_not_sent_twice(conn, monkeypatch):
     monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
     bot.subscribe(conn, "low", None, min_conviction=0.5)
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
     tg = FakeTelegram()
 
     assert bot.broadcast(conn, tg)["sent"] == 1
@@ -258,9 +270,31 @@ def test_the_same_token_is_not_sent_twice(conn, monkeypatch):
     assert len(tg.sent) == 1
 
 
+def test_a_launch_is_pushed_only_while_it_is_one(conn, monkeypatch):
+    """An hour after the first trusted wallet went in, a launch is history: still on /fresh, not
+    in anybody's pocket."""
+    monkeypatch.setattr(settings, "telegram_launch_max_age_min", 60)
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch(age_s=59 * 60), a_launch(mint="0x" + "d" * 40, sym="OLD", age_s=3 * 3600)], "hours": 6})
+    kinds = [(k, t["sym"]) for k, t, _ in bot.due(conn)]
+    assert kinds == [("launch", "HOT")]
+
+
+def test_a_new_subscriber_starts_from_now(conn, monkeypatch):
+    """Two hundred people joined in an afternoon and every one of them got the same three-hour-old
+    launch. Now what is due at the moment of joining is treated as already seen."""
+    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
+    bot.subscribe(conn, "late", "joiner")
+    tg = FakeTelegram()
+    assert bot.broadcast(conn, tg)["sent"] == 0, "the launch that was already due is not a push for a newcomer"
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch(), a_launch(mint="0x" + "c" * 40, sym="NEW")], "hours": 6})
+    assert bot.broadcast(conn, tg)["sent"] == 1 and "$NEW" in tg.sent[0][1]
+
+
 def test_a_blocked_chat_unsubscribes_itself(conn, monkeypatch):
     monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
     bot.subscribe(conn, "blocked", None, min_conviction=0.5)
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
     tg = FakeTelegram(fail_for=["blocked"])
 
     stats = bot.broadcast(conn, tg)
@@ -277,6 +311,7 @@ def test_every_permanent_refusal_unsubscribes(conn, monkeypatch):
                                 "Client error '403 Forbidden' for url 'https://api.telegram.org/x'",
                                 "Bad Request: chat not found")):
         bot.subscribe(conn, f"gone{i}", None, min_conviction=0.5)
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
 
     class Refusing(FakeTelegram):
         def send(self, chat_id, text, preview=False):
@@ -299,6 +334,7 @@ def test_broadcast_with_no_subscribers_does_nothing(conn):
 def test_run_once_polls_and_broadcasts(conn, monkeypatch):
     monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
     bot.subscribe(conn, "low", None, min_conviction=0.5)
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
 
     class Poller(FakeTelegram):
         def updates(self, offset, timeout=None):

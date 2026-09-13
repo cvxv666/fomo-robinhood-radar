@@ -147,6 +147,9 @@ class RobinhoodRPC:
 
     def __init__(self, url: str | None = None, client: httpx.Client | None = None):
         self.url = url or settings.rpc_url
+        # the endpoints in the order they are asked; a 429 on one moves the next call to the next
+        self.urls = [self.url] + [u for u in settings.rpc_urls if u != self.url]
+        self._which = 0
         self.http = client or httpx.Client(
             timeout=90,
             headers={"content-type": "application/json", "user-agent": settings.rpc_user_agent},
@@ -167,8 +170,12 @@ class RobinhoodRPC:
         self.limiter.wait()
         self.requests += 1
         for attempt in range(4):
-            r = self.http.post(self.url, json=payload)
+            r = self.http.post(self.urls[self._which], json=payload)
             if r.status_code == 429:
+                if len(self.urls) > 1:
+                    # another endpoint is another allowance; rotate before sleeping on this one
+                    self._which = (self._which + 1) % len(self.urls)
+                    continue
                 time.sleep(2 + 2 * attempt)
                 continue
             r.raise_for_status()

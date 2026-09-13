@@ -504,8 +504,8 @@ HELP = """<b>FOMO ROBINHOOD RADAR</b>
 /exits — where they are getting out
 /top — the leaderboard, ranked by judgement
 
-<b>Alerts</b> are on for this chat: bursts the moment they form, launches and signals as they
-cross the bar, and one digest a day. /stop turns them off, /start turns them back on.
+<b>Alerts</b> are on for this chat: bursts the moment they form, launches while they are still
+early, and one digest a day. /stop turns them off, /start turns them back on.
 
 Research, not financial advice."""
 
@@ -523,8 +523,16 @@ COMMANDS = [
 
 # ---------------------------------------------------------------- subscriptions
 
-def subscribe(conn, chat_id, username: str | None, min_conviction: float | None = None) -> bool:
-    """Returns True when this is a new subscriber rather than a threshold change."""
+def subscribe(conn, chat_id, username: str | None, min_conviction: float | None = None,
+              backlog: bool = False) -> bool:
+    """Returns True when this is a new subscriber rather than a repeat.
+
+    A new chat starts from now: whatever is due at this moment is marked as already sent to it,
+    so its first push is the next launch, not the one from an hour ago. Two hundred people joined
+    in an afternoon once and every one of them was handed the same three-hour-old launch as if it
+    had just happened; the burst on that token had gone out to the six who were there when it
+    burst. `backlog=True` keeps the old behaviour for a test that wants the queue.
+    """
     existed = conn.execute("SELECT 1 FROM bot_subscribers WHERE chat_id=?", (str(chat_id),)).fetchone()
     with db.tx(conn):
         conn.execute(
@@ -534,6 +542,12 @@ def subscribe(conn, chat_id, username: str | None, min_conviction: float | None 
             (str(chat_id), username, min_conviction if min_conviction is not None
              else settings.telegram_min_conviction, db.now()),
         )
+    if existed is None and not backlog:
+        try:
+            for _, t, _ in due(conn):
+                mark_sent(conn, chat_id, t["mint"])
+        except Exception:  # noqa: BLE001 - a feed that cannot answer must not block a subscription
+            log.warning("could not quiet the backlog for %s", chat_id, exc_info=True)
     return existed is None
 
 
@@ -569,22 +583,26 @@ def mark_sent(conn, chat_id, mint: str) -> None:
                      (str(chat_id), mint, db.now()))
 
 
-def due(conn) -> list[tuple[str, dict, str]]:
-    """(kind, token, message) for everything worth pushing right now, launches first.
+def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
+    """(kind, token, message) for everything worth pushing right now: launches, while they are.
 
-    Two feeds answer two questions and both are worth a message: a launch several good wallets
-    entered in the first minutes, and a name the cohort is piling into whenever it opened. They
-    overlap — a hot launch is usually also a signal — and the dedup below is per token rather than
-    per feed, so whichever describes it first wins and the other stays quiet.
+    The signal feed is not pushed any more. Measured over a day of pushes it went 0 for 5: by the
+    time four wallets scoring 80 are in, the move is done, and a message that arrives after the
+    move is noise with a good name. Launches went 5 of 8 to 2x and bursts are pushed by the
+    watcher within seconds, so those two are the alerts. /signals still answers when asked.
+
+    A launch is a push only while it is one: `telegram_launch_max_age_min` after the first
+    trusted wallet went in it drops out of the queue, however hot it reads, so a subscriber who
+    joins at four o'clock is not told about noon.
     """
     chain = settings.dex_chains[0] if settings.dex_chains else None
     hours = settings.telegram_alert_window_h
+    now = now or db.now()
+    cutoff = now - settings.telegram_launch_max_age_min * 60
     out = []
     for t in analyze.fresh(conn, chain, hours=hours, limit=10)["tokens"]:
-        if t["heat"] >= settings.telegram_min_heat:
+        if t["heat"] >= settings.telegram_min_heat and (t.get("first_ts") or now) >= cutoff:
             out.append(("launch", t, fmt_launch(t)))
-    for s in analyze.signals(conn, chain, hours=hours, limit=10):
-        out.append(("signal", s, fmt_signal(s)))
     return out
 
 
@@ -598,12 +616,7 @@ def broadcast(conn, tg: Telegram) -> dict:
     items = due(conn)
     quiet = settings.telegram_realert_hours * 3600
     for sub in subs:
-        floor = sub["min_conviction"] if sub["min_conviction"] is not None else settings.telegram_min_conviction
         for kind, t, text in items:
-            # A subscriber's own floor governs the signal feed. Launches are gated by heat, which
-            # is a different scale, so their floor is the one in the config.
-            if kind == "signal" and (t["conviction"] or 0) < floor:
-                continue
             if already_sent(conn, sub["chat_id"], t["mint"], quiet):
                 stats["skipped"] += 1
                 continue
@@ -693,19 +706,18 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
         n = int(args[0]) if args and args[0].isdigit() else 15
         return fmt_leaderboard(analyze.leaderboard(conn, min(n, 40), status), status)
     if cmd == "/subscribe":
+        # a number after it used to set a conviction floor for signal pushes; signals are not
+        # pushed any more, so it is accepted and means nothing
         floor = float(args[0]) if args and args[0].replace(".", "", 1).isdigit() else None
         fresh = subscribe(conn, chat_id, username, floor)
-        level = floor if floor is not None else settings.telegram_min_conviction
-        return (("Alerts are on." if fresh else "Bar updated.") +
+        return (("Alerts are on." if fresh else "Alerts were already on.") +
                 " You will hear about:\n"
                 "· a <b>burst</b> — several trusted wallets entering one token inside minutes, "
                 "sent within seconds of the fill\n"
-                "· a <b>launch</b> the cohort is entering in its first minutes\n"
-                f"· a <b>signal</b> once a token's conviction reaches <b>{level:g}</b> — about four "
-                "wallets scoring 80\n"
+                "· a <b>launch</b> the cohort is entering in its first minutes, while it still is\n"
                 "· one digest a day\n\n"
-                "Usually five to fifteen a day. <code>/subscribe 3</code> for more signals, "
-                "<code>/subscribe 8</code> for fewer, /stop for none.")
+                "A handful a day, none of them old. /stop for none; "
+                "/signals, /hot, /fresh and /exits answer whenever you ask.")
     if cmd in ("/stop", "/unsubscribe", "/mute"):
         unsubscribe(conn, chat_id)
         return "Alerts are off for this chat. /start turns them back on; the feeds still answer."

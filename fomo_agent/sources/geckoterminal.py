@@ -171,6 +171,9 @@ class GeckoTerminal:
         try:
             data = self._get(f"/networks/{network}/pools/{pool}/ohlcv/{timeframe}",
                              {"aggregate": aggregate, "limit": min(limit, 1000)})
+        except Busy:
+            log.debug("geckoterminal ohlcv %s/%s: busy, no candles this time", network, pool)
+            return []
         except httpx.HTTPError as e:
             log.warning("geckoterminal ohlcv %s/%s failed: %s", network, pool, e)
             return []
