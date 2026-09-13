@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 
 from .. import db
 from .analyze import TRUSTED, NOT_QUOTE
-from .provenance import NOT_SEEDED, REAL, seeded_params
+from .provenance import NOT_SEEDED, NOT_UNSELLABLE, REAL, seeded_params
 
 
 @dataclass
@@ -97,7 +97,7 @@ def hot_now(conn: sqlite3.Connection, chain: str | None = None, delta: float = 3
         "FROM trades tr JOIN traders t ON t.address = tr.address "
         "LEFT JOIN tokens tk ON tk.mint = tr.mint "
         f"WHERE tr.side='buy' AND t.score >= ?{not_quote}{REAL.format(t='tr')}"
-        + (" AND tr.chain=?" if chain else "") + NOT_SEEDED.format(t="tr") +
+        + (" AND tr.chain=?" if chain else "") + NOT_SEEDED.format(t="tr") + NOT_UNSELLABLE.format(t="tr") +
         " GROUP BY tr.mint, tr.address HAVING first_ts >= ?",
         [TRUSTED, *([chain] if chain else []), *seeded_params(now), since],
     ).fetchall()
@@ -208,7 +208,7 @@ def recent(conn: sqlite3.Connection, chain: str | None = None, hours: int = 24,
     """
     now = now or db.now()
     rows = conn.execute(
-        "SELECT b.*, COALESCE(tk.symbol, substr(b.mint,1,8)) sym, tk.liquidity_usd liq "
+        "SELECT b.*, COALESCE(tk.symbol, substr(b.mint,1,8)) sym, tk.liquidity_usd liq, tk.sellable sellable "
         "FROM bursts b LEFT JOIN tokens tk ON tk.mint = b.mint "
         "WHERE b.ts >= ?" + (" AND b.chain = ?" if chain else "") + " ORDER BY b.ts DESC",
         [now - hours * 3600, *([chain] if chain else [])]).fetchall()
@@ -221,6 +221,7 @@ def recent(conn: sqlite3.Connection, chain: str | None = None, hours: int = 24,
         # it - but it is not evidence about the feed, and the scorecard leaves it out
         out.append({
             "seeded": _seeded(conn, r["mint"], now)["seeded"],
+            "unsellable": r["sellable"] == 0,
             "mint": r["mint"], "sym": r["sym"], "liq": r["liq"], "ts": r["ts"],
             "conviction": r["conviction"], "wallets": r["wallets"], "usd": r["usd"],
             "px": r["px"], "window_s": r["window_s"], "age_s": r["age_s"],

@@ -29,8 +29,8 @@ def conviction(scores: list[int]) -> float:
 
 
 def _real(t: str) -> str:
-    from .provenance import REAL, NOT_SEEDED
-    return REAL.format(t=t) + NOT_SEEDED.format(t=t)
+    from .provenance import REAL, NOT_SEEDED, NOT_UNSELLABLE
+    return REAL.format(t=t) + NOT_SEEDED.format(t=t) + NOT_UNSELLABLE.format(t=t)
 
 
 def _seed_params() -> list:
@@ -540,6 +540,8 @@ def analyze_token(conn: sqlite3.Connection, mint: str, hours: int = 48) -> dict:
         # what the tracked wallets' holdings are worth at the token's current price
         "cohort_value": sum(h["value"] for h in holders if h["value"]) or None,
         "seeded": seeded, "flow": flow,
+        "sellable": token["sellable"] if token else None,
+        "sell_note": token["sell_note"] if token else None,
         "bought_usd": sum(f["usd"] or 0 for f in flow if f["side"] == "buy"),
         "sold_usd": sum(f["usd"] or 0 for f in flow if f["side"] == "sell"),
         "first_trusted_buy": first["ts"] if first else None,

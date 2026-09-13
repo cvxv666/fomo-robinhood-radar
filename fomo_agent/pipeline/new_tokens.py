@@ -198,6 +198,14 @@ def enrich_tokens(conn: sqlite3.Connection, dex: DexScreener | None = None, limi
                         db.upsert_token(conn, mint, chain=chain, created_at=created)
                         stats["dated"] += 1
 
+    # Fourth pass: can they be sold. The tokens the cohort touched today, a dozen a pass, the
+    # stale ones first. A verdict of no is final and is not asked again.
+    try:
+        from .safety import sweep
+        stats["sell_check"] = sweep(conn, limit=settings.sell_check_per_pass)
+    except Exception as e:  # noqa: BLE001 - the check is a guard, not the pass
+        log.warning("sell check sweep failed: %s", e)
+
     log.info("token enrichment: %s", stats)
     return stats
 

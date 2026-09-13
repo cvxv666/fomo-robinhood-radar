@@ -599,9 +599,16 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
     hours = settings.telegram_alert_window_h
     now = now or db.now()
     cutoff = now - settings.telegram_launch_max_age_min * 60
+    from .pipeline.safety import check as sell_check
+
     out = []
     for t in analyze.fresh(conn, chain, hours=hours, limit=10)["tokens"]:
         if t["heat"] >= settings.telegram_min_heat and (t.get("first_ts") or now) >= cutoff:
+            # a launch nobody can leave is not a launch: asked of the chain before the message goes
+            verdict = sell_check(conn, t["mint"], now=now)
+            if verdict["sellable"] == 0:
+                log.warning("launch %s not pushed: %s", t["sym"], verdict["note"])
+                continue
             out.append(("launch", t, fmt_launch(t)))
     return out
 

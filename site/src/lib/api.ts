@@ -102,6 +102,8 @@ export type Token = {
   /** Trusted wallets that received dust or outside-key buys of this token inside the window.
    *  Past the threshold the token is out of every feed. */
   seeded: { wallets: number; dust: number; direct: number; first_ts: number | null; seeded: boolean };
+  /** Can it be sold: 1 yes, 0 no, null not known. A 0 keeps it out of every feed. */
+  sellable: 0 | 1 | null; sell_note: string | null;
   bought_usd: number; sold_usd: number; first_trusted_buy: number | null;
   trusted_buyers: number; hours: number;
   theses: Thesis[];

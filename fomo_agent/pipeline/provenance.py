@@ -80,6 +80,9 @@ REAL = " AND COALESCE({t}.kind, 'trade') = 'trade'"
 # Seeded: enough trusted wallets received pushed fills, and they outnumber the ones that bought for
 # real. Both halves matter. The first is the pattern; the second is what keeps the pattern from
 # being turned around and used to hide a real token with a few dollars of dust.
+# Unsellable: the token said no to a sell, or nobody has managed one. Settled by safety.check
+# and kept on the token, so a feed only has to look it up.
+NOT_UNSELLABLE = " AND {t}.mint NOT IN (SELECT mint FROM tokens WHERE sellable = 0)"
 NOT_SEEDED = (
     " AND {t}.mint NOT IN ("
     "  SELECT s.mint FROM trades s JOIN traders st ON st.address = s.address"

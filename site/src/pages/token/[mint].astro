@@ -41,11 +41,20 @@ const desc = t.is_quote
     <h1 style="font-size:clamp(28px,5vw,44px)">${name}</h1>
     {t.is_quote && <span class="badge drop">quote asset</span>}
     {t.seeded?.seeded && <span class="badge flag">seeded</span>}
+    {t.sellable === 0 && <span class="badge flag">cannot be sold</span>}
     {!t.is_quote && hasFlow && !t.seeded?.seeded && <span class="badge follow">conviction {conv.toFixed(1)}</span>}
     {!t.is_quote && !hasFlow && !hasBook && <span class="badge tag">untracked</span>}
   </div>
   <p class="addr" style="margin-bottom:20px">{t.mint}</p>
 
+  {t.sellable === 0 && (
+    <p class="note flagged">
+      <b>Nobody can sell this.</b> {t.sell_note ? `${t.sell_note[0].toUpperCase()}${t.sell_note.slice(1)}.` : ''} A
+      token that lets you buy and not sell looks better on a tape than anything real — the price only
+      goes one way — which is why it is checked before every launch and burst, and why this one is out
+      of every feed however its numbers read.
+    </p>
+  )}
   {t.seeded?.seeded && (
     <p class="note flagged">
       <b>This token was pushed into {t.seeded.wallets} trusted wallets rather than bought by them</b>

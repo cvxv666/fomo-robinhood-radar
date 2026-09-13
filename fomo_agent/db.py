@@ -215,6 +215,14 @@ MIGRATIONS: dict[int, str] = {
     -- each wallet's own idea of a normal buy, which is what a dust floor is relative to
     ALTER TABLE traders ADD COLUMN median_buy_usd REAL;
     """,
+    19: """
+    -- Can it be sold. 1 yes, 0 no, NULL not known; asked of the chain (a simulated transfer to
+    -- the pool) and of the pool (buys against sells). A 0 keeps the token out of every feed the
+    -- way seeded does. See pipeline/safety.py.
+    ALTER TABLE tokens ADD COLUMN sellable INTEGER;
+    ALTER TABLE tokens ADD COLUMN sell_checked_at INTEGER;
+    ALTER TABLE tokens ADD COLUMN sell_note TEXT;
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

@@ -157,6 +157,25 @@ class GeckoTerminal:
                     out[norm_addr(addr)] = t.created_at
         return out
 
+    def pool(self, chain: str, pool: str) -> dict | None:
+        """One pool's attributes: transactions by window, when it opened. None if it cannot say."""
+        network = NETWORK_MAP.get(chain, chain)
+        try:
+            items = self._get(f"/networks/{network}/pools/{pool}")
+        except httpx.HTTPError as e:
+            log.debug("geckoterminal pool %s/%s: %s", network, pool, e)
+            return None
+        if not items:
+            return None
+        a = (items[0] or {}).get("attributes") or {}
+        created = a.get("pool_created_at")
+        try:
+            created_ts = int(datetime.fromisoformat(created.replace("Z", "+00:00")).timestamp()) if created else None
+        except ValueError:
+            created_ts = None
+        return {"transactions": a.get("transactions") or {}, "created_at": created_ts,
+                "reserve_usd": _f(a.get("reserve_in_usd")), "address": a.get("address")}
+
     def ohlcv(self, chain: str, pool: str, timeframe: str = "hour", aggregate: int = 1,
               limit: int = 168) -> list[list[float]]:
         """Candles for one pool: [timestamp, open, high, low, close, volume], oldest first.

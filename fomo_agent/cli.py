@@ -373,6 +373,16 @@ def hot_cmd(
         conn.close()
 
 
+@app.command("sell-check")
+def sell_check_cmd(mint: str = typer.Argument(..., help="token address"),
+                   force: bool = typer.Option(True, "--force/--cached", help="ask again even if recent")) -> None:
+    """Can it be sold: a simulated transfer to the pool, and the pool's buys against sells."""
+    from .pipeline.safety import check
+
+    conn = db.connect()
+    typer.echo(check(conn, mint.lower(), force=force))
+
+
 @app.command("verify-fills")
 def verify_fills_cmd(
     days: int = typer.Option(7, "--days", help="how far back to fetch receipts for"),

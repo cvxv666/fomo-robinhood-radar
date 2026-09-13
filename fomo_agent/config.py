@@ -105,6 +105,8 @@ class Settings:
     # Heat floor for a pushed launch. Measured over a live day: 1.0 is 28 messages, 2.0 is six,
     # 3.0 is three. Six a day is a feed somebody reads; thirty is one they mute.
     telegram_min_heat: float = field(default_factory=lambda: _float("TELEGRAM_MIN_HEAT", 2.0))
+    # how many tokens the enrichment pass re-asks "can it be sold" about, every fifteen minutes
+    sell_check_per_pass: int = field(default_factory=lambda: _int("SELL_CHECK_PER_PASS", 12))
     # a launch is pushed only while it is one: this long after the first trusted wallet went in
     telegram_launch_max_age_min: int = field(default_factory=lambda: _int("TELEGRAM_LAUNCH_MAX_AGE_MIN", 60))
     # how long the watcher waits after the RPC rate-limits it; one tick is enough to clear it

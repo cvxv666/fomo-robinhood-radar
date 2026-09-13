@@ -145,7 +145,14 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
     tg = Telegram()
     quiet = settings.telegram_realert_hours * 3600
     sent = 0
+    from .safety import check as sell_check
+
     for h in burning:
+        # the first time a token bursts is the first time anyone tries to sell it in our name
+        verdict = sell_check(conn, h["mint"], rpc=None, now=None)
+        if verdict["sellable"] == 0:
+            log.warning("burst on %s not pushed: %s", h["sym"], verdict["note"])
+            continue
         key = f"hot:{h['mint']}"
         text = fmt_hot(h)
         for sub in subs:
