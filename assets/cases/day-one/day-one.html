@@ -118,11 +118,11 @@
   // ── the three numbers
   const S = { x: 1130, y0: 300, gap: 134 };
   line(S.x - 34, 268, S.x - 34, 660, W.WHITE, { 'stroke-width': 2 });
-  const STATS = [[`${HIT.length}/${PUSHES.length}`, 'REACHED 2×', W.GREEN, 112], ['7.9×', 'BEST  ·  SWARM', W.GREEN, 84], [`${median.toFixed(1)}×`, 'MEDIAN PEAK', W.WHITE, 84]];
-  const stats = STATS.map(([v, k, fill, size], i) => {
-    const y = S.y0 + i * S.gap + (i ? 8 : 0);
-    const vEl = txt(S.x - 4, y + size * .72, v, { class: 'sans b', style: `fill:${fill}`, 'font-size': size, 'letter-spacing': '-.02em' });
-    txt(S.x, y + size * .72 + 34, k, { 'font-size': 15, 'font-weight': 700, 'letter-spacing': '.14em' });
+  // baselines set by hand: the big number, then its label with air under it, then the next
+  const STATS = [[`${HIT.length}/${PUSHES.length}`, 'REACHED 2×', W.GREEN, 112, 381, 444], ['7.9×', 'BEST  ·  SWARM', W.GREEN, 78, 522, 552], [`${median.toFixed(1)}×`, 'MEDIAN PEAK', W.WHITE, 78, 630, 660]];
+  const stats = STATS.map(([v, k, fill, size, yv, yk]) => {
+    const vEl = txt(S.x - 4, yv, v, { class: 'sans b', style: `fill:${fill}`, 'font-size': size, 'letter-spacing': '-.02em' });
+    txt(S.x, yk, k, { 'font-size': 15, 'font-weight': 700, 'letter-spacing': '.14em' });
     return vEl;
   });
   const shine = el('rect', { x: S.x, y: S.y0 - 30, width: 44, height: 3 * S.gap + 40, fill: W.WHITE, opacity: 0 });
