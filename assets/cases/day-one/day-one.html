@@ -101,26 +101,28 @@
     const hit = p.peak >= 2, colour = hit ? W.GREEN : W.GRAPHITE;
     txt(pad, y + 6, p.t, { class: 'g', 'font-size': 16, 'letter-spacing': '.06em' }, g);
     const pw = p.kind === 'BURST' ? 70 : 84;
-    el('rect', { x: pad + 66, y: y - 13, width: pw, height: 26, rx: 999, fill: p.kind === 'BURST' ? W.YELLOW : W.VIOLET }, g);
-    txt(pad + 66 + pw / 2, y + 5, p.kind, { fill: W.BLACK, 'font-size': 12, 'letter-spacing': '.1em', 'text-anchor': 'middle', 'font-weight': 700 }, g);
+    if (p.kind === 'BURST') el('rect', { x: pad + 66, y: y - 13, width: pw, height: 26, rx: 999, fill: W.BLACK, stroke: W.YELLOW, 'stroke-width': 2 }, g);
+    else el('rect', { x: pad + 66, y: y - 13, width: pw, height: 26, rx: 999, fill: W.VIOLET }, g);
+    txt(pad + 66 + pw / 2, y + 5, p.kind, { style: `fill:${p.kind === 'BURST' ? W.YELLOW : W.BLACK}`, 'font-size': 12, 'letter-spacing': '.1em', 'text-anchor': 'middle', 'font-weight': 700 }, g);
     const name = txt(pad + 168, y + 8, `$${p.sym}`, { fill: W.WHITE, 'font-size': 24, 'font-weight': 700, 'letter-spacing': '.02em' }, g);
     const w = X(p.peak) - R.x0;
     const bar = el('rect', { x: R.x0, y: y - R.barH / 2, width: w, height: R.barH, fill: colour }, g);
     const lit = el('rect', { x: R.x0, y: y - R.barH / 2, width: 0, height: R.barH, fill: W.WHITE, opacity: 0 }, g);
-    const lab = txt(R.x0 + w + 12, y + 9, `${p.peak.toFixed(p.peak < 10 ? 2 : 1)}×`, { fill: colour, 'font-size': 26, 'font-weight': 700, 'letter-spacing': '.01em' }, g);
-    txt(R.x1 + 56, y + 10, hit ? '✓' : '—', { fill: colour, 'font-size': hit ? 28 : 22, 'font-weight': 700, class: hit ? 'breathe' : '' }, g);
+    const labX = (R.x0 + w + 12 < X(2) + 14 && R.x0 + w + 12 > X(2) - 90) ? X(2) + 14 : R.x0 + w + 12;   // never under the 2x line
+    const lab = txt(labX, y + 9, `${p.peak.toFixed(p.peak < 10 ? 2 : 1)}×`, { fill: colour, 'font-size': 26, 'font-weight': 700, 'letter-spacing': '.01em' }, g);
+    txt(R.x1 + 66, y + 10, hit ? '✓' : '—', { fill: colour, 'font-size': hit ? 28 : 22, 'font-weight': 700, class: hit ? 'breathe' : '' }, g);
     const spark = hit ? el('rect', { x: R.x0, y: y - R.barH / 2, width: 34, height: R.barH, fill: W.WHITE, opacity: 0 }, g) : null;
     return { p, y, hit, w, bar, lit, lab, name, spark, phase: i * .37 };
   });
 
   // ── the three numbers
-  const S = { x: 1130, y0: 312, gap: 128 };
+  const S = { x: 1130, y0: 300, gap: 134 };
   line(S.x - 34, 268, S.x - 34, 660, W.WHITE, { 'stroke-width': 2 });
   const STATS = [[`${HIT.length}/${PUSHES.length}`, 'REACHED 2×', W.GREEN, 112], ['7.9×', 'BEST  ·  SWARM', W.GREEN, 84], [`${median.toFixed(1)}×`, 'MEDIAN PEAK', W.WHITE, 84]];
   const stats = STATS.map(([v, k, fill, size], i) => {
-    const y = S.y0 + i * S.gap + (i ? 10 : 0);
-    const vEl = txt(S.x - 4, y + 30, v, { class: 'sans b', style: `fill:${fill}`, 'font-size': size, 'letter-spacing': '-.02em' });
-    txt(S.x, y + 58, k, { 'font-size': 15, 'font-weight': 700, 'letter-spacing': '.14em' });
+    const y = S.y0 + i * S.gap + (i ? 8 : 0);
+    const vEl = txt(S.x - 4, y + size * .72, v, { class: 'sans b', style: `fill:${fill}`, 'font-size': size, 'letter-spacing': '-.02em' });
+    txt(S.x, y + size * .72 + 34, k, { 'font-size': 15, 'font-weight': 700, 'letter-spacing': '.14em' });
     return vEl;
   });
   const shine = el('rect', { x: S.x, y: S.y0 - 30, width: 44, height: 3 * S.gap + 40, fill: W.WHITE, opacity: 0 });
@@ -183,7 +185,7 @@
     rows.forEach((r) => {
       const passed = clamp(sx - R.x0, 0, r.w), fresh = Math.max(0, 1 - (sx - R.x0 - r.w) / 90);
       r.lit.setAttribute('width', passed); r.lit.setAttribute('opacity', sx < R.x0 + r.w ? .22 : .22 * clamp(fresh, 0, 1));
-      r.lab.setAttribute('opacity', sx > R.x0 + r.w && sx < R.x0 + r.w + 90 ? 1 : .88);
+      r.lab.setAttribute('opacity', sx > R.x0 + r.w && sx < R.x0 + r.w + 90 ? 1 : .9);
       if (r.spark) { const u = ((t * .55 + r.phase) % 1); r.spark.setAttribute('x', R.x0 + u * Math.max(1, r.w - 34)); r.spark.setAttribute('opacity', .28 * Math.sin(u * Math.PI)); }
     });
     const ci = Math.floor(t / 1.5) % rows.length, cy = rows[ci].y;
