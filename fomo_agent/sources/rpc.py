@@ -162,6 +162,7 @@ class RobinhoodRPC:
         self._fills: dict[str, list[Trade]] = {}
         self._fetched_at = 0.0
         self._failed: str | None = None
+        self._max_span: int | None = None   # blocks per eth_getLogs the node has been seen to answer
         self._probes: dict[int, int] = {}   # block -> timestamp, for dating an arbitrary moment
         self._decimals: dict[str, int] = {}  # token -> decimals; constant, so cached for the run
 
@@ -204,14 +205,23 @@ class RobinhoodRPC:
         A range the node will not answer whole is answered in halves, and the halves in halves;
         the depth is logarithmic, so a day of the roster costs a dozen calls, not a thousand.
         """
+        span = to_block - from_block + 1
+        if self._max_span and span > self._max_span:
+            # a size the node already refused once this process is not asked for again
+            out: list = []
+            step = self._max_span   # fixed for this loop: a refusal inside it shrinks the next one
+            for start in range(from_block, to_block + 1, step):
+                out += self.logs(start, min(start + step - 1, to_block), **flt)
+            return out
         try:
             return self.call("eth_getLogs", [{"fromBlock": hex(from_block), "toBlock": hex(to_block), **flt}])
         except RpcError as e:
             if from_block >= to_block or not self._too_big(e):
                 raise
-            mid = (from_block + to_block) // 2
-            log.info("rpc: %d..%d too big for one answer (%s), splitting", from_block, to_block, str(e)[:60])
-            return self.logs(from_block, mid, **flt) + self.logs(mid + 1, to_block, **flt)
+            self._max_span = max(1, min(self._max_span or span, span // 2))
+            log.info("rpc: %d..%d too big for one answer (%s); %d blocks a call from here",
+                     from_block, to_block, str(e)[:60], self._max_span)
+            return self.logs(from_block, to_block, **flt)
 
     def batch(self, method: str, args: list[list], size: int | None = None) -> list:
         """One HTTP round trip per `size` calls; results come back aligned with `args`."""

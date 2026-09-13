@@ -153,7 +153,10 @@ def test_a_range_the_node_will_not_answer_whole_is_asked_in_halves(monkeypatch):
     rpc = RobinhoodRPC(url="http://offline")
     got = rpc.logs(1, 1000, topics=["0xabc"])
     assert [g["block"] for g in got] == list(range(1, 1001)), "every block once, in order"
-    assert len(asked) == 7, "one refused, two halves refused, four quarters answered"
+    assert len(asked) == 6, "1000 refused, 500 refused, then four pieces of 250 answered - a refused size is not tried twice"
+    asked.clear()
+    rpc.logs(2000, 2999, topics=["0xabc"])
+    assert len(asked) == 4 and all(t - f < 250 for f, t in asked), "the next range starts at the size that worked"
 
 
 def test_a_failed_scan_is_not_retried_for_every_wallet(monkeypatch):
