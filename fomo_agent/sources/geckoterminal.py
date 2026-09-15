@@ -135,8 +135,26 @@ class GeckoTerminal:
                 log.warning("geckoterminal token lookup on %s failed: %s", chain, e)
                 continue
             pools = {p.get("id"): p for p in (self.included or []) if p.get("type") == "pool"}
-            out.extend(t for t in (parse_token(it, chain, pools) for it in items) if t)
+            for it in items:
+                t = parse_token(it, chain, pools)
+                if t is None:
+                    continue
+                ids = [p.get("id") for p in (((it.get("relationships") or {}).get("top_pools") or {}).get("data") or [])]
+                if ids and t.pool_address is None and pools:
+                    # the multi call names one pool per token and for SYNTH that was the trap; the
+                    # single-token call lists them all, and the launch pool is usually among them
+                    t = self._retry_pools(t, chain, network) or t
+                out.append(t)
         return out
+
+    def _retry_pools(self, t: NewToken, chain: str, network: str) -> NewToken | None:
+        try:
+            items = self._get(f"/networks/{network}/tokens/{t.mint}", {"include": "top_pools"})
+        except (httpx.HTTPError, Busy) as e:
+            log.debug("geckoterminal pools for %s: %s", t.mint[:10], e)
+            return None
+        pools = {p.get("id"): p for p in (self.included or []) if p.get("type") == "pool"}
+        return parse_token(items[0], chain, pools) if items else None
 
     def pool_ages(self, chain: str, pools: Iterable[str]) -> dict[str, int]:
         """When each pool opened, keyed by pool address. Thirty at a time.
@@ -273,7 +291,9 @@ def best_pool(ids: list[str], pools: dict) -> tuple[str | None, dict | None]:
     known = [(i, a) for i, a in rows if a]
     if not known:
         return ids[0].split("_", 1)[-1], None
-    sane = [(i, a) for i, a in known if (pool_fee(a.get("name")) or 0) < JUNK_POOL_FEE] or known
+    sane = [(i, a) for i, a in known if (pool_fee(a.get("name")) or 0) < JUNK_POOL_FEE]
+    if not sane:
+        return None, None   # only traps on offer: no pool is better than a trap
     i, a = max(sane, key=lambda r: _f(r[1].get("reserve_in_usd")) or 0)
     return i.split("_", 1)[-1], a
 
@@ -296,6 +316,8 @@ def parse_token(item: dict, chain: str, pools: dict | None = None) -> NewToken |
     ids = [p.get("id") or "" for p in (((item.get("relationships") or {}).get("top_pools") or {}).get("data") or [])]
     pool, pa = best_pool(ids, pools or {})
     price = _f(a.get("price_usd"))
+    if ids and pool is None and pools:
+        price = None   # the only price on offer was printed in a trap pool; no price is the honest answer
     if pa:
         base = (((pools or {}).get(next(i for i in ids if i.endswith(pool)), {}).get("relationships") or {}).get("base_token") or {}).get("data") or {}
         ours = (base.get("id") or "").lower().endswith(norm_addr(address))

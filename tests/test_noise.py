@@ -97,6 +97,10 @@ def test_the_deepest_sane_pool_is_the_one_read(tmp_path):
     t = parse_token(item, "robinhood", pools)
     assert t.pool_address == "0xreal" and t.price_usd == 1.44e-6, "the trap pool is skipped even though it is deeper"
     assert parse_token(item, "robinhood", {}).pool_address == "0xjunk", "without attributes the first id stands"
+    only_junk = {"robinhood_0xjunk": pools["robinhood_0xjunk"]}
+    item1 = {**item, "relationships": {"top_pools": {"data": [{"id": "robinhood_0xjunk"}]}}}
+    t1 = parse_token(item1, "robinhood", only_junk)
+    assert t1.pool_address is None and t1.price_usd is None, "a trap is the only pool: no pool, no price"
 
 
 def test_the_tape_peak_ignores_dust_and_direct_rows(tmp_path):
