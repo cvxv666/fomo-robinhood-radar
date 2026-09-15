@@ -24,6 +24,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from .. import db
+from ..config import settings
 from .analyze import TRUSTED, NOT_QUOTE
 from .provenance import NOT_SEEDED, NOT_UNSELLABLE, REAL, seeded_params
 
@@ -184,6 +185,14 @@ def outcome(conn: sqlite3.Connection, mint: str, ts: int, px: float | None,
     quote = cur["price_usd"] / px if cur and cur["price_usd"] else None
     # a candle that contains the burst counts: its high may be after the burst, its open before
     since = [c for c in (candles or []) if c[0] >= ts - 3600 and c[0] <= ts + horizon_s]
+    # a pool that saw less volume than the cohort itself put in is not where the cohort traded:
+    # SYNTH's chart came from an 89%-fee pool with $253 of lifetime volume against a $1,532
+    # burst, and one trade in it printed 384x. Its candles are not evidence of anything.
+    burst = conn.execute("SELECT usd FROM bursts WHERE mint=? AND ts=?", (mint, ts)).fetchone()
+    floor = max(settings.outcome_min_candle_volume_usd, (burst["usd"] or 0) * 0.5 if burst else 0)
+    volume = [c[5] for c in since if len(c) > 5 and c[5]]
+    if volume and sum(volume) < floor:   # candles without a volume column are judged on price alone
+        since = []
     # candles in some other unit than the fill: the pools with a 32-byte id come back from
     # GeckoTerminal off by exactly a thousand, every one of them, and would put a 700x on the
     # scorecard. A clean power of ten between the candle nearest the burst and the cohort's own

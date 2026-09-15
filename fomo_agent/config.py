@@ -109,6 +109,9 @@ class Settings:
     telegram_min_heat: float = field(default_factory=lambda: _float("TELEGRAM_MIN_HEAT", 2.0))
     # how many tokens the enrichment pass re-asks "can it be sold" about, every fifteen minutes
     sell_check_per_pass: int = field(default_factory=lambda: _int("SELL_CHECK_PER_PASS", 12))
+    # candles since a burst count as evidence only if they carry at least this much volume (and
+    # at least half the burst's own size): a trap pool's one trade is not a price
+    outcome_min_candle_volume_usd: float = field(default_factory=lambda: _float("OUTCOME_MIN_CANDLE_VOLUME_USD", 200))
     # a tracked address with more fills than this in an hour is not a person: quarantined (pipeline/noise.py)
     noise_fills_per_hour: int = field(default_factory=lambda: _int("NOISE_FILLS_PER_HOUR", 300))
     # a launch is pushed only while it is one: this long after the first trusted wallet went in

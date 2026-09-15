@@ -68,6 +68,37 @@ def test_candles_in_another_unit_are_brought_into_the_fill_price(tmp_path):
     assert o2["best"] is None and o2["now"] == 0.7, "not evidence; the tape (empty) and the quote answer"
 
 
+def test_a_pool_thinner_than_the_burst_is_not_evidence(tmp_path):
+    """SYNTH: the cohort put $1,532 in; the pool GeckoTerminal offered had $253 of volume and one
+    trade at 384x. Candles carrying less than half the burst's own size are set aside."""
+    conn = db.connect(tmp_path / "v.db")
+    ts, px = 1_000_000, 1.34e-6
+    with db.tx(conn):
+        conn.execute("INSERT INTO bursts(mint, chain, ts, conviction, wallets, usd, px, window_s) VALUES(?,?,?,?,?,?,?,?)",
+                     (MINT, "robinhood", ts, 5.15, 7, 1532.0, px, 1800))
+        db.upsert_token(conn, MINT, chain="robinhood", price_usd=1.44e-6)
+    thin = [[ts + 600, 5.96e-6, 5.96e-6, 5.96e-6, 5.96e-6, 0], [ts + 20_000, 5.96e-6, 0.000516, 5.96e-6, 0.000516, 253]]
+    o = hot.outcome(conn, MINT, ts, px, candles=thin, now=ts + 40_000)
+    assert o["best"] is None and o["now"] == round(1.44e-6 / px, 2)
+    real = [[ts + 600, 1.3e-6, 1.5e-6, 1.2e-6, 1.4e-6, 900], [ts + 1200, 1.4e-6, 1.6e-6, 1.3e-6, 1.45e-6, 1200]]
+    assert hot.outcome(conn, MINT, ts, px, candles=real, now=ts + 40_000)["best"] == round(1.6e-6 / px, 2)
+
+
+def test_the_deepest_sane_pool_is_the_one_read(tmp_path):
+    from fomo_agent.sources.geckoterminal import parse_token, pool_fee
+    assert pool_fee("SYNTH / USDG 89%") == 89.0 and pool_fee("SYNTH / WETH 0.25%") == 0.25 and pool_fee(None) is None
+    mint = "0x4534dda9ee44a9869f57aab2a85a175a940911f8"
+    item = {"attributes": {"address": mint, "symbol": "SYNTH", "decimals": 9, "price_usd": "0.0000032", "fdv_usd": "320497", "total_reserve_in_usd": "85"},
+            "relationships": {"top_pools": {"data": [{"id": "robinhood_0xjunk"}, {"id": "robinhood_0xreal"}]}}}
+    pools = {"robinhood_0xjunk": {"type": "pool", "attributes": {"name": "SYNTH / USDG 89%", "reserve_in_usd": "85", "base_token_price_usd": "0.0000032"},
+                                  "relationships": {"base_token": {"data": {"id": "robinhood_" + mint}}}},
+             "robinhood_0xreal": {"type": "pool", "attributes": {"name": "SYNTH / WETH 0.25%", "reserve_in_usd": "12", "base_token_price_usd": "0.00000144"},
+                                  "relationships": {"base_token": {"data": {"id": "robinhood_" + mint}}}}}
+    t = parse_token(item, "robinhood", pools)
+    assert t.pool_address == "0xreal" and t.price_usd == 1.44e-6, "the trap pool is skipped even though it is deeper"
+    assert parse_token(item, "robinhood", {}).pool_address == "0xjunk", "without attributes the first id stands"
+
+
 def test_the_tape_peak_ignores_dust_and_direct_rows(tmp_path):
     conn = db.connect(tmp_path / "t.db")
     ts, px = 1_000_000, 0.001

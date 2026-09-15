@@ -242,8 +242,8 @@ def test_the_pool_candles_correct_a_tape_that_held_through_the_run(tmp_path):
                         usd_value=3000.0, token_amount=1000.0, ts=now + 600, source="rpc")
     burst_ts = h["last_ts"]
     candles = [[burst_ts - 7200, 1.5, 1.6, 1.4, 1.5, 100.0],   # before: does not count
-               [burst_ts - 600, 1.9, 44.0, 1.8, 30.0, 900.0],    # the hour that holds the burst
-               [burst_ts + 3000, 30.0, 33.0, 20.0, 21.0, 500.0]]
+               [burst_ts - 600, 1.9, 44.0, 1.8, 30.0, 90_000.0],    # the hour that holds the burst
+               [burst_ts + 3000, 30.0, 33.0, 20.0, 21.0, 50_000.0]]
     r = hot.recent(conn, "robinhood", hours=24, now=now + 4 * 3600,
                    candles_for=lambda mint: candles if mint == TOKEN else None)[0]
     assert r["best"] == 22.0 and r["last"] == 1.5 and r["now"] == 10.5
@@ -263,7 +263,7 @@ def test_a_mispriced_tape_row_does_not_beat_the_candles(tmp_path):
         db.insert_trade(conn, sig="odd", address=W[1], chain="robinhood", mint=TOKEN, side="sell",
                         usd_value=614.0, token_amount=33.0, ts=now + 600, source="rpc")
     burst_ts = h["last_ts"]
-    candles = [[burst_ts - 600, 1.9, 8.0, 1.8, 6.0, 900.0], [burst_ts + 3000, 6.0, 7.0, 4.0, 4.5, 500.0]]
+    candles = [[burst_ts - 600, 1.9, 8.0, 1.8, 6.0, 90_000.0], [burst_ts + 3000, 6.0, 7.0, 4.0, 4.5, 50_000.0]]
     r = hot.recent(conn, "robinhood", hours=24, now=now + 4 * 3600,
                    candles_for=lambda mint: candles if mint == TOKEN else None)[0]
     assert r["best"] == 4.0, "the pool's high, not the odd fill"

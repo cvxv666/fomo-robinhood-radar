@@ -58,6 +58,7 @@ class GeckoTerminal:
         self.feeds = tuple(feeds) if feeds else settings.gecko_feeds
         self.limiter = RateLimiter(settings.gecko_max_req_per_min, "geckoterminal")
         self._last = 0.0
+        self.included: list[dict] = []   # the `included` block of the last answer, for callers that asked for it
         # A batch job waits its turn and backs off on 429; that is the right shape for a pass that
         # must finish. A request thread serving the public must never sleep on anybody's limit:
         # with bots walking thousands of token pages, forty threads asleep on GeckoTerminal's
@@ -97,7 +98,9 @@ class GeckoTerminal:
             if r.status_code == 429:
                 raise Busy(f"geckoterminal: 429 on {path}, not backing off")
             r.raise_for_status()
-            data = r.json().get("data", [])
+            body = r.json()
+            self.included = body.get("included") or []
+            data = body.get("data", [])
             return data if isinstance(data, list) else [data]
         for attempt in range(3):
             gap = settings.gecko_min_interval_s - (time.monotonic() - self._last)
@@ -112,7 +115,9 @@ class GeckoTerminal:
                 time.sleep(wait)
                 continue
             r.raise_for_status()
-            data = r.json().get("data", [])
+            body = r.json()
+            self.included = body.get("included") or []
+            data = body.get("data", [])
             return data if isinstance(data, list) else [data]
         log.warning("geckoterminal %s: still 429 after retries, skipping", path)
         return []
@@ -125,11 +130,12 @@ class GeckoTerminal:
         for i in range(0, len(addresses), 30):
             chunk = ",".join(addresses[i:i + 30])
             try:
-                items = self._get(f"/networks/{network}/tokens/multi/{chunk}")
+                items = self._get(f"/networks/{network}/tokens/multi/{chunk}", {"include": "top_pools"})
             except httpx.HTTPError as e:
                 log.warning("geckoterminal token lookup on %s failed: %s", chain, e)
                 continue
-            out.extend(t for t in (parse_token(it, chain) for it in items) if t)
+            pools = {p.get("id"): p for p in (self.included or []) if p.get("type") == "pool"}
+            out.extend(t for t in (parse_token(it, chain, pools) for it in items) if t)
         return out
 
     def pool_ages(self, chain: str, pools: Iterable[str]) -> dict[str, int]:
@@ -239,29 +245,70 @@ def parse_ohlcv(payload: dict | None) -> list[list[float]]:
     return sorted(out, key=lambda r: r[0])
 
 
-def parse_token(item: dict, chain: str) -> NewToken | None:
+JUNK_POOL_FEE = 10.0   # percent: a pool with a fee this high is a trap, not a market
+
+
+def pool_fee(name: str | None) -> float | None:
+    """The fee tier GeckoTerminal writes into a pool's name: "SYNTH / USDG 89%" -> 89.0."""
+    tail = (name or "").rsplit(" ", 1)[-1]
+    if tail.endswith("%"):
+        try:
+            return float(tail[:-1])
+        except ValueError:
+            return None
+    return None
+
+
+def best_pool(ids: list[str], pools: dict) -> tuple[str | None, dict | None]:
+    """The pool to read a token by: the deepest one whose fee is not a trap.
+
+    GeckoTerminal's own ranking put an 89%-fee pool holding $85 first for SYNTH, and the token's
+    price came from a single $253 trade in it - 384x the launch, on a token that had gone
+    nowhere. Given the pools' attributes, prefer the largest reserve among sane fees; without
+    attributes (an older cache, a test), the first id is all there is.
+    """
+    if not ids:
+        return None, None
+    rows = [(i, (pools.get(i) or {}).get("attributes") or {}) for i in ids]
+    known = [(i, a) for i, a in rows if a]
+    if not known:
+        return ids[0].split("_", 1)[-1], None
+    sane = [(i, a) for i, a in known if (pool_fee(a.get("name")) or 0) < JUNK_POOL_FEE] or known
+    i, a = max(sane, key=lambda r: _f(r[1].get("reserve_in_usd")) or 0)
+    return i.split("_", 1)[-1], a
+
+
+def parse_token(item: dict, chain: str, pools: dict | None = None) -> NewToken | None:
     """Pure: one entry of /tokens/multi -> NewToken.
 
     Everything the rest of the pipeline asks about a token arrives here at once: what to call it,
     how many base units make one of it, what it is worth, and how deep the market behind that
-    price is. `market_cap_usd` is usually null on a memecoin, so FDV stands in for it.
+    price is. `market_cap_usd` is usually null on a memecoin, so FDV stands in for it. With the
+    pools' attributes in hand (`include=top_pools`), the price and the chart come from the deepest
+    sane pool rather than whichever one GeckoTerminal listed first.
     """
     a = item.get("attributes") or {}
     address = a.get("address")
     if not address:
         return None
     decimals = a.get("decimals")
-    # The deepest pool comes along for free, and it is what the chart is drawn from. Ids arrive
-    # prefixed with the network ("robinhood_0x...") because the same call can span chains.
-    pools = ((item.get("relationships") or {}).get("top_pools") or {}).get("data") or []
-    pool = (pools[0].get("id") or "").split("_", 1)[-1] if pools else None
+    # Ids arrive prefixed with the network ("robinhood_0x...") because the same call can span chains.
+    ids = [p.get("id") or "" for p in (((item.get("relationships") or {}).get("top_pools") or {}).get("data") or [])]
+    pool, pa = best_pool(ids, pools or {})
+    price = _f(a.get("price_usd"))
+    if pa:
+        base = (((pools or {}).get(next(i for i in ids if i.endswith(pool)), {}).get("relationships") or {}).get("base_token") or {}).get("data") or {}
+        ours = (base.get("id") or "").lower().endswith(norm_addr(address))
+        pool_price = _f(pa.get("base_token_price_usd" if ours else "quote_token_price_usd"))
+        if pool_price:
+            price = pool_price
     return NewToken(
         mint=norm_addr(address),
         chain=chain,
         symbol=a.get("symbol") or a.get("name") or None,
         mcap_usd=_f(a.get("market_cap_usd")) or _f(a.get("fdv_usd")),
         liquidity_usd=_f(a.get("total_reserve_in_usd")),
-        price_usd=_f(a.get("price_usd")),
+        price_usd=price,
         decimals=int(decimals) if isinstance(decimals, int) and 0 <= decimals <= 36 else None,
         pool_address=pool or None,
         source="geckoterminal",
