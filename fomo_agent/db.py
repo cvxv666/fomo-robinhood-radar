@@ -244,6 +244,13 @@ MIGRATIONS: dict[int, str] = {
     );
     CREATE INDEX IF NOT EXISTS idx_pro_payments_chat ON pro_payments(chat_id, ts);
     """,
+    21: """
+    -- Addresses that are not traders: routers, aggregators, bots. Found by their fill rate,
+    -- dropped from the roster, and never offered to wallet resolution again. See pipeline/noise.py.
+    CREATE TABLE IF NOT EXISTS noise_addresses(
+      address TEXT PRIMARY KEY, reason TEXT, ts INTEGER
+    );
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")
@@ -312,6 +319,11 @@ def upsert_trader(conn: sqlite3.Connection, address: str, **fields: Any) -> bool
     sets = ",".join(f"{k}=?" for k in clean)
     conn.execute(f"UPDATE traders SET {sets} WHERE address=?", [*clean.values(), address])
     return False
+
+
+def noise(conn: sqlite3.Connection) -> set[str]:
+    """Every address quarantined as not-a-trader."""
+    return {r["address"] for r in conn.execute("SELECT address FROM noise_addresses")}
 
 
 def set_status(conn: sqlite3.Connection, address: str, status: str) -> None:

@@ -172,9 +172,11 @@ def outcome(conn: sqlite3.Connection, mint: str, ts: int, px: float | None,
     now = now or db.now()
     if not px:
         return {"best": None, "last": None, "now": None, "fills": 0}
+    # trades only, and only ones with a dollar leg worth reading: a dust row or a direct transfer
+    # carries a price nobody paid, and one such row is enough to put a hundred x on the card
     rows = conn.execute(
         "SELECT usd_value / token_amount p FROM trades WHERE mint=? AND ts>? AND ts<=? "
-        "AND usd_value > 0 AND token_amount > 0 ORDER BY ts",
+        "AND usd_value >= 1 AND token_amount > 0 AND COALESCE(kind, 'trade') = 'trade' ORDER BY ts",
         (mint, ts, min(now, ts + horizon_s))).fetchall()
     later = [r["p"] for r in rows]
     best = max(later) / px if later else None
@@ -182,12 +184,15 @@ def outcome(conn: sqlite3.Connection, mint: str, ts: int, px: float | None,
     quote = cur["price_usd"] / px if cur and cur["price_usd"] else None
     # a candle that contains the burst counts: its high may be after the burst, its open before
     since = [c for c in (candles or []) if c[0] >= ts - 3600 and c[0] <= ts + horizon_s]
-    # candles in some other unit than the fill - a pool whose OHLCV comes back off by thousands
-    # happened once and would have put a 4,000x on the scorecard - are not evidence: when the
-    # candle nearest the burst does not agree with the cohort's own price within a factor of
-    # five, the tape is the only witness
-    if since and not (0.2 <= since[0][1] / px <= 5):
-        since = []
+    # candles in some other unit than the fill: the pools with a 32-byte id come back from
+    # GeckoTerminal off by exactly a thousand, every one of them, and would put a 700x on the
+    # scorecard. A clean power of ten between the candle nearest the burst and the cohort's own
+    # price is a unit, and the candles are brought into the fill's; anything else is not
+    # evidence, and the tape is the only witness
+    if since:
+        ratio = since[0][1] / px
+        unit = next((f for f in (1.0, 1e3, 1e-3, 1e6, 1e-6) if 0.2 <= ratio / f <= 5), None)
+        since = [] if unit is None else [[c[0], *[v / unit for v in c[1:5]], *c[5:]] for c in since]
     if since:
         # with candles that agree with the fill, the pool's high is the answer and the tape is
         # not consulted for the peak: a tape row can be mispriced - one FRONTIER sell carried a

@@ -419,6 +419,28 @@ def pro_cmd(
         conn.close()
 
 
+@app.command("noise")
+def noise_cmd(scan: bool = typer.Option(False, "--scan", help="quarantine every hyperactive address now"),
+              hours: int = typer.Option(24, "--hours", help="the window to count fills over")) -> None:
+    """Addresses that are not traders: list the suspects, or quarantine them with --scan."""
+    from .pipeline import noise
+
+    conn = db.connect()
+    try:
+        found = noise.hyperactive(conn, window_s=hours * 3600)
+        for h in found:
+            typer.echo(f"{h['address']}  {h['handle'] or '-':<18} {h['status'] or '-':<9} {h['n']:>8} fills  {h['tokens']:>5} tokens")
+        if not found:
+            typer.echo("nobody over the ceiling")
+        if scan:
+            for h in found:
+                removed = noise.quarantine(conn, h["address"], f"{h['n']} fills across {h['tokens']} tokens in {hours}h")
+                typer.echo(f"quarantined {h['address'][:10]}: {removed} fills removed")
+        typer.echo(f"noise addresses: {len(db.noise(conn))}")
+    finally:
+        conn.close()
+
+
 @app.command("verify-fills")
 def verify_fills_cmd(
     days: int = typer.Option(7, "--days", help="how far back to fetch receipts for"),

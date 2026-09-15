@@ -17,7 +17,9 @@ from fomo_agent.pipeline.health import report as health_report  # noqa: E402
 from fomo_agent.pipeline.collect_api import spent_this_month  # noqa: E402
 
 conn = db.connect(settings.db_path)
-now = db.now(); since = now - 86400
+import os  # noqa: E402
+HOURS = int(os.environ.get("HOURS", "24"))   # the window; the name says a day, a longer look uses the same blocks
+now = db.now(); since = now - HOURS * 3600
 hhmm = lambda ts: time.strftime("%H:%M", time.gmtime(ts))  # noqa: E731
 n1 = lambda q, *a: conn.execute(q, a).fetchone()[0]  # noqa: E731
 out = lambda k, v: print(k, json.dumps(v, ensure_ascii=False, default=str))  # noqa: E731
@@ -77,7 +79,7 @@ except Exception as e:  # noqa: BLE001
     out("PRO", {"error": str(e)})
 
 # ── 3. the site
-raw = subprocess.run(["journalctl", "-u", "caddy", "--since", "24 hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
+raw = subprocess.run(["journalctl", "-u", "caddy", "--since", f"{HOURS} hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
 BOT = re.compile(r"bot|crawl|spider|python|httpx|node|curl|go-http|java|okhttp|FomoPilot|Paper|Tracker|copytrader|fishmice|dime-|wget|axios|scrapy|Headless|LinkPreview", re.I)
 ips, humans, api_ips, st = set(), set(), set(), collections.Counter()
 paths, human_hours, uas = collections.Counter(), collections.Counter(), collections.Counter()
@@ -122,12 +124,20 @@ out("DATA", {"trades_24h": n1("SELECT COUNT(*) FROM trades WHERE ts >= ?", since
              "db_mb": round(__import__("os").path.getsize(settings.db_path) / 1e6, 1)})
 logs = {}
 for u in ("radar-api", "radar-bot", "radar-watch", "radar-collect", "radar-fomo", "radar-fomo-slow"):
-    j = subprocess.run(["journalctl", "-u", u, "--since", "24 hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
+    j = subprocess.run(["journalctl", "-u", u, "--since", f"{HOURS} hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
     warns = [l for l in j.splitlines() if re.search(r"WARNING|ERROR|Traceback", l)]
     kinds = collections.Counter(re.sub(r"\d[\d:,.\- ]*", "#", re.sub(r"0x[0-9a-f]+", "0x…", w.split("WARNING")[-1].split("ERROR")[-1]))[:70] for w in warns)
     logs[u] = {"lines": len(j.splitlines()), "warn_err": len(warns), "top": kinds.most_common(3)}
 out("LOGS", logs)
-w = subprocess.run(["journalctl", "-u", "radar-watch", "--since", "24 hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
+w = subprocess.run(["journalctl", "-u", "radar-watch", "--since", f"{HOURS} hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
 out("WATCH", {"ticks_with_fills": len(re.findall(r"watch: \{", w)), "fills": sum(int(x) for x in re.findall(r"'fills': (\d+)", w)),
               "rate_limited": len(re.findall(r"rate limited", w)), "bursts_pushed": sum(int(x) for x in re.findall(r"'sent': (\d+)", w)),
-              "not_pushed_unsellable": len(re.findall(r"not pushed", w))})
+              "not_pushed_unsellable": len(re.findall(r"not pushed", w)),
+              "spared_last": (re.findall(r"'spared': (\d+)", w) or ["0"])[-1],
+              "rate_limited_by_hour": dict(collections.Counter(m[:13] for m in re.findall(r"(\d{4}-\d\d-\d\d \d\d):\d\d:\d\d,\d+ WARNING [^\n]*rate limited", w)))})
+c = subprocess.run(["journalctl", "-u", "radar-collect", "--since", f"{HOURS} hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
+out("COLLECT", {"passes": len(re.findall(r"track: \{", c)), "trades_written": sum(int(x) for x in re.findall(r"'trades': (\d+), 'errors'", c)),
+                "errors": sum(int(x) for x in re.findall(r"'errors': (\d+), 'by_source'", c)), "requests": sum(int(x) for x in re.findall(r"'RobinhoodRPC': (\d+)\}, 'kinds'", c)),
+                "holdings_failed": len(re.findall(r"holdings failed", c)), "last_scan": (re.findall(r"rpc scan: [^\n]*", c) or ["—"])[-1][:200]})
+out("DISK", {"df": subprocess.run(["df", "-h", "/"], capture_output=True, text=True).stdout.splitlines()[-1],
+             "mem": subprocess.run(["free", "-m"], capture_output=True, text=True).stdout.splitlines()[1]})

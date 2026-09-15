@@ -125,9 +125,11 @@ def resolve_user(conn: sqlite3.Connection, fetch, user_id: str, chain: str,
     if not windows:
         return None, {"reason": "no stored swaps on this chain", "windows": 0}
     sets, used = [], 0
+    # an address that trades everything is in every window and would win every profile
+    junk = db.noise(conn)
     for token, ts, side in windows:
         try:
-            makers = fetch(token, ts, side)
+            makers = fetch(token, ts, side) - junk
         except Exception as e:  # noqa: BLE001 - one dead window must not abandon the trader
             log.warning("resolve window failed (%s): %s", token[:10], e)
             continue

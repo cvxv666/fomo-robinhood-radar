@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from .. import db
 from ..config import settings
 from ..sources.rpc import CHAIN, RobinhoodRPC, RpcError
-from . import pro
+from . import noise, pro
 from .hot import hot_now, record
 from .provenance import classify
 from .track import TRACKED
@@ -84,6 +84,11 @@ def tick(conn: sqlite3.Connection, w: Watch, now: int | None = None) -> dict:
             log.warning("could not store decimals: %s", e)
     if stats["fills"]:
         classify(conn, now - 3600)
+        # an address that filled more in the hour than a person can is not tracked from here
+        junk = noise.sweep(conn, now)
+        if junk:
+            stats["quarantined"] = [j["address"][:10] for j in junk]
+            w.roster_at = 0.0   # the roster is read again next tick, without it
     w.last_block = head
     stats["blocks"] = head - first + 1
     w.ticks += 1
