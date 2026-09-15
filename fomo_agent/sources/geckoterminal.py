@@ -201,7 +201,7 @@ class GeckoTerminal:
                 "reserve_usd": _f(a.get("reserve_in_usd")), "address": a.get("address")}
 
     def ohlcv(self, chain: str, pool: str, timeframe: str = "hour", aggregate: int = 1,
-              limit: int = 168) -> list[list[float]]:
+              limit: int = 168, before_ts: int | None = None) -> list[list[float]]:
         """Candles for one pool: [timestamp, open, high, low, close, volume], oldest first.
 
         The chart on a token page is drawn from these rather than from an embedded widget. Every
@@ -212,8 +212,10 @@ class GeckoTerminal:
         """
         network = NETWORK_MAP.get(chain, chain)
         try:
-            data = self._get(f"/networks/{network}/pools/{pool}/ohlcv/{timeframe}",
-                             {"aggregate": aggregate, "limit": min(limit, 1000)})
+            params = {"aggregate": aggregate, "limit": min(limit, 1000)}
+            if before_ts:
+                params["before_timestamp"] = int(before_ts)   # candles up to this moment, for a replay
+            data = self._get(f"/networks/{network}/pools/{pool}/ohlcv/{timeframe}", params)
         except Busy:
             log.debug("geckoterminal ohlcv %s/%s: busy, no candles this time", network, pool)
             return []
