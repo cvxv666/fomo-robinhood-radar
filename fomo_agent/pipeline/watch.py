@@ -189,7 +189,9 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
         key = f"hot:{h['mint']}"
         text = fmt_hot(h)
         for sub in subs:
-            if already_sent(conn, sub["chat_id"], key, quiet):
+            # told of this burst already, or of the launch on the same token minutes ago
+            if already_sent(conn, sub["chat_id"], key, quiet) \
+                    or already_sent(conn, sub["chat_id"], h["mint"], settings.telegram_dedupe_s):
                 continue
             try:
                 tg.send(sub["chat_id"], text)

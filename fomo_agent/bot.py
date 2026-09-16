@@ -669,17 +669,21 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
 
     A launch is a push only while it is one: `telegram_launch_max_age_min` after the first
     trusted wallet went in it drops out of the queue, however hot it reads, so a subscriber who
-    joins at four o'clock is not told about noon.
+    joins at four o'clock is not told about noon. And only while the cohort is still buying:
+    once the last trusted buy is `telegram_launch_max_gap_s` old, the heat is history - every
+    launch pushed more than two minutes after the cohort's last buy went nowhere.
     """
     chain = settings.dex_chains[0] if settings.dex_chains else None
     hours = settings.telegram_alert_window_h
     now = now or db.now()
     cutoff = now - settings.telegram_launch_max_age_min * 60
+    stale = now - settings.telegram_launch_max_gap_s
     from .pipeline.safety import check as sell_check
 
     out = []
     for t in analyze.fresh(conn, chain, hours=hours, limit=10)["tokens"]:
-        if t["heat"] >= settings.telegram_min_heat and (t.get("first_ts") or now) >= cutoff:
+        if t["heat"] >= settings.telegram_min_heat and (t.get("first_ts") or now) >= cutoff \
+                and (t.get("last_ts") or now) >= stale:
             # a launch nobody can leave is not a launch: asked of the chain before the message goes
             verdict = sell_check(conn, t["mint"], now=now)
             if verdict["sellable"] == 0:
@@ -741,8 +745,9 @@ def broadcast(conn, tg: Telegram) -> dict:
         if not pro.entitled_row(sub, now):
             continue
         for kind, t, text in items:
-            if already_sent(conn, sub["chat_id"], t["mint"], quiet):
-                stats["skipped"] += 1
+            if already_sent(conn, sub["chat_id"], t["mint"], quiet) \
+                    or already_sent(conn, sub["chat_id"], f"hot:{t['mint']}", settings.telegram_dedupe_s):
+                stats["skipped"] += 1   # told already, or told of the burst on it minutes ago
                 continue
             try:
                 tg.send(sub["chat_id"], text)

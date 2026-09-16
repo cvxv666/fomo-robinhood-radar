@@ -116,6 +116,13 @@ class Settings:
     noise_fills_per_hour: int = field(default_factory=lambda: _int("NOISE_FILLS_PER_HOUR", 300))
     # a launch is pushed only while it is one: this long after the first trusted wallet went in
     telegram_launch_max_age_min: int = field(default_factory=lambda: _int("TELEGRAM_LAUNCH_MAX_AGE_MIN", 60))
+    # ... and only while the cohort is still buying: the last trusted buy no older than this.
+    # Measured over 26 pushes (13-15 Sep): every launch that reached 2x was pushed within 72 s of
+    # the cohort's last buy; five of the six pushed more than two minutes after it failed.
+    telegram_launch_max_gap_s: int = field(default_factory=lambda: _int("TELEGRAM_LAUNCH_MAX_GAP_S", 120))
+    # one message per token: a launch is not sent this soon after a burst on the same token, nor
+    # a burst after a launch. Twelve of twenty-six pushes were the same event told twice.
+    telegram_dedupe_s: int = field(default_factory=lambda: _int("TELEGRAM_DEDUPE_S", 600))
     # how long the watcher waits after the RPC rate-limits it; one tick is enough to clear it
     watch_rate_limit_wait_s: int = field(default_factory=lambda: _int("WATCH_RATE_LIMIT_WAIT_S", 25))
     # ... and this long after the node itself failed (a backend timeout, a 500): the next attempt

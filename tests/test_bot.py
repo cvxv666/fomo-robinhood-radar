@@ -279,6 +279,40 @@ def test_a_launch_is_pushed_only_while_it_is_one(conn, monkeypatch):
     assert kinds == [("launch", "HOT")]
 
 
+def test_a_launch_the_cohort_stopped_buying_is_not_pushed(conn, monkeypatch):
+    """Heat can cross the bar minutes after the last trusted buy; by then it is history."""
+    monkeypatch.setattr(settings, "telegram_launch_max_gap_s", 120)
+    live = a_launch(); live["last_ts"] = db.now() - 60
+    late = a_launch(mint="0x" + "d" * 40, sym="LATE"); late["last_ts"] = db.now() - 400
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [live, late], "hours": 6})
+    assert [t["sym"] for _, t, _ in bot.due(conn)] == ["HOT"]
+
+
+def test_one_message_per_token_whichever_came_first(conn, monkeypatch):
+    """A burst told two minutes ago makes the launch on the same token silent, and the other way
+    round: the same event is not told twice."""
+    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
+    monkeypatch.setattr(settings, "telegram_dedupe_s", 600)
+    bot.subscribe(conn, "one", None)
+    launch = a_launch()
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [launch], "hours": 6})
+    bot.mark_sent(conn, "one", f"hot:{launch['mint']}")
+    tg = FakeTelegram()
+    assert bot.broadcast(conn, tg)["sent"] == 0 and bot.broadcast(conn, tg)["skipped"] == 1
+    # and a burst after a launch
+    from fomo_agent.pipeline import watch
+    other = "0x" + "b" * 40
+    bot.mark_sent(conn, "one", other)
+    sent_to = []
+    monkeypatch.setattr(settings, "telegram_bot_token", "x")
+    monkeypatch.setattr(bot, "Telegram", lambda: type("T", (), {"send": lambda self, c, t, preview=False: sent_to.append(str(c))})())
+    monkeypatch.setattr("fomo_agent.pipeline.safety.check", lambda *a, **k: {"sellable": 1, "note": ""})
+    h = {"mint": other, "sym": "SAME", "conviction": 4.4, "wallets": 3, "usd": 9000.0, "px": 0.01,
+         "first_ts": db.now() - 120, "last_ts": db.now(), "age_s": 300, "window_s": 1800, "liq": 50_000.0,
+         "who": ["ace"], "scores": [88], "avg_score": 88.0}
+    assert watch.push(conn, [h]) == 0 and sent_to == []
+
+
 def test_a_new_subscriber_starts_from_now(conn, monkeypatch):
     """Two hundred people joined in an afternoon and every one of them got the same three-hour-old
     launch. Now what is due at the moment of joining is treated as already seen."""
