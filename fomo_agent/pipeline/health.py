@@ -10,6 +10,7 @@ would look like if the thing it watches had stopped, and says so in a sentence a
 """
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 
@@ -84,6 +85,24 @@ def checks(conn: sqlite3.Connection, rpc: RobinhoodRPC | None = None) -> list[di
                      "(SELECT 1 FROM fomo_swaps s WHERE s.user_id = u.user_id)")
     priced = one("SELECT COUNT(*) FROM tokens WHERE price_usd IS NOT NULL")
     tokens = one("SELECT COUNT(*) FROM tokens")
+    # Six thousand collect errors in a day raised no flag: a roster scan the node refused shows
+    # up as a pass with four hundred wallet errors and no wallets read, and every pass writes its
+    # stats into the run ledger. The share of such passes in six hours is the check.
+    now = db.now()
+    track = conn.execute("SELECT stats_json FROM runs WHERE kind='track' AND started_at >= ? AND finished_at IS NOT NULL",
+                         (now - 6 * 3600,)).fetchall()
+    lost = 0
+    for r in track:
+        try:
+            st = json.loads(r[0] or "{}")
+        except ValueError:
+            st = {}
+        if (st.get("errors") or 0) > (st.get("wallets") or 0):
+            lost += 1
+    # The watcher keeps no ledger, but the tape it writes does: the roster fills every minute of
+    # the day, so a quarter of an hour with no fill at all is a quarter of an hour it was blind.
+    stamps = [r[0] for r in conn.execute("SELECT ts FROM trades WHERE ts >= ? ORDER BY ts", (now - 6 * 3600,))]
+    gap = max((b - a for a, b in zip(stamps, stamps[1:])), default=0) if len(stamps) > 20 else 0
 
     out = [
         router_alive(conn, rpc),
@@ -107,6 +126,13 @@ def checks(conn: sqlite3.Connection, rpc: RobinhoodRPC | None = None) -> list[di
          "detail": f"{unscored} tracked wallets waiting for a verdict"},
         {"name": "prices", "ok": tokens == 0 or priced / tokens > 0.6,
          "detail": f"{priced} of {tokens} tokens priced"},
+        {"name": "collect scans", "ok": not track or lost / len(track) <= 0.3,
+         "detail": f"{lost} of {len(track)} track passes in 6h lost their roster scan"
+                   + ("" if not track or lost / len(track) <= 0.3 else
+                      " - the node is refusing eth_getLogs; see `journalctl -u radar-collect | grep 'scan failed'`")},
+        {"name": "watcher gaps", "ok": gap < 900,
+         "detail": (f"longest silence on the tape in 6h: {gap // 60} min" if len(stamps) > 20 else "too few fills to judge")
+                   + ("" if gap < 900 else " - the watcher was blind that long; `journalctl -u radar-watch | grep 'rpc says'`")},
         {"name": "wallet resolution", "ok": True,
          "detail": f"{unresolved} fomo users still without an on-chain address, "
                    f"{resolvable} of them with swaps to try, {unresolved - resolvable} with none"},

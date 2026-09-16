@@ -190,6 +190,11 @@ class Settings:
     api_host: str = field(default_factory=lambda: _env("API_HOST", "127.0.0.1"))
     api_port: int = field(default_factory=lambda: _int("API_PORT", 8000))
     api_rate_per_min: int = field(default_factory=lambda: _int("API_RATE_PER_MIN", 120))
+    # uvicorn worker processes. One saturated at 40% CPU under six third-party crawlers with cache
+    # hits answering in half a second; the response cache and the limiter are per worker.
+    api_workers: int = field(default_factory=lambda: _int("API_WORKERS", 1))
+    # how long a GET answer is served from memory; the feeds move slower than this
+    api_cache_ttl_s: float = field(default_factory=lambda: _float("API_CACHE_TTL_S", 10))
     # Where the site answers. The bot links tokens to it, and Astro bakes the same value into
     # every canonical and og:url at build time, so the two cannot disagree.
     public_site_url: str = field(default_factory=lambda: _env("PUBLIC_SITE_URL", "").rstrip("/"))

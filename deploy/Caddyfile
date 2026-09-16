@@ -10,6 +10,12 @@
 fomoradar.app {
 	encode zstd gzip
 
+	# An address that asked 52,000 times in one hour with the bare "node" user agent and took
+	# 29,000 refusals is not a client, it is a loop. Refused here, before it reaches the API.
+	# Add to the list as they turn up; the API's own limiter handles everyone else.
+	@abuser remote_ip 34.186.82.14
+	respond @abuser 429
+
 	# the API and its generated documentation
 	handle /api/* {
 		reverse_proxy 127.0.0.1:8000

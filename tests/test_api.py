@@ -309,3 +309,17 @@ def test_a_signal_says_whether_it_arrived_in_a_burst(client):
     rows = client.get("/api/signals").json()["signals"]
     pons = next(r for r in rows if r["mint"] == TOKEN)
     assert pons["burst"] and pons["burst"]["conviction"] == 4.2
+
+
+def test_an_unknown_address_is_looked_up_once_an_hour(monkeypatch, tmp_path):
+    """Crawlers ask about the same unknown addresses over and over; a miss is remembered."""
+    from fomo_agent import api as api_mod, db
+    calls = []
+    monkeypatch.setattr("fomo_agent.pipeline.new_tokens.lookup_tokens", lambda *a, **k: (calls.append(1) or ([], 0)))
+    api_mod._missed.clear()
+    conn = db.connect(tmp_path / "m.db")
+    mint = "0x" + "77" * 20
+    assert api_mod.live_lookup(conn, mint) is False and len(calls) == 1
+    assert api_mod.live_lookup(conn, mint) is False and len(calls) == 1, "remembered as a miss"
+    api_mod._missed[mint] -= api_mod.MISS_TTL + 1
+    assert api_mod.live_lookup(conn, mint) is False and len(calls) == 2, "asked again once the hour is up"

@@ -111,7 +111,7 @@ app.add_middleware(
 # the same ten seconds are asking the same question, and it is answered once. Keyed by the full
 # URL, so a token page and a window size are each their own entry; bounded, so a crawler walking
 # six thousand token pages cannot turn it into a second database.
-RESPONSE_TTL = 10.0
+RESPONSE_TTL = settings.api_cache_ttl_s
 RESPONSE_CACHE_MAX = 4000
 _responses: dict[str, tuple[float, int, bytes, str]] = {}
 _responses_lock = threading.Lock()
@@ -202,27 +202,45 @@ def trader_row(r: dict) -> dict:
     }
 
 
+# Addresses a live lookup found nothing for, and when. Six third-party bots walk /api/token/*
+# with whatever addresses they have, and every unknown one used to cost a GeckoTerminal call:
+# 1,773 of them failed on 429 in a day and each held a request open while it waited. An address
+# that answered nothing is not asked about again for an hour.
+_missed: dict[str, float] = {}
+MISS_TTL = 3600.0
+MISS_MAX = 20_000
+
+
 def live_lookup(conn: sqlite3.Connection, mint: str) -> bool:
     """Name a token we have never seen, so an unknown address still gets a real answer.
 
     One free request, through the same source the collection pass uses. Returns True when
-    something was learned.
+    something was learned. A miss is remembered for an hour so the same unknown address does
+    not cost a request per crawler per minute.
     """
     from .pipeline.new_tokens import lookup_tokens
 
+    key = mint.lower()
+    seen = _missed.get(key)
+    if seen is not None and time.monotonic() - seen < MISS_TTL:
+        return False
     try:
         tokens, _ = lookup_tokens(chain() or "robinhood", [mint], gecko=gecko(), dex=dex())
     except Exception as e:  # noqa: BLE001 - an unknown token is still answerable without this
         log.warning("live lookup for %s failed: %s", mint[:10], e)
-        return False
+        tokens = []
     for t in tokens:
-        if t.mint.lower() == mint.lower():
+        if t.mint.lower() == key:
+            _missed.pop(key, None)
             with db.tx(conn):
                 db.upsert_token(conn, t.mint, chain=t.chain, symbol=t.symbol, mcap_usd=t.mcap_usd,
                                 liquidity_usd=t.liquidity_usd, created_at=t.created_at,
                                 price_usd=t.price_usd, price_at=db.now(), checked_at=db.now(),
                                 decimals=t.decimals, pool_address=t.pool_address)
             return True
+    if len(_missed) >= MISS_MAX:
+        _missed.clear()
+    _missed[key] = time.monotonic()
     return False
 
 
@@ -607,4 +625,5 @@ def serve(host: str | None = None, port: int | None = None, reload: bool = False
     uvicorn.run("fomo_agent.api:app", host=host or settings.api_host,
                 port=port or settings.api_port, reload=reload,
                 reload_dirs=["fomo_agent"] if reload else None,
+                workers=None if reload else max(1, settings.api_workers),
                 timeout_graceful_shutdown=3)
