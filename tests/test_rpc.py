@@ -168,6 +168,61 @@ def test_a_range_the_node_will_not_answer_whole_is_asked_in_halves(monkeypatch):
     assert len(asked) == 4 and all(t - f < 250 for f, t in asked), "the next range starts at the size that worked"
 
 
+def test_a_node_failure_on_logs_is_read_through_the_spare_in_slices(monkeypatch):
+    """The node's backend times out on a 350-block tick; the spare answers the same blocks a
+    hundred at a time and the tick sees every log once."""
+    hits = []
+
+    class R:
+        def __init__(self, code, body):
+            self.status_code, self._body = code, body
+
+        def json(self):
+            return self._body
+
+        def raise_for_status(self):
+            pass
+
+    def fake_post(url, json):
+        p = json["params"][0]; f, t = int(p["fromBlock"], 16), int(p["toBlock"], 16)
+        hits.append((url, f, t))
+        if url == "http://node":
+            return R(200, {"error": {"message": 'Post "http://10.31.27.212:8547/rpc": context deadline exceeded'}})
+        if t - f + 1 > 100:
+            return R(200, {"error": {"message": "ranges over 10000 blocks are not supported on free plan"}})
+        return R(200, {"result": [{"b": b} for b in range(f, t + 1)]})
+
+    monkeypatch.setattr(settings, "rpc_urls", ["http://extra"])
+    rpc = RobinhoodRPC(url="http://node")
+    rpc.http.post = fake_post
+    got = rpc.logs(1000, 1349, topics=["0xabc"])
+    assert [g["b"] for g in got] == list(range(1000, 1350))
+    assert [h for h in hits if h[0] == "http://extra"] == [("http://extra", 1000, 1099), ("http://extra", 1100, 1199), ("http://extra", 1200, 1299), ("http://extra", 1300, 1349)]
+    assert rpc.spared == 1
+
+
+def test_a_scan_that_hit_a_node_failure_is_tried_once_more(monkeypatch):
+    calls = []
+
+    def fake_post(self, payload):
+        calls.append(payload["method"])
+        if payload["method"] == "eth_blockNumber":
+            return {"result": hex(1_000_000)}
+        if payload["method"] == "eth_getBlockByNumber":
+            return {"result": {"timestamp": hex(1_700_000_000)}}
+        if calls.count("eth_getLogs") == 1:
+            return {"error": {"message": "internal server errror"}}
+        return {"result": []}
+
+    monkeypatch.setattr(RobinhoodRPC, "_post", fake_post)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    rpc = RobinhoodRPC(url="http://offline")
+    rpc.eth_price = 1.0
+    rpc.prime(["0x" + "a" * 40])
+    assert rpc.get_trades("0x" + "a" * 40, "robinhood") == []
+    assert calls.count("eth_getLogs") == 3, "the first try failed on the node, the second pair answered"
+
+
 def test_a_failed_scan_is_not_retried_for_every_wallet(monkeypatch):
     """Four hundred wallets asked after one failed scan used to cost eight hundred requests."""
     calls = []

@@ -211,6 +211,44 @@ class RobinhoodRPC:
         return body["result"]
 
     @staticmethod
+    def node_failed(e: Exception) -> bool:
+        """The node's own fault, not ours: a backend behind it timed out or threw. Seen from
+        2026-09-15 as `Post "http://10.31.x.x:8547/rpc": context deadline exceeded` and
+        `internal server error`, dozens an hour. Retried sooner, and read through the spare."""
+        s = str(e).lower()
+        return "deadline exceeded" in s or "internal server" in s or "connection refused" in s or "bad gateway" in s
+
+    def _post_to(self, url: str, payload: object) -> object | None:
+        """One call to one endpoint, no retries: the body, or None if it did not answer."""
+        self.limiter.wait()
+        self.requests += 1
+        try:
+            r = self.http.post(url, json=payload)
+        except httpx.HTTPError:
+            return None
+        if r.status_code != 200:
+            return None
+        body = r.json()
+        return None if self._unsupported(body) else body
+
+    def _logs_via_spare(self, from_block: int, to_block: int, flt: dict) -> list | None:
+        """The range read through the spare endpoints in slices their plans allow, or None."""
+        step = max(1, settings.rpc_spare_slice_blocks)
+        for alt in self.urls[1:]:
+            out: list = []
+            for start in range(from_block, to_block + 1, step):
+                body = self._post_to(alt, {"jsonrpc": "2.0", "id": 1, "method": "eth_getLogs",
+                                           "params": [{"fromBlock": hex(start), "toBlock": hex(min(start + step - 1, to_block)), **flt}]})
+                if not body or "error" in body:
+                    out = None
+                    break
+                out += body.get("result") or []
+            if out is not None:
+                self.spared += 1
+                return out
+        return None
+
+    @staticmethod
     def _too_big(e: Exception) -> bool:
         """The node refusing a range for its size, not for our rate: split it and ask again."""
         s = str(e).lower()
@@ -236,6 +274,13 @@ class RobinhoodRPC:
         try:
             return self.call("eth_getLogs", [{"fromBlock": hex(from_block), "toBlock": hex(to_block), **flt}])
         except RpcError as e:
+            if self.node_failed(e) and len(self.urls) > 1:
+                # the node's backend is down for this call; the spare reads the same blocks a
+                # hundred at a time, which is what its plan allows and what a tick needs
+                got = self._logs_via_spare(from_block, to_block, flt)
+                if got is not None:
+                    log.info("rpc: node failed on %d..%d (%s); read through the spare", from_block, to_block, str(e)[:60])
+                    return got
             if from_block >= to_block or not self._too_big(e):
                 raise
             self._max_span = max(1, min(self._max_span or span, span // 2))
@@ -516,12 +561,20 @@ class RobinhoodRPC:
         head = self.block_number()
         first = max(head - settings.rpc_window_blocks, 0)
         self._fetched_at = time.monotonic()
-        try:
-            self._fills = self.scan(self._wallets, first, head)
-            self._failed = None
-        except Exception as e:  # noqa: BLE001 - remembered, then re-raised for the caller
-            self._failed = str(e)[:160]
-            raise
+        for attempt in range(2):
+            try:
+                self._fills = self.scan(self._wallets, first, head)
+                self._failed = None
+                return
+            except Exception as e:  # noqa: BLE001 - remembered, then re-raised for the caller
+                self._failed = str(e)[:160]
+                # a backend timeout on the first try is usually a healthy backend on the second;
+                # without this one bad answer cost the whole pass its fills
+                if attempt == 0 and self.node_failed(e):
+                    log.warning("rpc scan failed (%s); once more in 10s", str(e)[:80])
+                    time.sleep(10)
+                    continue
+                raise
 
     def get_trades(self, address: str, chain: str = CHAIN, since_ts: int | None = None) -> list[Trade]:
         if chain != CHAIN:

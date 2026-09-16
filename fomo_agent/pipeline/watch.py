@@ -220,8 +220,11 @@ def run(conn: sqlite3.Connection, once: bool = False, rpc: RobinhoodRPC | None =
             if s["fills"] or s["hot"]:
                 log.info("watch: %s", s)
         except RpcError as e:
-            log.warning("watch: rpc says %s — waiting %ss", e, settings.watch_rate_limit_wait_s)
-            time.sleep(settings.watch_rate_limit_wait_s)
+            # the node throttling us is waited out; the node failing on its own side is not -
+            # the next attempt usually lands on a backend that answers
+            wait = settings.watch_node_error_wait_s if RobinhoodRPC.node_failed(e) else settings.watch_rate_limit_wait_s
+            log.warning("watch: rpc says %s — waiting %ss", e, wait)
+            time.sleep(wait)
         except Exception as e:  # noqa: BLE001 - a bad tick is a missed tick, not a dead watcher
             log.exception("watch tick failed: %s", e)
         if once:

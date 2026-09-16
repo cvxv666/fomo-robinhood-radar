@@ -118,6 +118,11 @@ class Settings:
     telegram_launch_max_age_min: int = field(default_factory=lambda: _int("TELEGRAM_LAUNCH_MAX_AGE_MIN", 60))
     # how long the watcher waits after the RPC rate-limits it; one tick is enough to clear it
     watch_rate_limit_wait_s: int = field(default_factory=lambda: _int("WATCH_RATE_LIMIT_WAIT_S", 25))
+    # ... and this long after the node itself failed (a backend timeout, a 500): the next attempt
+    # usually lands on a healthy backend, so there is nothing to wait out
+    watch_node_error_wait_s: int = field(default_factory=lambda: _int("WATCH_NODE_ERROR_WAIT_S", 5))
+    # blocks per eth_getLogs when a spare endpoint answers for the node; the free plans cap around a hundred
+    rpc_spare_slice_blocks: int = field(default_factory=lambda: _int("RPC_SPARE_SLICE_BLOCKS", 100))
     # PRO access: the alerts and the live feeds, paid for in the token and burned. A price of 0
     # means no gate at all - everything is open, which is how a fresh checkout and the tests run.
     # See pipeline/pro.py.
