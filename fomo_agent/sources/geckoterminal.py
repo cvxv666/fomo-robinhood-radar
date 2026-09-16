@@ -318,9 +318,13 @@ def parse_token(item: dict, chain: str, pools: dict | None = None) -> NewToken |
     ids = [p.get("id") or "" for p in (((item.get("relationships") or {}).get("top_pools") or {}).get("data") or [])]
     pool, pa = best_pool(ids, pools or {})
     price = _f(a.get("price_usd"))
+    liquidity = _f(a.get("total_reserve_in_usd"))
     if ids and pool is None and pools:
-        price = None   # the only price on offer was printed in a trap pool; no price is the honest answer
+        # the only pools on offer are traps: no price, and no depth anyone could sell into
+        price, liquidity = None, 0.0
     if pa:
+        # the depth of the pool one would actually trade, not the sum over every pool including traps
+        liquidity = _f(pa.get("reserve_in_usd")) if pa.get("reserve_in_usd") is not None else liquidity
         base = (((pools or {}).get(next(i for i in ids if i.endswith(pool)), {}).get("relationships") or {}).get("base_token") or {}).get("data") or {}
         ours = (base.get("id") or "").lower().endswith(norm_addr(address))
         pool_price = _f(pa.get("base_token_price_usd" if ours else "quote_token_price_usd"))
@@ -331,7 +335,7 @@ def parse_token(item: dict, chain: str, pools: dict | None = None) -> NewToken |
         chain=chain,
         symbol=a.get("symbol") or a.get("name") or None,
         mcap_usd=_f(a.get("market_cap_usd")) or _f(a.get("fdv_usd")),
-        liquidity_usd=_f(a.get("total_reserve_in_usd")),
+        liquidity_usd=liquidity,
         price_usd=price,
         decimals=int(decimals) if isinstance(decimals, int) and 0 <= decimals <= 36 else None,
         pool_address=pool or None,

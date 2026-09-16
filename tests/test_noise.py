@@ -112,3 +112,33 @@ def test_the_tape_peak_ignores_dust_and_direct_rows(tmp_path):
         db.insert_trade(conn, sig="c", address=BOT, chain="robinhood", mint=MINT, side="sell", usd_value=700.0, token_amount=1.0, ts=ts + 180, source="rpc", kind="direct")
     o = hot.outcome(conn, MINT, ts, px, now=ts + 7200)
     assert o["best"] == 1.25 and o["fills"] == 1
+
+
+def test_a_token_with_only_trap_pools_is_unsellable(tmp_path):
+    from fomo_agent.pipeline import safety
+    conn = db.connect(tmp_path / "trap.db")
+    with db.tx(conn):
+        db.upsert_token(conn, MINT, chain="robinhood", symbol="SYNTH", liquidity_usd=0.0)
+    v = safety.check(conn, MINT, rpc=None, gt=None)
+    assert v["sellable"] == 0 and "trap" in v["note"]
+
+
+def test_clones_by_name_are_named_in_the_push(tmp_path):
+    from fomo_agent import bot
+    from fomo_agent.pipeline import analyze
+    conn = db.connect(tmp_path / "clone.db")
+    now = db.now()
+    a, b, c = "0x" + "a1" * 20, "0x" + "b2" * 20, "0x" + "c3" * 20
+    with db.tx(conn):
+        db.upsert_token(conn, a, chain="robinhood", symbol="musebook", created_at=now - 7200)
+        db.upsert_token(conn, b, chain="robinhood", symbol="MUSEBOOK", created_at=now - 3600, sellable=0)
+        db.upsert_token(conn, c, chain="robinhood", symbol="musebook", created_at=now - 600)
+        db.upsert_token(conn, "0x" + "d4" * 20, chain="robinhood", symbol="musebook", created_at=now - 3 * 86400)
+        conn.execute("INSERT INTO bot_sent(chat_id, mint, ts) VALUES('1', ?, ?)", (a, now - 7000))
+    clones = analyze.namesakes(conn, "musebook", c, now)
+    assert [x["mint"] for x in clones] == [a, b], "the two from today, oldest first; three days ago does not count"
+    t = {"sym": "musebook", "mint": c, "heat": 2.5, "buyers": 3, "avg_score": 80.0, "lead_minutes": 4.0, "age_h": 0.2,
+         "usd": 1000.0, "liq": 20000.0, "who": ["x"], "scores": [80], "clones": clones}
+    text = bot.fmt_launch(t, now)
+    assert "3rd <b>$musebook</b> in 24h" in text and "honeypot" in text and "pushed" in text
+    assert bot.clone_line({"sym": "X", "mint": c}) is None

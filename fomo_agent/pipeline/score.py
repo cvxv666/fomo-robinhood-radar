@@ -121,7 +121,15 @@ def build_context(conn: sqlite3.Connection, address: str) -> dict[str, Any]:
             "cost_usd": round(r["cost"]) if r["cost"] else None,
             "multiple": round((r["cost"] + r["pnl"]) / r["cost"], 1)
             if r["cost"] and r["cost"] > 0 and r["pnl"] is not None else None,
+            # no cost basis and a profit: the tokens arrived by transfer or airdrop and fomo
+            # counts their whole value as profit. Not trading, and the model should know.
+            "unearned": bool((not r["cost"]) and r["pnl"] and r["pnl"] > 0),
         } for r in rows]
+        unearned = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(unrealized_pnl), 0) FROM fomo_positions "
+            f"WHERE user_id = ? AND closed_at IS NULL AND token NOT IN ({quotes}) "
+            "AND (cost_basis IS NULL OR cost_basis = 0) AND unrealized_pnl > 0", (t["fomo_user_id"],)).fetchone()
+        ctx["unearned_pnl"] = {"positions": unearned[0], "usd": round(unearned[1])}
 
     recent = conn.execute(
         "SELECT side, mint, sol_amount, ts FROM trades WHERE address=? "
@@ -178,7 +186,10 @@ EXPORT_INSTRUCTIONS = (
     "Weigh fomo PnL first: it is USD profit INCLUDING open positions, which is where memecoin results sit. "
     "On-chain buy/sell flow is only a sanity check — an accumulating trader shows negative flow while being "
     "profitable. `open_positions` shows the book behind the number: several winners beat one, and a high "
-    "multiple on a real cost basis is the clearest evidence of an early entry. Rules: score>=70 -> active (large PnL with a repeatable pattern); 40-69 -> watch (promising, "
+    "multiple on a real cost basis is the clearest evidence of an early entry. A position marked `unearned` "
+    "(profit with no cost basis) was received, not bought - an airdrop, a transfer, a dev allocation: count none of "
+    "its PnL as skill, and flag `insider-like` when it is most of the number; `unearned_pnl` sums them. "
+    "Rules: score>=70 -> active (large PnL with a repeatable pattern); 40-69 -> watch (promising, "
     "thin, or resting on one unresolved position); <40 -> dropped (no PnL and no edge, bot-like, wash). "
     "Few trades = low confidence."
 )
@@ -298,14 +309,18 @@ def export_contexts(conn: sqlite3.Connection, path: Path, *, force: bool = False
                     limit: int | None = None, unscored_only: bool = False) -> dict:
     rows = pending_for_scoring(conn, force=force, limit=limit, unscored_only=unscored_only)
     rows, bots = drop_automated(conn, rows)
+    contexts = [build_context(conn, r["address"]) for r in rows]
+    # a wallet with no fills on our tape and no open book is a name and a number from fomo -
+    # there is nothing to judge, and a verdict on nothing is worse than a queue
+    judged = [c for c in contexts if (c.get("last_30d") or {}).get("trades") or c.get("open_positions")]
     payload = {
         "instructions": EXPORT_INSTRUCTIONS,
         "schema": ScoreResult.model_json_schema(),
         "generated_at": db.now(),
-        "wallets": [build_context(conn, r["address"]) for r in rows],
+        "wallets": judged,
     }
     Path(path).write_text(json.dumps(payload, indent=1, ensure_ascii=False), encoding="utf-8")
-    return {"exported": len(rows), "bots_dropped": bots, "path": str(path)}
+    return {"exported": len(judged), "nothing_to_judge": len(contexts) - len(judged), "bots_dropped": bots, "path": str(path)}
 
 
 def import_results(conn: sqlite3.Connection, path: Path, model: str = "manual") -> dict:

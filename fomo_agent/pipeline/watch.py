@@ -187,6 +187,8 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
             log.warning("burst on %s not pushed: %s", h["sym"], verdict["note"])
             continue
         key = f"hot:{h['mint']}"
+        from .analyze import namesakes
+        h["clones"] = namesakes(conn, h.get("sym"), h["mint"], now)
         text = fmt_hot(h)
         for sub in subs:
             # told of this burst already, or of the launch on the same token minutes ago

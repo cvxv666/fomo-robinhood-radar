@@ -173,6 +173,25 @@ def heat(buyers: list[dict], launched_ts: int | None) -> float:
                for b in buyers if b.get("score"))
 
 
+def namesakes(conn: sqlite3.Connection, sym: str | None, mint: str, now: int | None = None,
+              hours: int = 24) -> list[dict]:
+    """Other tokens with this exact name in the last day, oldest first, with what became of each:
+    pushed when, or found unsellable. Three musebooks in twelve hours - flat, a rocket, a
+    honeypot - and a subscriber could not tell which one the message meant."""
+    if not sym:
+        return []
+    now = now or db.now()
+    rows = conn.execute(
+        "SELECT mint, COALESCE(created_at, first_seen_at) t0, sellable FROM tokens "
+        "WHERE symbol = ? COLLATE NOCASE AND mint != ? AND COALESCE(created_at, first_seen_at) >= ? "
+        "ORDER BY t0", (sym, mint, now - hours * 3600)).fetchall()
+    out = []
+    for r in rows:
+        pushed = conn.execute("SELECT MIN(ts) FROM bot_sent WHERE mint IN (?, ?)", (r["mint"], "hot:" + r["mint"])).fetchone()[0]
+        out.append({"mint": r["mint"], "t0": r["t0"], "pushed_at": pushed, "unsellable": r["sellable"] == 0})
+    return out
+
+
 def fresh(conn: sqlite3.Connection, chain: str | None = None, hours: int = 24,
           max_age_h: int = 72, min_liquidity: float = 5_000, min_buyers: int = 2,
           limit: int = 40) -> dict:

@@ -203,6 +203,23 @@ def fmt_signal(s: dict, now: int | None = None) -> str:
     return "\n".join(out)
 
 
+ORDINAL = {2: "2nd", 3: "3rd"}
+
+
+def clone_line(t: dict, now: int | None = None) -> str | None:
+    """'3rd $musebook today · 0x786d… pushed 05:33 · 0x9da1… honeypot' - or nothing."""
+    clones = t.get("clones") or []
+    if not clones:
+        return None
+    n = len(clones) + 1
+    parts = []
+    for c in clones:
+        what = ("honeypot" if c.get("unsellable") else
+                f"pushed {time.strftime('%H:%M', time.gmtime(c['pushed_at']))}" if c.get("pushed_at") else "not pushed")
+        parts.append(f"{short(c['mint'])} {what}")
+    return f"\u26a0 {ORDINAL.get(n, f'{n}th')} <b>${esc(t['sym'])}</b> in 24h \u00b7 " + " \u00b7 ".join(parts)
+
+
 def fmt_hot(h: dict, now: int | None = None) -> str:
     """One burst. The clock is the headline: how much conviction arrived in how few minutes."""
     mins = max(1, round((h["last_ts"] - h["first_ts"]) / 60))
@@ -218,6 +235,8 @@ def fmt_hot(h: dict, now: int | None = None) -> str:
         ("liquidity", analyze.usd(h.get("liq"))),
     ]))
     out.append(who_line(h.get("who"), h.get("scores")))
+    if clone_line(h, now):
+        out.append(clone_line(h, now))
     out.append("")
     out.extend(token_lines(h["mint"]))
     return "\n".join(out)
@@ -377,6 +396,8 @@ def fmt_launch(t: dict, now: int | None = None) -> str:
         ("liquidity", analyze.usd(t.get("liq"))),
     ]))
     out.append(who_line(t.get("who"), t.get("scores")))
+    if clone_line(t, now):
+        out.append(clone_line(t, now))
     out.append(f"\n<code>{esc(t['mint'])}</code>")
     out.append(f"/token_{esc(t['mint'])}")
     return "\n".join(out)
@@ -689,6 +710,7 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
             if verdict["sellable"] == 0:
                 log.warning("launch %s not pushed: %s", t["sym"], verdict["note"])
                 continue
+            t["clones"] = analyze.namesakes(conn, t.get("sym"), t["mint"], now)
             out.append(("launch", t, fmt_launch(t)))
     return out
 

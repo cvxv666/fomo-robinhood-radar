@@ -117,7 +117,7 @@ def check(conn: sqlite3.Connection, mint: str, rpc: RobinhoodRPC | None = None, 
     Returns {"sellable": 1|0|None, "note": str, "checked_at": int, "asked": bool}.
     """
     now = now or db.now()
-    row = conn.execute("SELECT sellable, sell_checked_at, sell_note, pool_address, chain FROM tokens WHERE mint=?", (mint,)).fetchone()
+    row = conn.execute("SELECT sellable, sell_checked_at, sell_note, pool_address, chain, liquidity_usd FROM tokens WHERE mint=?", (mint,)).fetchone()
     if row is None:
         return {"sellable": None, "note": "unknown token", "checked_at": None, "asked": False}
     if not force and row["sell_checked_at"] and now - row["sell_checked_at"] < max_age_s:
@@ -127,6 +127,14 @@ def check(conn: sqlite3.Connection, mint: str, rpc: RobinhoodRPC | None = None, 
         return {"sellable": 0, "note": row["sell_note"], "checked_at": row["sell_checked_at"], "asked": False}
 
     chain = row["chain"] or (settings.dex_chains[0] if settings.dex_chains else "robinhood")
+    # every pool the screener knows for it charges a trap fee (SYNTH: 82% and 89%, made minutes
+    # after the push): the lookup stores no pool and zero depth, and there is nothing to sell into
+    if row["pool_address"] is None and row["liquidity_usd"] == 0:
+        note = "only trap pools (fee over 10%): no market to sell into"
+        with db.tx(conn):
+            conn.execute("UPDATE tokens SET sellable=0, sell_checked_at=?, sell_note=? WHERE mint=?", (now, note, mint))
+        log.warning("unsellable: %s - %s", mint, note)
+        return {"sellable": 0, "note": note, "checked_at": now, "asked": False}
     verdict, note = None, "nothing to go on yet"
     # the chain first: cheap, immediate, and the usual pattern blocks exactly this
     try:
