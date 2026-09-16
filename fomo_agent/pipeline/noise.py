@@ -59,6 +59,14 @@ def quarantine(conn: sqlite3.Connection, address: str, reason: str) -> int:
         removed = conn.execute("DELETE FROM trades WHERE address=?", (address,)).rowcount
         conn.execute("DELETE FROM holdings WHERE address=?", (address,))
     log.warning("noise: %s quarantined (%s), %d fills removed", address[:10], reason, removed)
+    if removed > 100_000:
+        # the file keeps the space a deleted six hundred thousand rows took (757 MB for a 139 MB
+        # database, once) until it is rebuilt; a second and a half now, outside any transaction
+        try:
+            conn.execute("VACUUM")
+            log.info("noise: database compacted after %d rows", removed)
+        except sqlite3.OperationalError as e:
+            log.warning("noise: vacuum skipped: %s", e)
     return removed
 
 

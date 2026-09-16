@@ -1,0 +1,17 @@
+[Unit]
+Description=FOMO Robinhood Radar - the day's report and the scoring queue, prepared for the morning
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=radar
+Group=radar
+WorkingDirectory=/opt/fomoradar/app
+EnvironmentFile=/opt/fomoradar/app/.env
+Environment=PYTHONIOENCODING=utf-8
+ExecStart=/bin/bash /opt/fomoradar/app/scripts/daily_prep.sh
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/fomoradar

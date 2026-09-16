@@ -22,6 +22,7 @@ Xvfb, the one piece that would make fomo collection fully unattended.
 | `radar-backup.timer` | sqlite `.backup` nightly, 14 kept | — |
 | `radar-health.timer` | what is quietly broken, pushed to the bot at 07:40 | — |
 | `radar-digest.timer` | the day in one message to every subscriber, 18:00 | — |
+| `radar-daily.timer` | the day's report, the scoring export and its digest into `/opt/fomoradar/daily/<date>/`, 06:50 UTC | — |
 | `radar-heartbeat.timer` | pings `HEARTBEAT_URL` every 10 min **while the checks pass** | — |
 | `radar-watch` | the chain every 20 s: new blocks, their fills, a burst pushed the moment it forms, and PRO burns credited (`pipeline/pro.py`) | — |
 | `radar-fomo.timer` | the 24h fomo board over HTTP, every 2 h, 1 credit | — |

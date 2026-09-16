@@ -1,0 +1,12 @@
+[Unit]
+Description=FOMO Robinhood Radar - daily preparation
+
+[Timer]
+# 06:50 UTC is 09:50 for the author. The desktop summary at 10:03 local used to run everything
+# itself and ran nothing at all while the app was closed; now the numbers and the export are on
+# the server whenever the morning happens, and the app's job is the reading and the verdicts.
+OnCalendar=*-*-* 06:50:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
