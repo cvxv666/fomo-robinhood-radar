@@ -183,8 +183,11 @@ def outcome(conn: sqlite3.Connection, mint: str, ts: int, px: float | None,
     best = max(later) / px if later else None
     cur = conn.execute("SELECT price_usd FROM tokens WHERE mint=?", (mint,)).fetchone()
     quote = cur["price_usd"] / px if cur and cur["price_usd"] else None
-    # a candle that contains the burst counts: its high may be after the burst, its open before
-    since = [c for c in (candles or []) if c[0] >= ts - 3600 and c[0] <= ts + horizon_s]
+    # The candle that contains the burst counts, and nothing earlier. An hour of slack here let
+    # a launch pushed after its opening spike claim the spike: ROBBIN read 6.6x on a push that
+    # went to 0.38x, STANDARD 13x for a real 2.6x. Five-minute candles, so the most a push can
+    # borrow is the four minutes before it.
+    since = [c for c in (candles or []) if c[0] >= ts - 300 and c[0] <= ts + horizon_s]
     # a pool that saw less volume than the cohort itself put in is not where the cohort traded:
     # SYNTH's chart came from an 89%-fee pool with $253 of lifetime volume against a $1,532
     # burst, and one trade in it printed 384x. Its candles are not evidence of anything.

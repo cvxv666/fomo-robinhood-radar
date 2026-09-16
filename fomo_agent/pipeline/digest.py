@@ -72,7 +72,7 @@ def daily(conn: sqlite3.Connection, hours: int = 24, chain: str | None = None) -
 
 
 def _pool_candles(conn: sqlite3.Connection):
-    """One day's hourly candles per burst, from GeckoTerminal. Once a day, a handful of requests,
+    """A day of five-minute candles per burst, from GeckoTerminal. Once a day, a handful of requests,
     and a pool it cannot answer for simply leaves the tape as the only witness."""
     def candles(mint: str):
         row = conn.execute("SELECT pool_address, chain FROM tokens WHERE mint=?", (mint,)).fetchone()
@@ -80,8 +80,10 @@ def _pool_candles(conn: sqlite3.Connection):
             return None
         try:
             from ..sources.geckoterminal import GeckoTerminal
+            # five-minute candles, a day and an hour of them: the hour candle that held a push
+            # also held the hour before it, and a launch's opening spike read as the outcome
             return GeckoTerminal().ohlcv(row["chain"] or "robinhood", row["pool_address"],
-                                         "hour", 1, 24) or None
+                                         "minute", 5, 300) or None
         except Exception:  # noqa: BLE001 - the tape still answers
             return None
     return candles
