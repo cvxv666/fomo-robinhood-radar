@@ -14,3 +14,5 @@ def _no_gate_unless_asked(monkeypatch):
     monkeypatch.setattr(settings, "pro_price_usd", 0.0)
     monkeypatch.setattr(settings, "pro_grace_until", 0)
     monkeypatch.setattr(settings, "pro_trial_days", 0)
+    # the server's .env names a spare RPC endpoint; a test that wants one sets it itself
+    monkeypatch.setattr(settings, "rpc_urls", [])
