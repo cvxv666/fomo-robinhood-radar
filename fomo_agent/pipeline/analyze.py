@@ -194,7 +194,7 @@ def namesakes(conn: sqlite3.Connection, sym: str | None, mint: str, now: int | N
 
 def fresh(conn: sqlite3.Connection, chain: str | None = None, hours: int = 24,
           max_age_h: int = 72, min_liquidity: float = 5_000, min_buyers: int = 2,
-          limit: int = 40) -> dict:
+          limit: int = 40, now: int | None = None) -> dict:
     """Tokens the cohort has *just started* buying, hottest first.
 
     Different question from the signal feed, which ranks everything trusted wallets bought today
@@ -206,15 +206,18 @@ def fresh(conn: sqlite3.Connection, chain: str | None = None, hours: int = 24,
     pool had already been drained. Ranked on headcount it would have topped the page. Those are
     counted and reported rather than silently dropped, but they do not rank.
     """
-    since = db.now() - hours * 3600
-    params: list = [since, TRUSTED]
+    # `now` other than the clock is a replay: the feed as it read at that moment, from the
+    # trades that existed then, for judging a push after the fact
+    now = now or db.now()
+    since = now - hours * 3600
+    params: list = [since, now, TRUSTED]
     if chain:
         params.append(chain)
     rows = [dict(r) for r in conn.execute(
         "SELECT tr.mint mint, tr.address address, t.fomo_handle handle, t.score score, "
         "  MIN(tr.ts) ts, SUM(tr.usd_value) usd "
         "FROM trades tr JOIN traders t ON t.address = tr.address "
-        f"WHERE tr.side='buy' AND tr.ts >= ? AND t.score >= ?{' AND tr.chain=?' if chain else ''}"
+        f"WHERE tr.side='buy' AND tr.ts >= ? AND tr.ts <= ? AND t.score >= ?{' AND tr.chain=?' if chain else ''}"
         + NOT_QUOTE.format(col="tr.mint") + _real("tr") +
         " GROUP BY tr.mint, tr.address", [*params, *_seed_params()],
     )]
@@ -238,7 +241,6 @@ def fresh(conn: sqlite3.Connection, chain: str | None = None, hours: int = 24,
         [since, TRUSTED, *by_mint],
     )}
 
-    now = db.now()
     out, drained = [], 0
     for mint, buyers in by_mint.items():
         if mint in prior or len(buyers) < min_buyers:
