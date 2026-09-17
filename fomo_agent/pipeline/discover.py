@@ -275,5 +275,5 @@ def safe_fomo() -> FomoClient | None:
     try:
         return FomoClient()
     except FomoNotConfigured as e:
-        log.warning("fomo disabled: %s", e)
+        log.debug("fomo disabled: %s", e)   # the fomo units collect on their own; here it is expected
         return None

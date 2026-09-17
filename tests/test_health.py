@@ -27,7 +27,7 @@ def test_lost_scans_and_a_blind_watcher_raise_flags(tmp_path, monkeypatch):
             n += 1
             t += 60 if not (now - 2 * 3600 < t < now - 2 * 3600 + 2400) else 2400
     rows = names(health.checks(conn))
-    assert rows["collect scans"]["ok"] is False and "4 of 10" in rows["collect scans"]["detail"]
+    assert rows["collect scans"]["ok"] is False and "4 of 10" in rows["collect scans"]["detail"] and "24h" in rows["collect scans"]["detail"]
     assert rows["watcher gaps"]["ok"] is False and "40 min" in rows["watcher gaps"]["detail"]
 
 

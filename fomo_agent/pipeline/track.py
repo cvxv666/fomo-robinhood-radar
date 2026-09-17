@@ -156,7 +156,14 @@ def track_all(conn: sqlite3.Connection, trackers: list[Tracker] | None = None, l
             stats["by_source"][name] = stats["by_source"].get(name, 0) + 1
         except Exception as e:  # noqa: BLE001 - one bad wallet must not stop the loop
             stats["errors"] += 1
+            if "scan failed earlier this pass" in str(e):
+                # the roster scan failed once; every wallet after it gets the same answer, and
+                # that is one fact, not four hundred warnings (1,596 lines for three lost scans)
+                stats["skipped"] = stats.get("skipped", 0) + 1
+                continue
             log.warning("track %s (%s) failed: %s", r["address"][:8], chain, e)
+    if stats.get("skipped"):
+        log.warning("track: %d wallets skipped after the roster scan failed this pass", stats["skipped"])
     for t in trackers:
         learned = getattr(t, "known_decimals", None)
         if learned:

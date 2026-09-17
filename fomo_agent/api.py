@@ -227,7 +227,9 @@ def live_lookup(conn: sqlite3.Connection, mint: str) -> bool:
     try:
         tokens, _ = lookup_tokens(chain() or "robinhood", [mint], gecko=gecko(), dex=dex())
     except Exception as e:  # noqa: BLE001 - an unknown token is still answerable without this
-        log.warning("live lookup for %s failed: %s", mint[:10], e)
+        # the screener's ceiling is hit whenever crawlers walk new addresses; that is expected
+        # and remembered below, not a warning eight hundred times a day
+        (log.debug if "429" in str(e) or "allowance" in str(e) else log.warning)("live lookup for %s failed: %s", mint[:10], e)
         tokens = []
     for t in tokens:
         if t.mint.lower() == key:

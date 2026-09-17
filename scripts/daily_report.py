@@ -31,7 +31,17 @@ for r in rows:
     key = r["mint"]; kind = "burst" if key.startswith("hot:") else "launch"; mint = key.split(":", 1)[-1]
     p = pushes.setdefault((kind, mint), {"kind": kind, "mint": mint, "ts": r["ts"], "chats": set()})
     p["chats"].add(r["chat_id"]); p["ts"] = min(p["ts"], r["ts"])
-candles_for = _pool_candles(conn)
+_candles_once = _pool_candles(conn)
+
+
+def candles_for(mint):
+    """Once, and once more after a pause if the screener said no: a pool skipped here is a push
+    measured by the tape alone, and the tape misses the peak."""
+    c = _candles_once(mint)
+    if c:
+        return c
+    time.sleep(20)
+    return _candles_once(mint)
 report = []
 for p in sorted(pushes.values(), key=lambda p: p["ts"]):
     mint, ts = p["mint"], p["ts"]

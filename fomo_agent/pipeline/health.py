@@ -87,10 +87,11 @@ def checks(conn: sqlite3.Connection, rpc: RobinhoodRPC | None = None) -> list[di
     tokens = one("SELECT COUNT(*) FROM tokens")
     # Six thousand collect errors in a day raised no flag: a roster scan the node refused shows
     # up as a pass with four hundred wallet errors and no wallets read, and every pass writes its
-    # stats into the run ledger. The share of such passes in six hours is the check.
+    # stats into the run ledger. The share of such passes in a day is the check: six hours
+    # reported a clean morning after an afternoon that lost three passes.
     now = db.now()
     track = conn.execute("SELECT stats_json FROM runs WHERE kind='track' AND started_at >= ? AND finished_at IS NOT NULL",
-                         (now - 6 * 3600,)).fetchall()
+                         (now - 24 * 3600,)).fetchall()
     lost = 0
     for r in track:
         try:
@@ -127,7 +128,7 @@ def checks(conn: sqlite3.Connection, rpc: RobinhoodRPC | None = None) -> list[di
         {"name": "prices", "ok": tokens == 0 or priced / tokens > 0.6,
          "detail": f"{priced} of {tokens} tokens priced"},
         {"name": "collect scans", "ok": not track or lost / len(track) <= 0.3,
-         "detail": f"{lost} of {len(track)} track passes in 6h lost their roster scan"
+         "detail": f"{lost} of {len(track)} track passes in 24h lost their roster scan"
                    + ("" if not track or lost / len(track) <= 0.3 else
                       " - the node is refusing eth_getLogs; see `journalctl -u radar-collect | grep 'scan failed'`")},
         {"name": "watcher gaps", "ok": gap < 900,

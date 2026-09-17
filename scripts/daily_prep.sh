@@ -10,6 +10,8 @@ DAY=$(date -u +%F)
 OUT=/opt/fomoradar/daily/$DAY
 mkdir -p "$OUT"
 cd "$APP"
+# the collect pass shares the screener's allowance; the report's candles wait for it to finish
+for _ in $(seq 1 60); do systemctl is-active --quiet radar-collect.service || break; sleep 5; done
 HOURS=${HOURS:-24} "$PY" scripts/daily_report.py > "$OUT/report.jsonl" 2> "$OUT/report.err" || echo "report failed, see $OUT/report.err"
 "$PY" -m fomo_agent.cli score --export "$OUT/pending.json" --unscored --digest 200 > "$OUT/digest.txt" 2>&1 || true
 "$PY" -m fomo_agent.cli health > "$OUT/health.txt" 2>&1 || true
