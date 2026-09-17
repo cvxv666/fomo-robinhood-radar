@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOMO Radar — week one</title>
+<!--
+  The first week on the record, as one board: 82 pushes since 11 September, 66 measured by the
+  real pool's candles, 54 of them traded above the entry after the push candle. The second
+  anchor is the paper run: a hundred dollars on every burst at the cohort's price, held two
+  hours - seventeen bursts, +$2,088, eight winners, one 18x. Everything is on the board from
+  the first frame; the light replays the equity curve and scans the skyline. ?still=1 holds.
+  Numbers from scripts/paper.py and the history study of 17 Sep 2026; nothing here is advice.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root { --black:#000; --white:#fff; --carbon:#606060; --graphite:#949494; --line:#2a2a2a; --green:#00ff85; --crimson:#ff003d;
+          --amber:#ff8a00; --yellow:#fcff76; --violet:#6100ff; --lilac:#a884ff;
+          --sans:"Space Grotesk", system-ui, sans-serif; --mono:"JetBrains Mono", ui-monospace, monospace; }
+  html, body { margin:0; height:100%; background:var(--black); color:var(--white); overflow:hidden; font-family:var(--mono); }
+  .stage { position:fixed; inset:0; display:grid; place-items:center; }
+  .board { position:relative; width:1600px; height:900px; transform-origin:center center; background:var(--black); overflow:hidden; }
+  .board > canvas { position:absolute; left:0; top:0; width:1600px; height:900px; pointer-events:none; }
+  #brain { position:absolute; left:1230px; top:26px; width:330px; height:224px; }
+  .frame { position:absolute; inset:14px; border:2px solid var(--white); pointer-events:none; }
+  .abs { position:absolute; }
+  .eyebrow { left:40px; top:44px; font-size:15px; font-weight:700; letter-spacing:.14em; }
+  .led { display:inline-block; width:11px; height:11px; background:var(--green); margin-right:12px; vertical-align:-1px; animation:blink 2.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+  .big { font-family:var(--sans); font-weight:700; letter-spacing:-.02em; line-height:.86; }
+  #pct { left:30px; top:78px; font-size:236px; color:var(--green); }
+  #pct-l { left:520px; top:96px; font-size:54px; line-height:1.02; letter-spacing:.005em; white-space:nowrap; }
+  #pct-s { left:524px; top:228px; font-size:15px; font-weight:700; letter-spacing:.1em; color:var(--graphite); line-height:1.7; }
+  #pct-s b { color:var(--white); }
+  .rule { position:absolute; height:2px; background:var(--white); }
+  .vrule { position:absolute; width:2px; background:var(--white); }
+  .h { font-size:13px; font-weight:700; letter-spacing:.14em; }
+  .h span { color:var(--graphite); font-weight:400; }
+  #paper-big { left:796px; top:408px; font-size:118px; color:var(--green); }
+  #paper-side { left:1300px; top:416px; font-size:15px; font-weight:700; letter-spacing:.1em; color:var(--graphite); line-height:1.75; }
+  #paper-side b { color:var(--white); }
+  .stat { position:absolute; top:548px; width:236px; border-top:2px solid var(--white); }
+  .stat .v { position:absolute; left:0; top:12px; font-family:var(--sans); font-weight:700; font-size:54px; line-height:1; letter-spacing:-.01em; white-space:nowrap; }
+  .stat .k { position:absolute; left:0; top:74px; font-size:12px; font-weight:700; letter-spacing:.14em; color:var(--graphite); white-space:nowrap; }
+  .stat .k b { color:var(--white); }
+  .cls { position:absolute; font-size:14px; font-weight:700; letter-spacing:.1em; white-space:nowrap; }
+  .cls span { color:var(--graphite); font-weight:400; }
+  .cls i { font-style:normal; display:inline-block; width:12px; height:12px; margin-right:10px; vertical-align:-1px; }
+  .tag { position:absolute; font-size:12px; font-weight:700; letter-spacing:.08em; white-space:nowrap; }
+  @media (prefers-reduced-motion: reduce) { .led { animation:none; } }
+</style>
+</head>
+<body>
+<div class="stage"><div class="board" id="board">
+  <canvas id="art"></canvas>
+  <canvas id="brain"></canvas>
+  <div class="frame"></div>
+
+  <div class="abs eyebrow"><span class="led"></span>FOMO ROBINHOOD RADAR  ·  11–17 SEP 2026  ·  THE FIRST WEEK, ON THE RECORD</div>
+  <div class="abs big" id="pct">82%</div>
+  <div class="abs big" id="pct-l">OF CALLS TRADED<br>ABOVE THE ENTRY</div>
+  <div class="abs" id="pct-s"><b>54 OF 66</b> MEASURED PUSHES  ·  82 PUSHES, 69 TOKENS<br>PEAK AFTER THE PUSH CANDLE vs THE PRICE AT THE PUSH<br><b>39%</b> REACHED ×2  ·  MEDIAN PEAK <b>×1.62</b></div>
+
+  <div class="rule" style="left:40px;top:334px;width:1520px"></div>
+  <div class="vrule" style="left:770px;top:356px;height:504px"></div>
+
+  <div class="abs h" style="left:40px;top:358px">EVERY CALL SINCE 11 SEP  <span>·  PEAK vs ENTRY, LOG  ·  54 ABOVE, 12 BELOW</span></div>
+  <div class="cls" style="left:40px;top:806px"><i style="background:var(--green)"></i>BURSTS  <span>·</span>  85% ABOVE  <span>·</span>  54% REACHED ×2  <span>·</span>  MEDIAN ×2.49</div>
+  <div class="cls" style="left:40px;top:834px"><i style="background:var(--white)"></i>LAUNCHES  <span>·</span>  79% ABOVE  <span>·</span>  36% REACHED ×2  <span>·</span>  MEDIAN ×1.51</div>
+
+  <div class="abs h" style="left:800px;top:358px">PAPER RUN  <span>·  $100 ON EVERY BURST  ·  HOLD TWO HOURS  ·  AT THE COHORT'S PRICE</span></div>
+  <div class="abs big" id="paper-big">+$2,088</div>
+  <div class="abs" id="paper-side">17 BURSTS<br><b>$1,700</b> STAKED<br><b>×2.2</b> ON CAPITAL</div>
+  <div class="stat" style="left:800px"><div class="v" style="color:var(--green)">47%</div><div class="k">WIN RATE  <b>8 OF 17</b></div></div>
+  <div class="stat" style="left:1062px"><div class="v">+123%</div><div class="k">AVERAGE PER BURST</div></div>
+  <div class="stat" style="left:1324px"><div class="v" style="color:var(--yellow)">×18</div><div class="k">BEST TICKET  <b>musebook</b></div></div>
+</div></div>
+<script>
+(() => {
+  'use strict';
+  const q = new URLSearchParams(location.search);
+  const reduced = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || q.has('still');
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const board = document.getElementById('board');
+  const fit = () => { const s = Math.min(innerWidth / 1600, innerHeight / 900); board.style.transform = `scale(${s})`; };
+  addEventListener('resize', fit); fit();
+  const C = { white:'#fff', carbon:'#606060', graphite:'#949494', line:'#2a2a2a', green:'#00ff85', crimson:'#ff003d', amber:'#ff8a00', yellow:'#fcff76', lilac:'#a884ff' };
+
+  // ── the record: 66 measured pushes in order (peak after the push candle / price at the push), and the 17 bursts on paper
+  const SKY = [["Microhood","l",2.19],["OPAI","l",1.31],["FLYBRAIN","l",1.57],["SNOW","l",0.39],["AI","l",1.34],["INU","l",2.95],["HENT","l",1.68],["ICOIN","l",1.07],["SENP","l",0.28],["DOGGO","l",2.52],["OPEN","l",7.03],["STRAT","l",1.64],["LAMP","l",1.21],["CATGPT","l",26.76],["CATGPT","b",15.31],["FROGE","l",1.54],["ANTHROPIG","l",3.02],["FOMOFLY","l",1.14],["SPAWN","l",1.4],["Maple","l",1.6],["AMD","l",1.22],["FRONTIER","l",4.05],["FRONTIER","b",2.49],["SWARM","l",8.02],["LONGCAT","l",1.84],["TWINE","l",2.5],["UNITY","l",1.1],["LLM","l",0.99],["MEME","l",1.1],["YUGE","l",1.27],["XL","l",2.4],["VLAD","l",3.6],["PVE","l",1.51],["TICK","l",2.27],["PROPPED","b",2.75],["PROPPED","l",2.75],["HUMANITY","l",1.13],["ZKCAT","b",1.73],["GOLDGOOSE","b",1.12],["GOLDGOOSE","l",1.12],["NEOPETS","l",0.75],["RSI","b",0.95],["IPO","l",4.23],["IPO","b",4.23],["SPERM","l",0.86],["STANDARD","b",2.58],["STANDARD","l",1.92],["JENSEN","l",1.72],["JENSEN","b",1.78],["Tiptoe","l",0.17],["INUSIDER","l",0.8],["ROBBIN","l",0.38],["CRIMECAT","l",1.45],["FREN","l",2.23],["GG","l",1.23],["FTUSD","l",3.12],["FTUSD","b",0.95],["musebook","l",2.21],["musebook","l",12.19],["musebook","b",24.07],["JOLLY","l",1.33],["FOMOPAD","b",4.14],["FOMOPAD","l",4.14],["LITVM","b",1.29],["LITVM","l",0.26],["DYNABLOCKS","l",0.61]];
+  const TRADES = [["CATGPT",4.487],["FRONTIER",-0.341],["PROPPED",1.71],["SYNTH",0.059],["ZKCAT",-0.1],["GOLDGOOSE",0.075],["RSI",-0.515],["IPO",1.983],["STANDARD",0.571],["JENSEN",-0.593],["FTUSD",-0.928],["musebook",17.14],["FOMOPAD",-0.706],["LITVM",-0.987],["FLAI",0.319],["FOMOBALL",-0.39],["SPIDERBRAIN",-0.901]];
+
+  const cv = document.getElementById('art'), pr = Math.min(2, window.devicePixelRatio || 1); cv.width = 1600 * pr; cv.height = 900 * pr;
+  const c = cv.getContext('2d'); c.setTransform(pr, 0, 0, pr, 0, 0);
+  const font = (px, b = 700, sans = false) => c.font = `${b} ${px}px ${sans ? '"Space Grotesk"' : '"JetBrains Mono"'}, monospace`;
+  const text = (s, x, y, col = C.white, px = 12, align = 'left', b = 700, sans = false) => { font(px, b, sans); c.fillStyle = col; c.textAlign = align; c.textBaseline = 'alphabetic'; c.fillText(s, x, y); };
+
+  // ── the skyline: 66 bars on a log scale from 0.1x to 30x, the entry at 1x in yellow
+  const S = { x0: 44, x1: 742, y0: 388, y1: 776 };
+  const LO = Math.log10(0.1), HI = Math.log10(30);
+  const SY = (m) => S.y1 - ((Math.log10(clamp(m, 0.1, 30)) - LO) / (HI - LO)) * (S.y1 - S.y0);
+  const bw = (S.x1 - S.x0) / SKY.length, barW = Math.max(4, bw - 3);
+  const CALL = { CATGPT: 1, musebook: 1, SWARM: 1, OPEN: 1 };
+  function skyline(t) {
+    c.strokeStyle = C.line; c.lineWidth = 1;
+    for (const m of [0.25, 0.5, 2, 5, 10, 25]) { const y = SY(m); c.beginPath(); c.moveTo(S.x0, y); c.lineTo(S.x1, y); c.stroke(); text(`${m}×`, S.x1, y - 4, C.carbon, 10.5, 'right'); }
+    const scan = S.x0 + ((t * .12) % 1) * (S.x1 - S.x0);
+    const wave = (x) => reduced ? 0 : Math.max(0, 1 - Math.abs(x - scan) / 70);
+    let labelled = {};
+    SKY.forEach(([sym, kind, m], i) => {
+      const x = S.x0 + i * bw + (bw - barW) / 2, y = SY(m), up = m > 1;
+      const col = up ? (kind === 'b' ? C.green : C.white) : C.crimson;
+      const w = wave(x + barW / 2);
+      c.fillStyle = col; c.globalAlpha = up ? .78 + .22 * w : .55 + .35 * w;
+      c.fillRect(x, y, barW, S.y1 - y);
+      if (w > .4) { c.fillStyle = C.white; c.globalAlpha = .5 * (w - .4); c.fillRect(x, y - 2, barW, 3); }
+      c.globalAlpha = 1;
+      if (CALL[sym] && m > 6 && !labelled[sym]) {
+        labelled[sym] = 1;   // one label per name: the launch and the burst on it stand side by side
+        const twin = SKY.find(([s2, k2, m2], j) => s2 === sym && j !== i && Math.abs(j - i) <= 2 && m2 > 6);
+        const label = `${sym} ×${m.toFixed(m >= 10 ? 0 : 1)}` + (twin ? `  ·  ${twin[1] === 'b' ? 'burst' : 'launch'} ×${twin[2].toFixed(twin[2] >= 10 ? 0 : 1)}` : ''), col = kind === 'b' ? C.green : C.white;
+        if (y - 10 < S.y0 + 14) { if (x > S.x1 - 120) text(label, x - 6, S.y0 + 16, col, 12, 'right'); else text(label, x + barW + 6, S.y0 + 16, col, 12, 'left'); }
+        else text(label, clamp(x + barW / 2, S.x0 + 40, S.x1 - 60), y - 10, col, 12, 'center');
+      }
+    });
+    // the entry line, flowing
+    const y1 = SY(1);
+    c.strokeStyle = C.yellow; c.lineWidth = 3; c.setLineDash([12, 8]); c.lineDashOffset = -t * 40; c.beginPath(); c.moveTo(S.x0, y1); c.lineTo(S.x1, y1); c.stroke(); c.setLineDash([]);
+    c.fillStyle = C.black; c.fillRect(S.x0, y1 - 12, 74, 22); text('ENTRY ×1', S.x0 + 2, y1 + 4, C.yellow, 12, 'left');
+    // scan light
+    if (!reduced) { const g = c.createLinearGradient(scan - 60, 0, scan + 60, 0); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.07)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(scan - 60, S.y0 - 6, 120, S.y1 - S.y0 + 6); }
+  }
+
+  // ── the paper run: the equity curve stepping through seventeen bursts, replayed by the light
+  const E = { x0: 852, x1: 1556, y0: 692, y1: 842 };
+  const cum = []; let acc = 0; for (const [, r] of TRADES) { acc += r * 100; cum.push(acc); }
+  const EMAX = Math.max(...cum) * 1.08, EMIN = Math.min(0, ...cum) - 40;
+  const EX = (i) => E.x0 + (i / TRADES.length) * (E.x1 - E.x0);
+  const EY = (v) => E.y1 - ((v - EMIN) / (EMAX - EMIN)) * (E.y1 - E.y0);
+  const parts = [];
+  function equity(t, dt) {
+    // grid, the zero line, the trade bars
+    c.strokeStyle = C.line; c.lineWidth = 1; for (const v of [500, 1000, 1500, 2000]) { const y = EY(v); c.beginPath(); c.moveTo(E.x0, y); c.lineTo(E.x1, y); c.stroke(); text(`$${v.toLocaleString('en-US')}`, E.x0 - 6, y + 4, C.carbon, 10.5, 'right'); }
+    c.strokeStyle = C.carbon; c.beginPath(); c.moveTo(E.x0, EY(0)); c.lineTo(E.x1, EY(0)); c.stroke();
+    TRADES.forEach(([sym, r], i) => {
+      const x = EX(i) + 3, w = EX(i + 1) - EX(i) - 6, h = Math.sqrt(Math.abs(r)) * 26;
+      c.fillStyle = r >= 0 ? C.green : C.crimson; c.globalAlpha = .22; c.fillRect(x, r >= 0 ? E.y1 - h : E.y1, w, h); c.globalAlpha = 1;
+    });
+    // the full curve, ghosted; then the replay on top
+    const path = (upto) => { c.beginPath(); c.moveTo(EX(0), EY(0)); let prev = 0; for (let i = 0; i < TRADES.length; i++) { const v = cum[i]; if (i + 1 > upto) { const f = clamp(upto - i, 0, 1); c.lineTo(EX(i) + (EX(i + 1) - EX(i)) * f, EY(prev + (v - prev) * f)); break; } c.lineTo(EX(i + 1), EY(v)); prev = v; } };
+    path(TRADES.length); c.strokeStyle = C.green; c.lineWidth = 2; c.globalAlpha = .28; c.stroke(); c.globalAlpha = 1;
+    const cycle = 9, ph = reduced ? 1 : ((t % cycle) / cycle);
+    const upto = ph < .7 ? (ph / .7) * TRADES.length : TRADES.length;
+    path(upto); c.strokeStyle = C.green; c.lineWidth = 3.5; c.shadowColor = C.green; c.shadowBlur = 12; c.stroke(); c.shadowBlur = 0;
+    // the head
+    const i = Math.min(TRADES.length - 1, Math.floor(upto)), f = clamp(upto - i, 0, 1), prev = i ? cum[i - 1] : 0;
+    const hx = EX(i) + (EX(i + 1) - EX(i)) * f, hy = EY(prev + (cum[i] - prev) * f);
+    if (!reduced && ph < .7) { c.fillStyle = C.white; c.beginPath(); c.arc(hx, hy, 5, 0, 7); c.fill();
+      if (Math.random() < .5) parts.push({ x: hx, y: hy, vx: (Math.random() - .5) * 40, vy: -20 - Math.random() * 40, a: 1 }); }
+    for (let k = parts.length - 1; k >= 0; k--) { const p = parts[k]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 60 * dt; p.a -= dt * 1.2; if (p.a <= 0) { parts.splice(k, 1); continue; } c.fillStyle = C.green; c.globalAlpha = p.a * .8; c.fillRect(p.x, p.y, 2.5, 2.5); }
+    c.globalAlpha = 1;
+    // the three that made it, named where they land; the last value as a tag
+    for (const [name, idx] of [['CATGPT', 0], ['IPO', 7], ['musebook', 11]]) { text(name, EX(idx + 1), EY(cum[idx]) - 10, C.white, 11.5, 'center'); }
+    const endX = EX(TRADES.length), endY = EY(cum[cum.length - 1]);
+    c.fillStyle = C.black; c.fillRect(endX - 92, endY - 26, 92, 20); text('+$2,088', endX - 4, endY - 11, C.green, 13, 'right');
+    text('12 SEP', E.x0, E.y1 + 16, C.carbon, 10.5, 'left'); text('16 SEP', E.x1, E.y1 + 16, C.carbon, 10.5, 'right');
+    text('EQUITY, TRADE BY TRADE', E.x0, E.y0 - 8, C.graphite, 11, 'left');
+  }
+
+  // ── the brain, top right, as a silhouette: turning, scanned, firing
+  const brainDraw = (() => {
+    const bcv = document.getElementById('brain'), Wc = 330, Hc = 224; bcv.width = Wc * pr; bcv.height = Hc * pr; const b = bcv.getContext('2d'); b.setTransform(pr, 0, 0, pr, 0, 0);
+    const BCX = Wc * .5, BCY = Hc * .5, BSCALE = 94, k = BSCALE / 150; let s2 = 7;
+    const r2 = () => { s2 ^= s2 << 13; s2 >>>= 0; s2 ^= s2 >> 17; s2 ^= s2 << 5; s2 >>>= 0; return s2 / 4294967296; }; const rr = (a, z) => a + r2() * (z - a);
+    const PTS = []; const push = (x, y, z, tint, w, br) => PTS.push({ x, y, z, ph: rr(0, 6.28), sp: rr(.25, .9), amp: rr(.003, .012), b: br, tint, w, fire: 0 });
+    const hemiR = (u, v) => { const f = Math.cos(u), up = Math.cos(v); let R = 1; R *= 1 + .1 * f - .16 * f * f; R *= up > 0 ? 1 + .1 * up : 1 - .46 * Math.abs(up); R *= 1 + .2 * Math.max(0, -up) * Math.max(0, f) * 1.5; R *= 1 + .055 * Math.sin(u * 3 + v * 2); return R; };
+    const gy = (u, v) => Math.sin(u * 7.5 + v * 4.2) * Math.sin(v * 5.5 - u * 2.1);
+    for (let i = 0; i < 5200; i++) { const side = r2() < .5 ? -1 : 1, u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), g = gy(u, v); if (r2() > .3 + .7 * ((g + 1) / 2)) continue; const sh = r2() < .82 ? rr(.9, 1) : rr(.45, .9), R = hemiR(u, v) * sh * (1 + g * .045); const x = Math.sin(v) * Math.cos(u) * .5 * R + side * .235; if (Math.abs(x) < .052) continue; push(x, Math.cos(v) * .385 * R - .045, Math.sin(v) * Math.sin(u) * .415 * R, 0, rr(.9, 2.1), clamp(.45 + ((g + 1) / 2) * .55 + rr(-.1, .1), .1, 1)); }
+    for (let i = 0; i < 1400; i++) { const u = rr(0, 6.28), v = Math.acos(rr(-1, 1)), sh = r2() < .8 ? rr(.88, 1) : rr(.5, .88), f = Math.sin(v * 22) * .5 + .5; if (r2() > .25 + .75 * f) continue; const R = (1 - .22 * Math.max(0, Math.cos(v))) * sh; push(Math.sin(v) * Math.cos(u) * .27 * R, Math.cos(v) * .138 * R + .362, Math.sin(v) * Math.sin(u) * .215 * R - .3, 1, rr(.6, 1.4), clamp(.45 + f * .5 + rr(-.08, .08), .1, 1)); }
+    for (let i = 0; i < 400; i++) { const t = r2(), w = .115 - t * .052, a = rr(0, 6.28), on = r2() < .75, q2 = on ? w : w * Math.sqrt(r2()); push(Math.cos(a) * q2, .36 + t * .46, Math.sin(a) * q2 - .075, 2, rr(.6, 1.3), clamp(.4 + (on ? .4 : .05) + rr(-.08, .08), .1, 1)); }
+    const TINT = [[190, 240, 255], [120, 255, 205], [150, 205, 255]]; let fireT = 0;
+    return (T, dt) => { fireT -= dt; if (fireT <= 0) { fireT = 1.1; const fo = [rr(-.4, .4), rr(-.3, .3), rr(-.3, .3)]; for (const p of PTS) if ((p.x - fo[0]) ** 2 + (p.y - fo[1]) ** 2 + (p.z - fo[2]) ** 2 < .05) p.fire = 1; }
+      b.clearRect(0, 0, Wc, Hc); const yaw = T * .3, roll = Math.sin(T * .21) * .26, cy0 = Math.cos(yaw), sy0 = Math.sin(yaw), cr = Math.cos(roll), sr = Math.sin(roll);
+      const scanD = ((T * .155) % 1) * 1.5 - .75, sa = T * .11, nx = Math.cos(sa), nz = Math.sin(sa);
+      for (const p of PTS) { const br = 1 + Math.sin(T * p.sp + p.ph) * p.amp * 3.2, x = p.x * br, y = p.y * br, z = p.z * br; const Xr = x * cy0 + z * sy0; let Z = -x * sy0 + z * cy0; const Y = y * cr - Z * sr; Z = y * sr + Z * cr; const ps = 2.1 / (2.1 + Z * .9), sx = BCX + Xr * BSCALE * ps, sy = BCY + Y * BSCALE * ps, d = clamp((1.1 - Z) / 2.2, 0, 1);
+        p.fire *= .93; const sc2 = Math.abs(x * nx + z * nz - scanD) < .045 ? 1 : 0, a = clamp((.2 + p.b * .8) * (.5 + d * .5) + sc2 * .5 + p.fire * .5, 0, 1);
+        const tc = p.fire > .15 ? [0, 255, 133] : TINT[p.tint]; b.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},${a.toFixed(2)})`; const sz = Math.max(.9, p.w * (.55 + d * .85) * ps * k * (1 + sc2 * .6 + p.fire * .8)); b.fillRect(sx, sy, sz * 1.6, sz * 1.6); }
+      for (const sd of [-1, 1]) { const ex = BCX + sd * BSCALE * .17, ey = BCY - BSCALE * .06, ew = BSCALE * .052, eh = BSCALE * .066; b.fillStyle = 'rgba(2,5,10,.96)'; b.beginPath(); b.ellipse(ex, ey, ew, eh, 0, 0, 7); b.fill(); b.strokeStyle = 'rgba(150,220,255,.9)'; b.lineWidth = 1.4; b.stroke(); b.fillStyle = C.green; b.beginPath(); b.arc(ex + ew * .3, ey - eh * .1, ew * .42, 0, 7); b.fill(); } };
+  })();
+
+  // ── the light on the numbers: a sweep across the two anchors, every few seconds
+  const pct = document.getElementById('pct'), big = document.getElementById('paper-big');
+  function shine(t) {
+    const p1 = (t % 6) / 6, p2 = ((t + 3) % 6) / 6;
+    const g = (p) => p < .35 ? `linear-gradient(100deg, currentColor ${p / .35 * 100 - 18}%, #ffffff ${p / .35 * 100 - 8}%, currentColor ${p / .35 * 100 + 2}%)` : 'none';
+    for (const [el, p] of [[pct, p1], [big, p2]]) {
+      const bg = g(p);
+      if (bg === 'none') { el.style.background = 'none'; el.style.webkitBackgroundClip = ''; el.style.webkitTextFillColor = ''; el.style.color = el === pct ? C.green : C.green; }
+      else { el.style.background = bg; el.style.webkitBackgroundClip = 'text'; el.style.backgroundClip = 'text'; el.style.webkitTextFillColor = 'transparent'; }
+    }
+  }
+
+  let last = performance.now(), T0 = last;
+  const frame = (now) => {
+    const dt = Math.min(.05, (now - last) / 1000), t = (now - T0) / 1000; last = now;
+    c.clearRect(0, 0, 1600, 900);
+    skyline(t); equity(t, dt);
+    if (!reduced) shine(t);
+    brainDraw(4.33 + t * (reduced ? 0 : 1), dt);
+    if (!reduced) requestAnimationFrame(frame);
+  };
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => requestAnimationFrame(frame));
+})();
+</script>
+</body>
+</html>
