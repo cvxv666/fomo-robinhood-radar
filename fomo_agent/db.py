@@ -263,6 +263,15 @@ MIGRATIONS: dict[int, str] = {
     CREATE INDEX IF NOT EXISTS idx_pushes_mint ON pushes(mint, ts);
     CREATE INDEX IF NOT EXISTS idx_pushes_due ON pushes(followup_due, followup_at);
     """,
+    23: """
+    -- API keys: a PRO chat's key raises its allowance on the public API. Handed out by the bot,
+    -- checked by the API on every request, revoked by asking for a new one. See pipeline/keys.py.
+    CREATE TABLE IF NOT EXISTS api_keys(
+      key TEXT PRIMARY KEY, chat_id TEXT NOT NULL, created_at INTEGER NOT NULL,
+      revoked_at INTEGER, last_used INTEGER, requests INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_api_keys_chat ON api_keys(chat_id, revoked_at);
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

@@ -323,3 +323,37 @@ def test_an_unknown_address_is_looked_up_once_an_hour(monkeypatch, tmp_path):
     assert api_mod.live_lookup(conn, mint) is False and len(calls) == 1, "remembered as a miss"
     api_mod._missed[mint] -= api_mod.MISS_TTL + 1
     assert api_mod.live_lookup(conn, mint) is False and len(calls) == 2, "asked again once the hour is up"
+
+
+def test_a_pro_key_reads_faster_and_a_lapsed_one_does_not(client, monkeypatch):
+    """No key: the address's 120. A PRO chat's key: its own, larger allowance. A key whose chat
+    is no longer PRO: refused with a reason. No User-Agent at all: refused before anything."""
+    from fomo_agent import bot
+    from fomo_agent.pipeline import keys, pro
+    monkeypatch.setattr(settings, "pro_price_usd", 20.0)
+    monkeypatch.setattr(settings, "pro_token", "0x" + "f" * 40)
+    monkeypatch.setattr(api.limiter, "per_minute", 2)
+    monkeypatch.setattr(api.keyed, "per_minute", 4)
+    api.limiter.hits.clear(); api.keyed.hits.clear(); api.keyring._seen.clear(); api._responses.clear()
+    conn = db.connect()
+    bot.subscribe(conn, "42", None)
+    pro.grant(conn, "42", 30)
+    key = keys.issue(conn, "42")
+    h = {"x-forwarded-for": "203.0.113.7"}
+    assert [client.get("/api/health", headers=h).status_code for _ in range(3)] == [200, 200, 429]
+    with_key = {**h, "x-api-key": key}
+    assert [client.get("/api/health", headers=with_key).status_code for _ in range(5)] == [200, 200, 200, 200, 429]
+    assert client.get("/api/health", headers={**h, "x-api-key": "nope"}).status_code == 401
+    # the chat's PRO lapses: the key is answered from memory for a minute, then refused
+    with db.tx(conn):
+        conn.execute("UPDATE bot_subscribers SET paid_until=1 WHERE chat_id='42'")
+    api.keyring._seen.clear()
+    assert client.get("/api/health", headers=with_key).status_code == 401
+    # no user agent at all
+    assert client.get("/api/health", headers={**h, "user-agent": ""}).status_code == 400
+    # the bot hands keys to PRO chats only, and a second ask replaces the first
+    pro.grant(conn, "42", 30)
+    text = bot.handle_text(conn, "/apikey", "42", None)
+    assert "revoked" in text and keys.current(conn, "42")["key"] in text and keys.current(conn, "42")["key"] != key
+    bot.subscribe(conn, "free", None)
+    assert "PRO" in bot.handle_text(conn, "/apikey", "free", None)

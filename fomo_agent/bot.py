@@ -611,6 +611,7 @@ COMMANDS = [
     ("exits", "where the cohort is getting out"),
     ("top", "the leaderboard, by judgement"),
     ("pro", "the alerts and the live feeds, paid in the token"),
+    ("apikey", "a PRO key for the API: 600 requests a minute"),
     ("stop", "stop the alerts"),
     ("help", "what this is and what to send"),
 ]
@@ -888,6 +889,20 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
             return "No price for the token right now, so no quote. Try again in a minute."
         q["_conn"] = conn
         return fmt_quote(q)
+    if cmd == "/apikey":
+        if not pro.enabled() or settings.api_key_rate_per_min <= 0:
+            return "There are no API keys yet: the API is open at 120 a minute. /help"
+        if not pro.entitled(conn, chat_id):
+            return ("An API key is <b>PRO</b>: " + PRO_ONLY.format(days=settings.pro_days, usd=f"{settings.pro_price_usd:g}",
+                    symbol=esc(settings.pro_token_symbol)).replace("This feed is <b>PRO</b>. ", ""))
+        from .pipeline import keys
+        had = keys.current(conn, chat_id)
+        key = keys.issue(conn, chat_id)
+        return (("Your previous key is revoked. " if had else "") +
+                f"Your API key:\n<code>{key}</code>\n\n"
+                f"Send it as the <code>X-API-Key</code> header for {settings.api_key_rate_per_min} requests a minute "
+                f"(120 without). It works while this chat is PRO. Keep it to yourself; /apikey again replaces it. "
+                f"Docs: {settings.public_site_url or ''}/docs")
     if cmd == "/claim":
         if not pro.enabled():
             return "There is nothing to claim: everything here is open. /help"

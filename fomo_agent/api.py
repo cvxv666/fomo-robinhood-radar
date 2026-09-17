@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse, Response
 
 from . import db
 from .config import settings
-from .pipeline import analyze, pro
+from .pipeline import analyze, keys, pro
 from .sources.rpc import QUOTE_TOKENS
 
 log = logging.getLogger(__name__)
@@ -72,6 +72,8 @@ class RateLimit:
 
 
 limiter = RateLimit(settings.api_rate_per_min)
+keyed = RateLimit(settings.api_key_rate_per_min)   # per key, for PRO chats
+keyring = keys.Keyring()
 
 
 @asynccontextmanager
@@ -90,7 +92,12 @@ app = FastAPI(
     description=(
         "Research over Robinhood Chain. Every trader here was resolved from a fomo "
         "profile to a real on-chain wallet, tracked, and judged by Claude. Nothing on this API "
-        "places a trade, and none of it is financial advice."
+        "places a trade, and none of it is financial advice.\n\n"
+        "**Reading it:** 120 requests a minute per address, no key needed. Send a `User-Agent` "
+        "that names your project - requests without one are refused. A PRO subscriber of the "
+        "Telegram bot (@fomoradarRH_bot, `/pro`) can ask it for a key with `/apikey` and send it "
+        "as `X-API-Key` for 600 a minute. Answers are cached for a few seconds; the feeds move on "
+        "the watcher's tick, not faster."
     ),
     lifespan=lifespan,
 )
@@ -182,8 +189,24 @@ async def rate_limit(request: Request, call_next):
     host = request.client.host if request.client else "?"
     if not forwarded and host in ("127.0.0.1", "::1"):
         return await call_next(request)
+    if settings.api_require_user_agent and not request.headers.get("user-agent", "").strip():
+        return JSONResponse({"error": "send a User-Agent that names your project", "docs": "/docs"}, status_code=400)
+    key = request.headers.get("x-api-key") or request.query_params.get("key")
+    if key and settings.api_key_rate_per_min > 0:
+        conn = db.connect()
+        try:
+            ok, chat = keyring.check(conn, key)
+            if not ok:
+                return JSONResponse({"error": "unknown, revoked or lapsed API key", "docs": "/docs"}, status_code=401)
+            if not keyed.check(key):
+                return JSONResponse({"error": "rate limited", "limit_per_minute": keyed.per_minute}, status_code=429)
+            keyring.used(conn, key)
+        finally:
+            conn.close()
+        return await call_next(request)
     if not limiter.check(forwarded or host):
-        return JSONResponse({"error": "rate limited", "limit_per_minute": limiter.per_minute},
+        return JSONResponse({"error": "rate limited", "limit_per_minute": limiter.per_minute,
+                             "more": "a PRO key from the bot (/apikey) reads 600 a minute"},
                             status_code=429)
     return await call_next(request)
 

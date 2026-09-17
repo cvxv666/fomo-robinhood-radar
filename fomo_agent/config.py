@@ -193,6 +193,10 @@ class Settings:
     api_host: str = field(default_factory=lambda: _env("API_HOST", "127.0.0.1"))
     api_port: int = field(default_factory=lambda: _int("API_PORT", 8000))
     api_rate_per_min: int = field(default_factory=lambda: _int("API_RATE_PER_MIN", 120))
+    # a PRO chat's API key raises its allowance to this; 0 turns keys off
+    api_key_rate_per_min: int = field(default_factory=lambda: _int("API_KEY_RATE_PER_MIN", 600))
+    # a request with no User-Agent at all is refused with a 400 that says what to send
+    api_require_user_agent: bool = field(default_factory=lambda: _env("API_REQUIRE_USER_AGENT", "1") == "1")
     # uvicorn worker processes. One saturated at 40% CPU under six third-party crawlers with cache
     # hits answering in half a second; the response cache and the limiter are per worker.
     api_workers: int = field(default_factory=lambda: _int("API_WORKERS", 1))
