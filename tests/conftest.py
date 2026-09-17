@@ -16,3 +16,5 @@ def _no_gate_unless_asked(monkeypatch):
     monkeypatch.setattr(settings, "pro_trial_days", 0)
     # the server's .env names a spare RPC endpoint; a test that wants one sets it itself
     monkeypatch.setattr(settings, "rpc_urls", [])
+    # X posting is off unless a test switches it on
+    monkeypatch.setattr(settings, "x_enabled", False)

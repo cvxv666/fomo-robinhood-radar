@@ -49,6 +49,8 @@ def record(conn: sqlite3.Connection, kind: str, item: dict, chats: int, now: int
             "INSERT INTO pushes(kind, mint, ts, px, heat, conviction, wallets, liq, chats, followup_due) VALUES(?,?,?,?,?,?,?,?,?,?)",
             (kind, mint, now, px, item.get("heat"), item.get("conviction"), item.get("wallets") or item.get("buyers"),
              item.get("liq"), chats, due))
+    from . import xpost
+    xpost.enqueue(conn, cur.lastrowid, kind, item, now)   # nothing unless X is on
     return cur.lastrowid
 
 

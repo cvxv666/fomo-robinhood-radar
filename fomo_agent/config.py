@@ -153,6 +153,14 @@ class Settings:
     pro_grace_until: int = field(default_factory=lambda: _int("PRO_GRACE_UNTIL", 0))
     # days of PRO a new chat gets on /start; 0 is none
     pro_trial_days: int = field(default_factory=lambda: _int("PRO_TRIAL_DAYS", 0))
+    # X: the radar's own account posts every push a few minutes after Telegram and replies with
+    # the hour-later read. Off until the app exists and scripts/x_auth.py has written the token file.
+    x_enabled: bool = field(default_factory=lambda: _env("X_ENABLED", "0") == "1")
+    x_client_id: str = field(default_factory=lambda: _env("X_CLIENT_ID"))
+    x_client_secret: str = field(default_factory=lambda: _env("X_CLIENT_SECRET"))
+    x_token_file: str = field(default_factory=lambda: _env("X_TOKEN_FILE", "/opt/fomoradar/x_token.json"))
+    x_post_delay_s: int = field(default_factory=lambda: _int("X_POST_DELAY_S", 300))
+    x_max_per_day: int = field(default_factory=lambda: _int("X_MAX_PER_DAY", 20))
     # the bot's @name, for links from the site to it
     telegram_bot_name: str = field(default_factory=lambda: _env("TELEGRAM_BOT_NAME", "fomoradarRH_bot").lstrip("@"))
     telegram_alert_window_h: int = field(default_factory=lambda: _int("TELEGRAM_ALERT_WINDOW_H", 6))

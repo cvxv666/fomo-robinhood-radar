@@ -775,6 +775,11 @@ def followups(conn, tg: Telegram, now: int | None = None) -> int:
                     unsubscribe(conn, chat_id)
         pushes.close(conn, row["id"], m, now)
         log.info("followup %s %s: %s", row["kind"], row["sym"], m)
+        try:
+            from .pipeline import xpost
+            xpost.reply_followup(conn, row["id"], m, now=now)
+        except Exception as e:  # noqa: BLE001
+            log.warning("x reply failed: %s", e)
     return sent
 
 
@@ -1064,5 +1069,10 @@ def run(conn, tg: Telegram | None = None, once: bool = False) -> dict:
                 followups(conn, tg)
             except Exception as e:  # noqa: BLE001
                 log.warning("followups failed: %s", e)
+            try:
+                from .pipeline import xpost
+                xpost.send_due(conn)
+            except Exception as e:  # noqa: BLE001 - X being down is not the bot being down
+                log.warning("x posting failed: %s", e)
         if once:
             return stats

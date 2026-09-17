@@ -272,6 +272,16 @@ MIGRATIONS: dict[int, str] = {
     );
     CREATE INDEX IF NOT EXISTS idx_api_keys_chat ON api_keys(chat_id, revoked_at);
     """,
+    24: """
+    -- What went to X: one row per push queued for the account, the post id once it is up, and
+    -- the id of the hour-later reply. See pipeline/xpost.py.
+    CREATE TABLE IF NOT EXISTS x_posts(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      push_id INTEGER, kind TEXT, mint TEXT, due_ts INTEGER NOT NULL, text TEXT,
+      posted_at INTEGER, tweet_id TEXT, reply_id TEXT, replied_at INTEGER, attempts INTEGER DEFAULT 0, error TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_x_posts_due ON x_posts(posted_at, due_ts);
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")
