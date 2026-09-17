@@ -159,8 +159,10 @@ class Settings:
     x_client_id: str = field(default_factory=lambda: _env("X_CLIENT_ID"))
     x_client_secret: str = field(default_factory=lambda: _env("X_CLIENT_SECRET"))
     x_token_file: str = field(default_factory=lambda: _env("X_TOKEN_FILE", "/opt/fomoradar/x_token.json"))
-    x_post_delay_s: int = field(default_factory=lambda: _int("X_POST_DELAY_S", 300))
-    x_max_per_day: int = field(default_factory=lambda: _int("X_MAX_PER_DAY", 20))
+    # an hour: the alert is the bot's, the record is X's, and by the time a push lands there the
+    # hour-later read is already known and goes up under it in the same minute
+    x_post_delay_s: int = field(default_factory=lambda: _int("X_POST_DELAY_S", 3600))
+    x_max_per_day: int = field(default_factory=lambda: _int("X_MAX_PER_DAY", 40))
     # the bot's @name, for links from the site to it
     telegram_bot_name: str = field(default_factory=lambda: _env("TELEGRAM_BOT_NAME", "fomoradarRH_bot").lstrip("@"))
     telegram_alert_window_h: int = field(default_factory=lambda: _int("TELEGRAM_ALERT_WINDOW_H", 6))
