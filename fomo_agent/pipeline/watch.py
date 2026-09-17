@@ -170,6 +170,7 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
     """Tell every subscriber about each burst once. Lazy import: the bot needs a token, this does
     not, and a watcher with no bot configured is still a faster tape."""
     from ..bot import Telegram, fmt_hot, subscribers, already_sent, mark_sent, gone, unsubscribe
+    from . import pushes as pro_pushes
 
     now = db.now()
     subs = [s for s in subscribers(conn) if pro.entitled_row(s, now)]
@@ -190,6 +191,7 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
         from .analyze import namesakes
         h["clones"] = namesakes(conn, h.get("sym"), h["mint"], now)
         text = fmt_hot(h)
+        told = 0
         for sub in subs:
             # told of this burst already, or of the launch on the same token minutes ago
             if already_sent(conn, sub["chat_id"], key, quiet) \
@@ -199,10 +201,13 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
                 tg.send(sub["chat_id"], text)
                 mark_sent(conn, sub["chat_id"], key)
                 sent += 1
+                told += 1
             except Exception as e:  # noqa: BLE001 - one blocked chat must not stop the rest
                 log.warning("hot push to %s failed: %s", sub["chat_id"], e)
                 if gone(e):
                     unsubscribe(conn, sub["chat_id"])
+        if told:
+            pro_pushes.record(conn, "burst", h, told, now)
     return sent
 
 

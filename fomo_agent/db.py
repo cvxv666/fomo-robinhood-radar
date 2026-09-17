@@ -251,6 +251,18 @@ MIGRATIONS: dict[int, str] = {
       address TEXT PRIMARY KEY, reason TEXT, ts INTEGER
     );
     """,
+    22: """
+    -- The push ledger: one row per message event, with the price the cohort was at and what
+    -- earned the push, and an hour later what the market did with it. See pipeline/pushes.py.
+    CREATE TABLE IF NOT EXISTS pushes(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL, mint TEXT NOT NULL, ts INTEGER NOT NULL,
+      px REAL, heat REAL, conviction REAL, wallets INTEGER, liq REAL, chats INTEGER,
+      followup_due INTEGER, followup_at INTEGER, best REAL, peak_min INTEGER, now_x REAL, vol_usd REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_pushes_mint ON pushes(mint, ts);
+    CREATE INDEX IF NOT EXISTS idx_pushes_due ON pushes(followup_due, followup_at);
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

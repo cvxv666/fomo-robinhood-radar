@@ -123,6 +123,9 @@ class Settings:
     # one message per token: a launch is not sent this soon after a burst on the same token, nor
     # a burst after a launch. Twelve of twenty-six pushes were the same event told twice.
     telegram_dedupe_s: int = field(default_factory=lambda: _int("TELEGRAM_DEDUPE_S", 1800))
+    # this many minutes after a push, the same chats hear what the market did with it: the peak
+    # and when, now, volume since. A fact, not advice. 0 turns it off.
+    telegram_followup_min: int = field(default_factory=lambda: _int("TELEGRAM_FOLLOWUP_MIN", 60))
     # how long the watcher waits after the RPC rate-limits it; one tick is enough to clear it
     watch_rate_limit_wait_s: int = field(default_factory=lambda: _int("WATCH_RATE_LIMIT_WAIT_S", 25))
     # ... and this long after the node itself failed (a backend timeout, a 500): the next attempt

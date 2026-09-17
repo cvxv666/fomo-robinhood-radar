@@ -23,7 +23,7 @@ import httpx
 
 from . import db
 from .config import settings
-from .pipeline import analyze, pro
+from .pipeline import analyze, pro, pushes
 
 log = logging.getLogger(__name__)
 
@@ -739,6 +739,44 @@ class Burns:
         return len(paid)
 
 
+def fmt_followup(row, m: dict) -> str:
+    """An hour on. The peak and when it came, where the price is, what traded: the same three
+    facts every time, so that the reader learns the shape of these things."""
+    mark = "\u25b2" if row["kind"] == "burst" else "\u25c6"
+    head = f"{mark} {token_link(row['mint'], row['sym'])} \u00b7 {settings.telegram_followup_min} min after the push"
+    if m.get("best") is None:
+        return head + "\n\nNo trade in the pool since the push."
+    x = lambda v: "\u2014" if v is None else f"\u00d7{v:.2f}"  # noqa: E731
+    peak = x(m["best"]) + (f"  at +{m['peak_min']} min" if m.get("peak_min") is not None else "")
+    return head + "\n\n" + rows([
+        ("peak", peak),
+        ("now", x(m.get("now"))),
+        ("traded", analyze.usd(m.get("vol")) if m.get("vol") else "\u2014"),
+    ]) + ("\n(from the tape only)" if m.get("witness") == "tape" else "")
+
+
+def followups(conn, tg: Telegram, now: int | None = None) -> int:
+    """Every push whose hour is up: measure, tell the chats that got it, close the row."""
+    now = now or db.now()
+    sent = 0
+    for row in pushes.due(conn, now):
+        m = pushes.measure(conn, row, now=now)
+        if m is None:
+            continue   # the screener was busy; next minute
+        text = fmt_followup(row, m)
+        for chat_id in pushes.recipients(conn, row):
+            try:
+                tg.send(chat_id, text)
+                sent += 1
+            except Exception as e:  # noqa: BLE001
+                log.warning("followup to %s failed: %s", chat_id, e)
+                if gone(e):
+                    unsubscribe(conn, chat_id)
+        pushes.close(conn, row["id"], m, now)
+        log.info("followup %s %s: %s", row["kind"], row["sym"], m)
+    return sent
+
+
 def notify(conn, tg: Telegram) -> int:
     """PRO ending soon, or just ended: one line each, once per paid period."""
     sent = 0
@@ -763,6 +801,7 @@ def broadcast(conn, tg: Telegram) -> dict:
     items = due(conn)
     quiet = settings.telegram_realert_hours * 3600
     now = db.now()
+    told: dict[str, int] = {}
     for sub in subs:
         if not pro.entitled_row(sub, now):
             continue
@@ -776,11 +815,15 @@ def broadcast(conn, tg: Telegram) -> dict:
                 mark_sent(conn, sub["chat_id"], t["mint"])
                 stats["sent"] += 1
                 stats["launches"] += kind == "launch"
+                told[t["mint"]] = told.get(t["mint"], 0) + 1
             except Exception as e:  # noqa: BLE001 - one blocked chat must not stop the rest
                 stats["errors"] += 1
                 log.warning("send to %s failed: %s", sub["chat_id"], e)
                 if gone(e):
                     unsubscribe(conn, sub["chat_id"])
+    for kind, t, _ in items:
+        if told.get(t["mint"]):
+            pushes.record(conn, kind, t, told[t["mint"]], now)
     if stats["sent"]:
         log.info("broadcast: %s", stats)
     return stats
@@ -1002,5 +1045,9 @@ def run(conn, tg: Telegram | None = None, once: bool = False) -> dict:
                 burns.look(conn)
             except Exception as e:  # noqa: BLE001 - the watcher is the first pair of eyes
                 log.warning("pro burn check failed: %s", e)
+            try:
+                followups(conn, tg)
+            except Exception as e:  # noqa: BLE001
+                log.warning("followups failed: %s", e)
         if once:
             return stats
