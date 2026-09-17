@@ -274,9 +274,10 @@ class RobinhoodRPC:
         try:
             return self.call("eth_getLogs", [{"fromBlock": hex(from_block), "toBlock": hex(to_block), **flt}])
         except RpcError as e:
-            if self.node_failed(e) and len(self.urls) > 1:
-                # the node's backend is down for this call; the spare reads the same blocks a
-                # hundred at a time, which is what its plan allows and what a tick needs
+            if (self.node_failed(e) or "rate limited" in str(e)) and len(self.urls) > 1:
+                # the node's backend is down for this call, or it has throttled us out of every
+                # retry; the spare reads the same blocks a hundred at a time, which is what its
+                # plan allows and what a tick (or a PRO burn check) needs
                 got = self._logs_via_spare(from_block, to_block, flt)
                 if got is not None:
                     log.info("rpc: node failed on %d..%d (%s); read through the spare", from_block, to_block, str(e)[:60])
