@@ -31,14 +31,14 @@
   .big { font-family:var(--sans); font-weight:700; letter-spacing:-.02em; line-height:.86; }
   #pct { left:30px; top:78px; font-size:236px; color:var(--green); }
   #pct-l { left:520px; top:96px; font-size:54px; line-height:1.02; letter-spacing:.005em; white-space:nowrap; }
-  #pct-s { left:524px; top:228px; font-size:15px; font-weight:700; letter-spacing:.1em; color:var(--graphite); line-height:1.7; }
+  #pct-s { left:524px; top:236px; font-size:18px; font-weight:700; letter-spacing:.1em; color:var(--graphite); line-height:1.7; }
   #pct-s b { color:var(--white); }
   .rule { position:absolute; height:2px; background:var(--white); }
   .vrule { position:absolute; width:2px; background:var(--white); }
   .h { font-size:13px; font-weight:700; letter-spacing:.14em; }
   .h span { color:var(--graphite); font-weight:400; }
-  #paper-big { left:796px; top:408px; font-size:118px; color:var(--green); }
-  #paper-side { left:1300px; top:416px; font-size:15px; font-weight:700; letter-spacing:.1em; color:var(--graphite); line-height:1.75; }
+  #paper-big { left:796px; top:392px; font-size:124px; color:var(--green); }
+  #paper-side { left:1310px; top:404px; font-size:15px; font-weight:700; letter-spacing:.1em; color:var(--graphite); line-height:1.75; }
   #paper-side b { color:var(--white); }
   .stat { position:absolute; top:548px; width:236px; border-top:2px solid var(--white); }
   .stat .v { position:absolute; left:0; top:12px; font-family:var(--sans); font-weight:700; font-size:54px; line-height:1; letter-spacing:-.01em; white-space:nowrap; }
@@ -60,7 +60,7 @@
   <div class="abs eyebrow"><span class="led"></span>FOMO ROBINHOOD RADAR  ·  11–17 SEP 2026  ·  THE FIRST WEEK, ON THE RECORD</div>
   <div class="abs big" id="pct">82%</div>
   <div class="abs big" id="pct-l">OF CALLS TRADED<br>ABOVE THE ENTRY</div>
-  <div class="abs" id="pct-s"><b>54 OF 66</b> MEASURED PUSHES  ·  82 PUSHES, 69 TOKENS<br>PEAK AFTER THE PUSH CANDLE vs THE PRICE AT THE PUSH<br><b>39%</b> REACHED ×2  ·  MEDIAN PEAK <b>×1.62</b></div>
+  <div class="abs" id="pct-s"><b>54 OF 66</b> CALLS SINCE 11 SEP  ·  <b>39%</b> WENT ×2 OR MORE</div>
 
   <div class="rule" style="left:40px;top:334px;width:1520px"></div>
   <div class="vrule" style="left:770px;top:356px;height:504px"></div>
@@ -69,7 +69,6 @@
   <div class="cls" style="left:40px;top:806px"><i style="background:var(--green)"></i>BURSTS  <span>·</span>  85% ABOVE  <span>·</span>  54% REACHED ×2  <span>·</span>  MEDIAN ×2.49</div>
   <div class="cls" style="left:40px;top:834px"><i style="background:var(--white)"></i>LAUNCHES  <span>·</span>  79% ABOVE  <span>·</span>  36% REACHED ×2  <span>·</span>  MEDIAN ×1.51</div>
 
-  <div class="abs h" style="left:800px;top:358px">PAPER RUN  <span>·  $100 ON EVERY BURST  ·  HOLD TWO HOURS  ·  AT THE COHORT'S PRICE</span></div>
   <div class="abs big" id="paper-big">+$2,088</div>
   <div class="abs" id="paper-side">17 BURSTS<br><b>$1,700</b> STAKED<br><b>×2.2</b> ON CAPITAL</div>
   <div class="stat" style="left:800px"><div class="v" style="color:var(--green)">47%</div><div class="k">WIN RATE  <b>8 OF 17</b></div></div>
@@ -85,7 +84,7 @@
   const board = document.getElementById('board');
   const fit = () => { const s = Math.min(innerWidth / 1600, innerHeight / 900); board.style.transform = `scale(${s})`; };
   addEventListener('resize', fit); fit();
-  const C = { white:'#fff', carbon:'#606060', graphite:'#949494', line:'#2a2a2a', green:'#00ff85', crimson:'#ff003d', amber:'#ff8a00', yellow:'#fcff76', lilac:'#a884ff' };
+  const C = { black:'#000', white:'#fff', carbon:'#606060', graphite:'#949494', line:'#2a2a2a', green:'#00ff85', crimson:'#ff003d', amber:'#ff8a00', yellow:'#fcff76', lilac:'#a884ff' };
 
   // ── the record: 66 measured pushes in order (peak after the push candle / price at the push), and the 17 bursts on paper
   const SKY = [["Microhood","l",2.19],["OPAI","l",1.31],["FLYBRAIN","l",1.57],["SNOW","l",0.39],["AI","l",1.34],["INU","l",2.95],["HENT","l",1.68],["ICOIN","l",1.07],["SENP","l",0.28],["DOGGO","l",2.52],["OPEN","l",7.03],["STRAT","l",1.64],["LAMP","l",1.21],["CATGPT","l",26.76],["CATGPT","b",15.31],["FROGE","l",1.54],["ANTHROPIG","l",3.02],["FOMOFLY","l",1.14],["SPAWN","l",1.4],["Maple","l",1.6],["AMD","l",1.22],["FRONTIER","l",4.05],["FRONTIER","b",2.49],["SWARM","l",8.02],["LONGCAT","l",1.84],["TWINE","l",2.5],["UNITY","l",1.1],["LLM","l",0.99],["MEME","l",1.1],["YUGE","l",1.27],["XL","l",2.4],["VLAD","l",3.6],["PVE","l",1.51],["TICK","l",2.27],["PROPPED","b",2.75],["PROPPED","l",2.75],["HUMANITY","l",1.13],["ZKCAT","b",1.73],["GOLDGOOSE","b",1.12],["GOLDGOOSE","l",1.12],["NEOPETS","l",0.75],["RSI","b",0.95],["IPO","l",4.23],["IPO","b",4.23],["SPERM","l",0.86],["STANDARD","b",2.58],["STANDARD","l",1.92],["JENSEN","l",1.72],["JENSEN","b",1.78],["Tiptoe","l",0.17],["INUSIDER","l",0.8],["ROBBIN","l",0.38],["CRIMECAT","l",1.45],["FREN","l",2.23],["GG","l",1.23],["FTUSD","l",3.12],["FTUSD","b",0.95],["musebook","l",2.21],["musebook","l",12.19],["musebook","b",24.07],["JOLLY","l",1.33],["FOMOPAD","b",4.14],["FOMOPAD","l",4.14],["LITVM","b",1.29],["LITVM","l",0.26],["DYNABLOCKS","l",0.61]];
@@ -163,7 +162,7 @@
     // the three that made it, named where they land; the last value as a tag
     for (const [name, idx] of [['CATGPT', 0], ['IPO', 7], ['musebook', 11]]) { text(name, EX(idx + 1), EY(cum[idx]) - 10, C.white, 11.5, 'center'); }
     const endX = EX(TRADES.length), endY = EY(cum[cum.length - 1]);
-    c.fillStyle = C.black; c.fillRect(endX - 92, endY - 26, 92, 20); text('+$2,088', endX - 4, endY - 11, C.green, 13, 'right');
+    c.fillStyle = C.black; c.fillRect(endX - 98, endY - 28, 98, 24); c.strokeStyle = C.green; c.lineWidth = 1.5; c.strokeRect(endX - 98, endY - 28, 98, 24); text('+$2,088', endX - 8, endY - 11, C.green, 13, 'right');
     text('12 SEP', E.x0, E.y1 + 16, C.carbon, 10.5, 'left'); text('16 SEP', E.x1, E.y1 + 16, C.carbon, 10.5, 'right');
     text('EQUITY, TRADE BY TRADE', E.x0, E.y0 - 8, C.graphite, 11, 'left');
   }
