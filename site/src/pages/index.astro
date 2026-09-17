@@ -4,6 +4,7 @@ import Meter from '../components/Meter.astro';
 import Search from '../components/Search.astro';
 import Brain from '../components/Brain.astro';
 import Token from '../components/Token.astro';
+import Bot from '../components/Bot.astro';
 import Spark from '../components/Spark.astro';
 import Panel from '../components/Panel.astro';
 import Ident from '../components/Ident.astro';
@@ -49,6 +50,9 @@ const lead = signals[0];
 
   <!-- ── the token: nothing until PUBLIC_TOKEN_CA is set ────── -->
   <Token />
+
+  <!-- ── the bot: the alerts, one button ───────────────────── -->
+  <Bot />
 
   <!-- ── instrument strip ───────────────────────────────────── -->
   {!down && (

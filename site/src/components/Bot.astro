@@ -1,0 +1,71 @@
+---
+/**
+ * The bot block: what the Telegram bot does, in four lines, and one button into it. Sits right
+ * under the token block on the home page, so the two things a visitor can take away - the
+ * address and the alerts - are next to each other, above the data.
+ */
+const bot = (import.meta.env.PUBLIC_TELEGRAM_BOT ?? 'fomoradarRH_bot').trim().replace(/^@/, '');
+const link = `https://t.me/${bot}`;
+---
+<section class="bot" id="bot" aria-label="Telegram bot">
+  <div class="bot-copy">
+    <p class="eyebrow"><span class="led" aria-hidden="true"></span>Telegram · @{bot} · alerts in seconds</p>
+    <h2>The radar,<br />in your pocket</h2>
+    <p class="line">
+      The same cohort this site scores, pushed the moment they move: a <strong>burst</strong> when several
+      trusted wallets enter one token inside minutes, a <strong>launch</strong> while they are still early —
+      and an hour later, what the market did with it. Send it any token address or trader handle and it answers.
+    </p>
+  </div>
+  <div class="bot-cta">
+    <a class="btn go" href={link} rel="noopener">Open the bot →</a>
+    <ul class="what">
+      <li><b>/hot</b> several trusted wallets entering one token right now</li>
+      <li><b>/fresh</b> launches the cohort is entering early</li>
+      <li><b>/top</b> the leaderboard, by judgement — free, always</li>
+      <li><b>/pro</b> the alerts and the live feeds, $20 in $FOMOBRAIN, burned</li>
+    </ul>
+  </div>
+</section>
+
+<style>
+  .bot {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 520px);
+    gap: 30px;
+    align-items: center;
+    border: 1px solid #ffffff;
+    padding: 28px 30px;
+    margin-bottom: 25px;
+  }
+  .eyebrow {
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #00ff85; margin: 0 0 14px; max-width: none;
+  }
+  .led { width: 7px; height: 7px; border-radius: 9999px; background: #00ff85; animation: blink 2.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) { .led { animation: none; } }
+  .bot h2 {
+    font-size: clamp(30px, 4.6vw, 52px); line-height: 0.95; letter-spacing: 0.07em;
+    text-transform: uppercase; font-weight: 300; margin: 0 0 14px;
+  }
+  .line { font-size: 15px; color: #949494; max-width: 52ch; margin: 0; }
+  .line strong { color: #ffffff; font-weight: 500; }
+  .bot-cta { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .go {
+    align-self: flex-start; font-size: 13px; padding: 12px 26px;
+    background: #00ff85; border-color: #00ff85; color: #000000; font-weight: 500;
+  }
+  .go:hover { background: #ffffff; border-color: #ffffff; color: #000000; }
+  .what { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+  .what li {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; letter-spacing: 0.02em;
+    color: #949494; border-top: 1px solid #2a2a2a; padding-top: 7px;
+  }
+  .what b { color: #ffffff; font-weight: 500; display: inline-block; min-width: 56px; }
+  @media (max-width: 900px) {
+    .bot { grid-template-columns: 1fr; padding: 22px 18px; gap: 20px; }
+  }
+</style>

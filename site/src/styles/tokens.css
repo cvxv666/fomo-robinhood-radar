@@ -90,6 +90,16 @@ nav.tabs a {
 nav.tabs a:hover { color: var(--white); text-decoration: none; }
 nav.tabs a[aria-current="page"] { color: var(--green); }
 
+/* the one button in the masthead: into the bot, from every page */
+.masthead .tg {
+  display: inline-flex; align-items: center; gap: 7px; margin-left: 6px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--black); background: var(--green); border: 1px solid var(--green); border-radius: 9999px;
+  padding: 7px 14px; text-decoration: none; white-space: nowrap;
+}
+.masthead .tg:hover { background: var(--white); border-color: var(--white); color: var(--black); text-decoration: none; }
+@media (max-width: 640px) { .masthead .tg span { display: none; } .masthead .tg { padding: 8px 10px; } }
+
 main { padding: var(--section) 0 60px; }
 
 .pagehead { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
