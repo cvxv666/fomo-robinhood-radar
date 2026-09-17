@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOMO Radar — the day, 17 Sep</title>
+<!--
+  One day on the record, as one board: the 24 hours to 18:40 UTC on 17 September 2026. Six alerts
+  went out of the bot; every one of them traded above the price the cohort paid, two reached x2,
+  and five of the six peaked inside fifteen minutes - which is the other half of the story, and
+  it is on the board too: held to now, four of six sit under the entry. The tape under it is the
+  cohort's own day: 4,168 fills by 289 wallets in 441 tokens.
+  Peak and now are read from the pool's five-minute candles in the price of the last trusted fill
+  before the alert (the same read the bot posts an hour after each call). Nothing here is advice.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root { --black:#000; --white:#fff; --carbon:#606060; --graphite:#949494; --line:#2a2a2a; --green:#00ff85; --crimson:#ff003d;
+          --amber:#ff8a00; --yellow:#fcff76; --violet:#6100ff;
+          --sans:"Space Grotesk", system-ui, sans-serif; --mono:"JetBrains Mono", ui-monospace, monospace; }
+  html, body { margin:0; height:100%; background:var(--black); color:var(--white); overflow:hidden; font-family:var(--mono); }
+  .stage { position:fixed; inset:0; display:grid; place-items:center; }
+  .board { position:relative; width:1600px; height:900px; transform-origin:center center; background:var(--black); overflow:hidden; }
+  .frame { position:absolute; inset:14px; border:2px solid var(--white); pointer-events:none; }
+  .abs { position:absolute; }
+  .eyebrow { left:40px; top:44px; font-size:15px; font-weight:700; letter-spacing:.14em; white-space:nowrap; }
+  .eyebrow span { color:var(--graphite); font-weight:400; }
+  .led { display:inline-block; width:11px; height:11px; background:var(--green); margin-right:12px; vertical-align:-1px; }
+  .big { font-family:var(--sans); font-weight:700; letter-spacing:-.02em; line-height:.86; }
+  #hero { left:34px; top:84px; font-size:210px; color:var(--green); }
+  #hero small { font-size:96px; color:var(--white); letter-spacing:-.01em; vertical-align:18px; margin-left:6px; }
+  #hero-l { left:520px; top:98px; font-size:54px; line-height:1.02; letter-spacing:.005em; white-space:nowrap; }
+  #hero-s { left:524px; top:232px; font-size:17px; font-weight:700; letter-spacing:.1em; color:var(--graphite); line-height:1.75; white-space:nowrap; }
+  #hero-s b { color:var(--white); }
+  #hero-s i { color:var(--crimson); font-style:normal; }
+  .rule { position:absolute; height:2px; background:var(--white); }
+  .hair { position:absolute; height:1px; background:var(--line); }
+  .h { font-size:13px; font-weight:700; letter-spacing:.14em; white-space:nowrap; }
+  .h span { color:var(--graphite); font-weight:400; }
+  /* the 24 hours */
+  #tl { left:40px; top:330px; width:1520px; height:76px; }
+  .tick { position:absolute; top:44px; width:1px; height:10px; background:var(--carbon); }
+  .tick-l { position:absolute; top:57px; font-size:11px; color:var(--carbon); letter-spacing:.08em; transform:translateX(-50%); white-space:nowrap; }
+  .mark { position:absolute; top:48px; width:10px; height:10px; background:var(--green); transform:translateX(-50%) rotate(45deg); }
+  .mark.dead { background:var(--crimson); }
+  .mark-l { position:absolute; font-size:12px; font-weight:700; letter-spacing:.08em; transform:translateX(-50%); white-space:nowrap; }
+  .mark-l.up { top:6px; } .mark-l.down { top:25px; }
+  .mark-l.l { transform:none; } .mark-l.r { transform:translateX(-100%); }
+  /* the six */
+  .row { position:absolute; left:40px; width:1520px; height:54px; }
+  .row .t { position:absolute; left:0; top:19px; font-size:13px; color:var(--graphite); letter-spacing:.06em; }
+  .row .k { position:absolute; left:70px; top:20px; font-size:11px; font-weight:700; letter-spacing:.12em; color:var(--graphite); }
+  .row .k.b { color:var(--green); }
+  .row .k.thin { color:var(--amber); }
+  .row .sym { position:absolute; left:205px; top:11px; font-family:var(--sans); font-weight:700; font-size:25px; letter-spacing:-.01em; white-space:nowrap; }
+  .row .in { position:absolute; left:410px; top:19px; font-size:12px; color:var(--graphite); letter-spacing:.06em; white-space:nowrap; }
+  .row .in b { color:var(--white); font-weight:700; }
+  .row .bar { position:absolute; top:20px; height:14px; background:var(--green); }
+  .row .under { position:absolute; top:20px; height:14px; background:var(--crimson); }
+  .row .nowtick { position:absolute; top:14px; width:3px; height:26px; background:var(--white); }
+  .row .pk { position:absolute; top:17px; font-size:15px; font-weight:700; letter-spacing:.04em; white-space:nowrap; color:var(--green); }
+  .row .pk span { color:var(--graphite); font-weight:400; font-size:12px; letter-spacing:.08em; }
+  .row .nw { position:absolute; right:0; top:17px; font-size:15px; font-weight:700; letter-spacing:.04em; white-space:nowrap; }
+  .row .nw em { color:var(--amber); font-style:normal; font-weight:400; font-size:12px; letter-spacing:.08em; margin-left:6px; }
+  .row .nw span { color:var(--graphite); font-weight:400; font-size:12px; letter-spacing:.08em; }
+  .row .nw span:first-child { margin-right:6px; }
+  .row .nw.red { color:var(--crimson); }
+  .entry { position:absolute; width:2px; background:var(--white); }
+  .scale-l { position:absolute; font-size:11px; color:var(--carbon); letter-spacing:.08em; transform:translateX(-50%); white-space:nowrap; }
+  /* the tape */
+  .stat { position:absolute; top:774px; width:270px; border-top:2px solid var(--white); }
+  .stat .v { position:absolute; left:0; top:10px; font-family:var(--sans); font-weight:700; font-size:46px; line-height:1; letter-spacing:-.01em; white-space:nowrap; }
+  .stat .kk { position:absolute; left:0; top:64px; font-size:12px; font-weight:700; letter-spacing:.14em; color:var(--graphite); white-space:nowrap; }
+  .foot { position:absolute; top:862px; font-size:11px; letter-spacing:.1em; color:var(--carbon); white-space:nowrap; }
+  .foot b { color:var(--graphite); font-weight:700; }
+</style>
+</head>
+<body>
+<div class="stage"><div class="board" id="board">
+  <div class="frame"></div>
+
+  <div class="abs eyebrow"><span class="led"></span>FOMO ROBINHOOD RADAR  <span>·</span>  17 SEP 2026  <span>·</span>  THE DAY  <span>·  24 HOURS TO 18:40 UTC</span></div>
+  <div class="abs big" id="hero">6<small>/6</small></div>
+  <div class="abs big" id="hero-l">ALERTS TRADED<br>ABOVE THE CALL</div>
+  <div class="abs" id="hero-s"><b>2</b> REACHED ×2  ·  MEDIAN PEAK <b>×1.90</b>  ·  BEST <b>×4.73</b><br><b>5 OF 6</b> PEAKED INSIDE 15 MINUTES  ·  HELD TO NOW, <i>4 OF 6</i> SIT UNDER ENTRY</div>
+
+  <div class="rule" style="left:40px;top:300px;width:1520px"></div>
+  <div class="abs h" style="left:40px;top:312px">THE 24 HOURS  <span>·  WHEN EACH ALERT WENT OUT</span></div>
+  <div class="abs" id="tl"></div>
+
+  <div class="rule" style="left:40px;top:404px;width:1520px"></div>
+  <div class="abs h" style="left:40px;top:416px">THE SIX  <span>·  PEAK AFTER THE CALL, AND WHERE IT SITS NOW  ·  IN THE PRICE THE COHORT PAID</span></div>
+  <div id="rows"></div>
+
+  <div class="rule" style="left:40px;top:752px;width:1520px"></div>
+  <div class="stat" style="left:40px"><div class="v">4,168</div><div class="kk">FILLS ON THE TAPE</div></div>
+  <div class="stat" style="left:344px"><div class="v">289</div><div class="kk">TRUSTED WALLETS TRADING</div></div>
+  <div class="stat" style="left:648px"><div class="v">441</div><div class="kk">TOKENS TOUCHED</div></div>
+  <div class="stat" style="left:952px"><div class="v" style="color:var(--green)">$11.7M</div><div class="kk">THROUGH THEIR WALLETS</div></div>
+  <div class="stat" style="left:1256px;width:304px"><div class="v">251</div><div class="kk">NEW TOKENS SEEN</div></div>
+
+  <div class="foot" style="left:40px">PEAK AND NOW FROM THE POOL'S 5-MIN CANDLES, ENTRY = LAST TRUSTED FILL BEFORE THE CALL  ·  <b>NOTHING HERE IS ADVICE</b></div>
+  <div class="foot" style="right:40px"><b>@FomoBrainRH</b>  ·  THE BOT CALLS IT THE SECOND IT FORMS  ·  <b>fomoradar.app</b></div>
+</div></div>
+<script>
+(() => {
+  'use strict';
+  // the six, in the order they went out; minutes are since 18:40 UTC the day before
+  const SIX = [
+    { sym:'KONG',        at:'19:03', min:23,   kind:'LAUNCH',         peak:1.76, peakMin:194, now:0.31, buyers:5, usd:'$6.7K' },
+    { sym:'FOMOBALL',    at:'19:47', min:67,   kind:'LAUNCH · BURST', peak:4.73, peakMin:15,  now:0.39, buyers:6, usd:'$18.3K' },
+    { sym:'SPIDERBRAIN', at:'22:41', min:241,  kind:'LAUNCH · BURST', peak:1.97, peakMin:6,   now:0.09, buyers:6, usd:'$5.3K' },
+    { sym:'MUSE',        at:'10:42', min:962,  kind:'LAUNCH · BURST', peak:1.63, peakMin:5,   now:1.65, buyers:4, usd:'$0.9K', thin:true },
+    { sym:'Fly',         at:'14:45', min:1205, kind:'LAUNCH',         peak:1.82, peakMin:12,  now:0.28, buyers:5, usd:'$15.4K' },
+    { sym:'CPU',         at:'18:13', min:1413, kind:'BURST',          peak:2.13, peakMin:14,  now:1.96, buyers:8, usd:'$26.1K', fresh:true },
+  ];
+
+  // the 24 hours: one hairline, a tick every three hours, a diamond per alert
+  const tl = document.getElementById('tl');
+  const W = 1520, x = m => Math.round(W * m / 1440);
+  const line = document.createElement('div'); line.className = 'hair'; line.style.cssText = 'left:0;top:52px;width:1520px;background:#606060'; tl.appendChild(line);
+  const HOURS = ['21:00', '00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00'];
+  HOURS.forEach((h, i) => {
+    const m = 140 + i * 180;                     // 21:00 is 140 min after 18:40
+    const t = document.createElement('div'); t.className = 'tick'; t.style.left = x(m) + 'px'; tl.appendChild(t);
+    const l = document.createElement('div'); l.className = 'tick-l'; l.style.left = x(m) + 'px'; l.textContent = h; tl.appendChild(l);
+  });
+  SIX.forEach((s, i) => {
+    const d = document.createElement('div'); d.className = 'mark' + (s.now < 0.5 ? ' dead' : ''); d.style.left = x(s.min) + 'px'; tl.appendChild(d);
+    const l = document.createElement('div'); l.className = 'mark-l ' + (i % 2 ? 'down' : 'up') + (x(s.min) < 110 ? ' l' : x(s.min) > 1410 ? ' r' : ''); l.style.left = x(s.min) + 'px';
+    l.textContent = '$' + s.sym + '  ' + s.at; tl.appendChild(l);
+  });
+
+  // the six rows: a bar from entry to peak, and under the entry, how far it has fallen back
+  const rows = document.getElementById('rows');
+  const X0 = 620, XW = 640, MAX = 5;                 // 0x..5x across 640px, entry at 1x
+  const px = v => X0 + Math.round(XW * v / MAX);
+  const top0 = 446, step = 50;
+  const entry = document.createElement('div'); entry.className = 'entry'; entry.style.cssText = `left:${40 + px(1)}px;top:${top0 - 4}px;height:${step * SIX.length + 2}px`; rows.appendChild(entry);
+  [[1, '1× ENTRY'], [2, '×2'], [3, '×3'], [4, '×4'], [5, '×5']].forEach(([v, t]) => {
+    const l = document.createElement('div'); l.className = 'scale-l'; l.style.cssText = `left:${40 + px(v)}px;top:${top0 + step * SIX.length + 6}px`; l.textContent = t; rows.appendChild(l);
+    if (v > 1) { const h = document.createElement('div'); h.className = 'hair'; h.style.cssText = `left:${40 + px(v)}px;top:${top0 - 4}px;width:1px;height:${step * SIX.length + 2}px`; rows.appendChild(h); }
+  });
+  SIX.forEach((s, i) => {
+    const r = document.createElement('div'); r.className = 'row'; r.style.top = (top0 + i * step) + 'px';
+    const tag = '<span class="k' + (s.kind === 'BURST' ? ' b' : '') + '">' + s.kind + '</span>';
+    const nowTxt = '<span>NOW</span>×' + s.now.toFixed(2) + (s.fresh ? '<span> · 30 MIN OLD</span>' : '') + (s.thin ? '<em>THIN POOL</em>' : '');
+    r.innerHTML = `<div class="t">${s.at}</div>${tag}<div class="sym">$${s.sym}</div>` +
+      `<div class="in"><b>${s.buyers}</b> WALLETS · <b>${s.usd}</b> IN</div>` +
+      `<div class="bar" style="left:${px(1)}px;width:${px(s.peak) - px(1)}px"></div>` +
+      (s.now < 1 ? `<div class="under" style="left:${px(s.now)}px;width:${px(1) - px(s.now)}px"></div>` : `<div class="nowtick" style="left:${px(s.now)}px"></div>`) +
+      `<div class="pk" style="left:${px(s.peak) + 12}px">×${s.peak.toFixed(2)} <span>AT +${s.peakMin} MIN</span></div>` +
+      `<div class="nw${s.now < 1 ? ' red' : ''}">${nowTxt}</div>`;
+    rows.appendChild(r);
+  });
+
+  // fit the board to whatever window shows it
+  const board = document.getElementById('board');
+  const fit = () => { const k = Math.min(innerWidth / 1600, innerHeight / 900); board.style.transform = `scale(${k})`; };
+  addEventListener('resize', fit); fit();
+})();
+</script>
+</body>
+</html>
