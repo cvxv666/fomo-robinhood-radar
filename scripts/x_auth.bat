@@ -1,8 +1,14 @@
 @echo off
 rem One-time authorisation of the radar's X app for the bot account. Asks for the two values
 rem from the developer console, then hands over to scripts/x_auth.py, which prints one link.
+rem The repo path is fixed so this file can be copied anywhere (the Desktop, say).
 setlocal
-cd /d "%~dp0\.."
+cd /d "C:\Users\Honor\Desktop\FomoRadar"
+if not exist ".venv\Scripts\python.exe" (
+  echo  Cannot find the repo's Python at C:\Users\Honor\Desktop\FomoRadar\.venv
+  pause
+  exit /b 1
+)
 echo.
 echo  FOMO Radar - X authorisation
 echo  ---------------------------
