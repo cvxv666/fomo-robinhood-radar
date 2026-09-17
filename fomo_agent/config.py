@@ -62,8 +62,8 @@ class Settings:
     resolve_sources: tuple[str, ...] = field(default_factory=lambda: tuple(
         c.strip() for c in _env("RESOLVE_SOURCES", "rpc,codex").split(",") if c.strip()))
 
-    # robinhoodtrenches.com: third-party public API over fomo traders on Robinhood Chain
-    trenches_base_url: str = field(default_factory=lambda: _env("TRENCHES_BASE_URL", "https://robinhoodtrenches.com"))
+    # rhtrenches.com (was robinhoodtrenches.com): third-party public API over fomo traders on Robinhood Chain
+    trenches_base_url: str = field(default_factory=lambda: _env("TRENCHES_BASE_URL", "https://rhtrenches.com"))
     trenches_user_agent: str = field(default_factory=lambda: _env(
         "TRENCHES_USER_AGENT", "fomo-agent/0.1 (research; https://github.com/)"))
     trenches_min_interval_s: float = field(default_factory=lambda: _float("TRENCHES_MIN_INTERVAL_S", 900))

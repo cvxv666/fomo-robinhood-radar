@@ -580,19 +580,44 @@ def insert_fomo_swap(conn: sqlite3.Connection, **s: Any) -> bool:
     return cur.rowcount == 1
 
 
+FOMO_PNL_FIELDS = ("pnl_24h", "pnl_7d", "pnl_30d")
+
+
 def upsert_fomo_user(conn: sqlite3.Connection, user_id: str, **fields: Any) -> bool:
     ts = now()
-    exists = conn.execute("SELECT 1 FROM fomo_users WHERE user_id=?", (user_id,)).fetchone()
+    exists = conn.execute("SELECT handle FROM fomo_users WHERE user_id=?", (user_id,)).fetchone()
     clean = {k: v for k, v in fields.items() if v is not None}
     if exists is None:
         cols = ["user_id", "first_seen_at", "last_seen_at", *clean]
         vals = [user_id, ts, ts, *clean.values()]
         conn.execute(f"INSERT INTO fomo_users({','.join(cols)}) VALUES({_placeholders(len(cols))})", vals)
-        return True
-    clean["last_seen_at"] = ts
-    sets = ",".join(f"{k}=?" for k in clean)
-    conn.execute(f"UPDATE fomo_users SET {sets} WHERE user_id=?", [*clean.values(), user_id])
-    return False
+        created = True
+    else:
+        clean["last_seen_at"] = ts
+        sets = ",".join(f"{k}=?" for k in clean)
+        conn.execute(f"UPDATE fomo_users SET {sets} WHERE user_id=?", [*clean.values(), user_id])
+        created = False
+    mirror_fomo_pnl(conn, user_id, clean.get("handle") or (exists["handle"] if exists else None),
+                    {k: clean[k] for k in FOMO_PNL_FIELDS if k in clean})
+    return created
+
+
+def mirror_fomo_pnl(conn: sqlite3.Connection, user_id: str, handle: str | None, pnl: dict[str, Any]) -> int:
+    """The board's PnL, copied onto the wallet(s) that trade for this user.
+
+    `traders.pnl_*` is a mirror of the fomo board, and it used to be written once - at resolve
+    time - and then left, so the site's leaderboard and the scoring context would show a trader
+    the number the board had the day their wallet was found. Now every board row that lands
+    refreshes it. Only the three PnL columns: trades_cnt and volume_usd also come from trenches,
+    and two sources taking turns on one column is not a refresh, it is a fight.
+    """
+    if not pnl:
+        return 0
+    sets = ",".join(f"{k}=?" for k in pnl)
+    cur = conn.execute(
+        f"UPDATE traders SET {sets} WHERE fomo_user_id=? OR (? IS NOT NULL AND lower(fomo_handle)=lower(?))",
+        [*pnl.values(), user_id, handle, handle])
+    return cur.rowcount
 
 
 def unresolved_fomo_users(conn: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:

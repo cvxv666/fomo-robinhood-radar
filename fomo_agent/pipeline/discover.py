@@ -229,7 +229,7 @@ def import_browser_export(conn: sqlite3.Connection, source) -> dict:
 
 
 def discover_trenches(conn: sqlite3.Connection, client=None, window: str | None = None) -> dict:
-    """Import fomo traders from robinhoodtrenches.com — handles already mapped to execution wallets.
+    """Import fomo traders from rhtrenches.com — handles already mapped to execution wallets.
 
     This is the cheap path for Robinhood Chain: no fomo session, no Codex budget, one request.
     Their per-trader stats (realized PnL, win rate, best/worst trade) are stored verbatim and end

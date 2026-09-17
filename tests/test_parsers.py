@@ -285,7 +285,7 @@ def test_fomo_browser_export_import(tmp_path):
     assert again["new_users"] == 0 and again["swaps"] == 0
 
 
-# ---------- robinhoodtrenches (third-party indexer for Robinhood Chain) ----------
+# ---------- rhtrenches (third-party indexer for Robinhood Chain) ----------
 
 def test_trenches_parse_trader():
     rows = load("trenches_traders_sample.json")

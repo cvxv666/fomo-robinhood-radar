@@ -89,7 +89,7 @@ wallets than bought it for real is quarantined from every feed. On the first wee
 | Source | Chains | Cost |
 |---|---|---|
 | `rpc` | robinhood | free, keyless. Two `eth_getLogs` calls cover the entire roster |
-| `trenches` | robinhood | free, keyless, but only the ~108 wallets [robinhoodtrenches.com](https://robinhoodtrenches.com) curates |
+| `trenches` | robinhood | free, keyless, but only the ~150 wallets [rhtrenches.com](https://rhtrenches.com) curates |
 | `codex` | solana, base, robinhood | `CODEX_API_KEY`; ~1 request per wallet per pass |
 | `helius` | solana | `HELIUS_API_KEY`; 100 credits per Enhanced Transactions call |
 

@@ -86,6 +86,22 @@ def test_a_handle_we_know_is_updated_not_duplicated(conn):
         "SELECT COUNT(*) FROM fomo_users WHERE user_id LIKE 'api:%'").fetchone()[0] == 3
 
 
+def test_the_board_refreshes_the_pnl_of_a_wallet_we_already_track(conn):
+    """The wallet was resolved with the board's number of that day; the board moves, the trader must too."""
+    with db.tx(conn):
+        db.upsert_trader(conn, "0x" + "a" * 40, chain="robinhood", fomo_user_id="real-uuid",
+                         fomo_handle="PoorGoat_", pnl_24h=1.0, pnl_30d=100.0, trades_cnt=7, status="active")
+        # a second wallet linked by handle only, as the api route links them
+        db.upsert_trader(conn, "0x" + "b" * 40, chain="robinhood", fomo_handle="poorgoat_", pnl_24h=1.0)
+    rows = parse_leaderboard(load("fomoapi_leaderboard_sample.json"), "24h")
+    store_rows(conn, rows, "fomoapi_24h")
+    board = conn.execute("SELECT pnl_24h FROM fomo_users WHERE handle='PoorGoat_'").fetchone()[0]
+    a, b = conn.execute("SELECT pnl_24h, pnl_30d, trades_cnt FROM traders ORDER BY address").fetchall()
+    assert a["pnl_24h"] == board and b["pnl_24h"] == board, "both wallets carry today's number"
+    assert a["pnl_30d"] == 100.0, "a window the board did not speak about is left alone"
+    assert a["trades_cnt"] == 7, "trades_cnt is not the board's to refresh (trenches writes it too)"
+
+
 def test_a_verified_wallet_fills_a_gap_but_never_overwrites_a_conflict(conn):
     rows = parse_leaderboard(load("fomoapi_leaderboard_sample.json"), "24h")
     store_rows(conn, rows, "fomoapi_24h")

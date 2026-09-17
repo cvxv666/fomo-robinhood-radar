@@ -117,7 +117,7 @@ def discover(
     handle: Optional[str] = typer.Option(None, "--handle"),
     chain: Optional[str] = typer.Option(None, "--chain", help="solana | base | robinhood | evm (guessed if omitted)"),
     makers: bool = typer.Option(False, "--makers", help="with --mint: pull recent buyers from Codex instead of fomo holders"),
-    trenches: bool = typer.Option(False, "--trenches", help="import fomo traders from robinhoodtrenches.com (free, no session)"),
+    trenches: bool = typer.Option(False, "--trenches", help="import fomo traders from rhtrenches.com (free, no session)"),
     window: Optional[str] = typer.Option(None, "--window", help="with --trenches: 1h|24h|7d|30d|all"),
 ) -> None:
     """Discover candidate traders."""
@@ -175,7 +175,7 @@ def trenches_status(
     tape: int = typer.Option(0, "--tape", help="also print the N latest fills"),
     closed: int = typer.Option(0, "--closed", help="also print the N latest closed positions"),
 ) -> None:
-    """Health and a peek at robinhoodtrenches.com (fomo traders on Robinhood Chain)."""
+    """Health and a peek at rhtrenches.com (fomo traders on Robinhood Chain)."""
     from datetime import datetime, timezone
 
     from .sources.trenches import Trenches

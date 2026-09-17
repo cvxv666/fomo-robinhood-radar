@@ -1,4 +1,4 @@
-"""robinhoodtrenches.com — a public, keyless JSON API over fomo.family traders on Robinhood Chain.
+"""rhtrenches.com — a public, keyless JSON API over fomo.family traders on Robinhood Chain.
 
 Someone else already indexes what we need for chain 4663: they watch transfer logs over a websocket
 and keep a live tape for ~108 curated fomo wallets. Their `/api/traders` hands us the one thing
@@ -8,6 +8,8 @@ executes trades — plus realized PnL, win rate and hold times already computed.
 Scope and etiquette:
   - Robinhood Chain only. Solana and Base stay on Codex.
   - Third-party and unofficial: every call fails soft, and the loop keeps working without it.
+  - The site has moved once already (robinhoodtrenches.com -> rhtrenches.com, a 301 on every
+    path); the client follows redirects so the next move degrades to a log line, not a dead source.
   - `robots.txt` sets no restrictions, but we still identify ourselves, cache, and poll slowly
     (TRENCHES_MIN_INTERVAL_S). `/api/tape` returns at most 500 newest fills and ignores any
     pagination parameter, so polling faster than the tape moves buys nothing.
@@ -37,7 +39,7 @@ class Trenches:
     def __init__(self, base_url: str | None = None, client: httpx.Client | None = None):
         self.base_url = (base_url or settings.trenches_base_url).rstrip("/")
         self.http = client or httpx.Client(
-            base_url=self.base_url, timeout=25,
+            base_url=self.base_url, timeout=25, follow_redirects=True,
             headers={"accept": "application/json", "user-agent": settings.trenches_user_agent},
         )
         self._cache: dict[str, tuple[float, object]] = {}
