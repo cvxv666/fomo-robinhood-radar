@@ -281,9 +281,9 @@ def test_a_launch_is_pushed_only_while_it_is_one(conn, monkeypatch):
 
 def test_a_launch_the_cohort_stopped_buying_is_not_pushed(conn, monkeypatch):
     """Heat can cross the bar minutes after the last trusted buy; by then it is history."""
-    monkeypatch.setattr(settings, "telegram_launch_max_gap_s", 120)
+    monkeypatch.setattr(settings, "telegram_launch_max_gap_s", 360)
     live = a_launch(); live["last_ts"] = db.now() - 60
-    late = a_launch(mint="0x" + "d" * 40, sym="LATE"); late["last_ts"] = db.now() - 400
+    late = a_launch(mint="0x" + "d" * 40, sym="LATE"); late["last_ts"] = db.now() - 700
     monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [live, late], "hours": 6})
     assert [t["sym"] for _, t, _ in bot.due(conn)] == ["HOT"]
 
