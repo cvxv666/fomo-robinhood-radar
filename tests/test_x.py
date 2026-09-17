@@ -52,6 +52,23 @@ def test_a_push_is_queued_posted_after_the_delay_and_replied_to_an_hour_on(tmp_p
     assert xpost.reply_followup(conn, pid, {"best": 2.0}, client=fx) is False, "replied once"
 
 
+def test_with_an_hour_of_delay_the_read_goes_up_right_under_the_post(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "x_enabled", True)
+    monkeypatch.setattr(settings, "x_client_id", "app")
+    monkeypatch.setattr(settings, "x_post_delay_s", 3600)
+    conn = db.connect(tmp_path / "late.db")
+    now = db.now()
+    pid = pushes.record(conn, "burst", burst(), chats=3, now=now)
+    fx = FakeX()
+    # the hour passes: the followup is measured first (nothing on X yet to reply to) ...
+    assert xpost.reply_followup(conn, pid, {"best": 1.5, "peak_min": 30, "now": 1.1, "vol": 50_000}, client=fx, now=now + 3600) is False
+    pushes.close(conn, pid, {"best": 1.5, "peak_min": 30, "now": 1.1, "vol": 50_000}, now + 3600)
+    # ... and the post, when it goes up, carries the read under it at once
+    assert xpost.send_due(conn, fx, now=now + 3600) == 1
+    assert len(fx.posts) == 2 and fx.posts[1][1] == "1001" and "peak \u00d71.50 at +30 min" in fx.posts[1][0]
+    assert "posted 60 min after the bot's alert" in fx.posts[0][0]
+
+
 def test_the_daily_cap_holds_and_a_failure_is_retried_three_times(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "x_enabled", True)
     monkeypatch.setattr(settings, "x_client_id", "app")

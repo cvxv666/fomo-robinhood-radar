@@ -49,7 +49,9 @@ def fmt_post(kind: str, t: dict) -> str:
     usd = t.get("usd")
     if usd:
         line += f" · ${usd / 1000:.1f}K in" if usd >= 1000 else f" · ${usd:.0f} in"
-    lines = [head, line, t["mint"], "", "FOMO Robinhood Radar · the hour-later read follows in the thread · not financial advice"]
+    delay = settings.x_post_delay_s // 60
+    lines = [head, line, t["mint"], "",
+             f"FOMO Robinhood Radar · posted {delay} min after the bot's alert · the read since is in the thread · not financial advice"]
     return "\n".join(lines)
 
 
@@ -103,6 +105,12 @@ def send_due(conn: sqlite3.Connection, client=None, now: int | None = None) -> i
                 conn.execute("UPDATE x_posts SET posted_at=?, tweet_id=?, error=NULL WHERE id=?", (now, tid, r["id"]))
             sent += 1
             log.info("x: posted %s %s as %s", r["kind"], r["mint"][:10], tid)
+            # with an hour's delay the hour-later read is usually already on the books: it goes
+            # up under the post in the same minute rather than waiting for a measurement that
+            # has already happened
+            p = conn.execute("SELECT followup_at, best, peak_min, now_x, vol_usd FROM pushes WHERE id=?", (r["push_id"],)).fetchone() if r["push_id"] else None
+            if p and p["followup_at"]:
+                reply_followup(conn, r["push_id"], {"best": p["best"], "peak_min": p["peak_min"], "now": p["now_x"], "vol": p["vol_usd"]}, client=client, now=now)
         except Exception as e:  # noqa: BLE001 - X being down is not the bot being down
             with db.tx(conn):
                 conn.execute("UPDATE x_posts SET attempts=COALESCE(attempts,0)+1, error=? WHERE id=?", (str(e)[:200], r["id"]))
