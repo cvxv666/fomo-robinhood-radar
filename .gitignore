@@ -27,3 +27,5 @@ id_*
 
 # fetched once for assets/brand/make_brand.py, not worth versioning
 assets/brand/.fonts/
+x_token.json
+x_client.env
