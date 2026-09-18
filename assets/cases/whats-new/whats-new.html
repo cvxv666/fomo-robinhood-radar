@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOMO Radar — what shipped</title>
+<!--
+  What shipped on 18 September 2026, as one board: /follow, /paper and /invite for the reader;
+  webhooks for the bots that read the API (how many of them are heavy enough to pay, and what
+  that burns); and the two pieces of intelligence behind the alerts, the creator's record and
+  the crews. Every number is the day's: the API log of the last 24 hours, the push ledger, the
+  tape. Light moves; nothing appears late. ?still=1 holds. Nothing here is advice.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root { --black:#000; --white:#fff; --carbon:#606060; --graphite:#949494; --line:#2a2a2a; --green:#00ff85; --crimson:#ff003d;
+          --amber:#ff8a00; --yellow:#fcff76; --violet:#6100ff; --lilac:#a884ff;
+          --sans:"Space Grotesk", system-ui, sans-serif; --mono:"JetBrains Mono", ui-monospace, monospace; }
+  html, body { margin:0; height:100%; background:var(--black); color:var(--white); overflow:hidden; font-family:var(--mono); }
+  .stage { position:fixed; inset:0; display:grid; place-items:center; }
+  .board { position:relative; width:1600px; height:900px; transform-origin:center center; background:var(--black); overflow:hidden; }
+  .board > canvas.fx { position:absolute; left:0; top:0; width:1600px; height:900px; pointer-events:none; }
+  .frame { position:absolute; inset:14px; border:2px solid var(--white); pointer-events:none; }
+  .abs { position:absolute; }
+  .eyebrow { left:40px; top:44px; font-size:15px; font-weight:700; letter-spacing:.14em; white-space:nowrap; }
+  .eyebrow span { color:var(--graphite); font-weight:400; }
+  .led { display:inline-block; width:11px; height:11px; background:var(--green); margin-right:12px; vertical-align:-1px; animation:blink 2.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+  .big { font-family:var(--sans); font-weight:700; letter-spacing:-.02em; line-height:.86; }
+  #title { left:40px; top:78px; font-size:64px; line-height:.95; letter-spacing:-.01em; }
+  #title i { font-style:normal; color:var(--green); }
+  #lede { left:640px; top:84px; width:920px; font-size:15px; font-weight:700; letter-spacing:.1em; color:var(--graphite); line-height:1.8; }
+  #lede b { color:var(--white); }
+  .rule { position:absolute; height:2px; background:var(--white); }
+  .vrule { position:absolute; width:2px; background:var(--white); }
+  .hair { position:absolute; background:var(--line); }
+  /* tiles */
+  .tile { position:absolute; }
+  .tile .h { font-size:13px; font-weight:700; letter-spacing:.14em; white-space:nowrap; }
+  .tile .h span { color:var(--graphite); font-weight:400; }
+  .tile .cmd { font-family:var(--sans); font-weight:700; font-size:44px; letter-spacing:-.01em; line-height:1; margin-top:12px; }
+  .tile .cmd small { display:block; font-size:12px; font-family:var(--mono); font-weight:700; letter-spacing:.14em; color:var(--graphite); margin-top:10px; }
+  .tile .line { font-size:12.5px; font-weight:700; letter-spacing:.08em; color:var(--graphite); line-height:1.75; white-space:nowrap; }
+  .tile .line b { color:var(--white); }
+  .tile .line i { color:var(--green); font-style:normal; }
+  .num { font-family:var(--sans); font-weight:700; letter-spacing:-.02em; line-height:.9; }
+  /* the follow tape */
+  #tape { position:absolute; left:0; top:112px; width:440px; height:126px; overflow:hidden; }
+  #tape .row { position:absolute; left:0; width:440px; font-size:12px; letter-spacing:.04em; white-space:nowrap; color:var(--graphite); border-top:1px solid var(--line); padding-top:6px; height:24px; }
+  #tape .row b { color:var(--white); }
+  #tape .row i { font-style:normal; color:var(--green); } #tape .row i.s { color:var(--crimson); }
+  #tape .row em { font-style:normal; color:var(--carbon); float:right; }
+  /* stats along a rule */
+  .stat { position:absolute; border-top:2px solid var(--white); }
+  .stat .v { position:absolute; left:0; top:10px; font-family:var(--sans); font-weight:700; font-size:40px; line-height:1; letter-spacing:-.01em; white-space:nowrap; }
+  .stat .k { position:absolute; left:0; top:56px; font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--graphite); white-space:nowrap; }
+  .tag { position:absolute; font-size:11px; font-weight:700; letter-spacing:.12em; color:var(--graphite); white-space:nowrap; }
+  .foot { position:absolute; top:862px; font-size:11px; letter-spacing:.1em; color:var(--carbon); white-space:nowrap; }
+  .foot b { color:var(--graphite); font-weight:700; }
+  @media (prefers-reduced-motion: reduce) { .led { animation:none; } }
+</style>
+</head>
+<body>
+<div class="stage"><div class="board" id="board">
+  <canvas class="fx" id="art"></canvas>
+  <div class="frame"></div>
+
+  <div class="abs eyebrow"><span class="led"></span>FOMO ROBINHOOD RADAR  <span>·</span>  18 SEP 2026  <span>·  WHAT SHIPPED</span></div>
+  <div class="abs big" id="title">THE RADAR GOT<br><i>HANDS.</i></div>
+  <div class="abs" id="lede">THREE THINGS FOR THE READER, ONE FOR THE BOTS THAT READ US, TWO FOR THE ALERT ITSELF.<br>
+    EVERY NUMBER HERE IS TODAY'S: <b>THE LEDGER</b>, <b>THE TAPE</b>, <b>THE API LOG OF THE LAST 24 HOURS</b>.</div>
+
+  <div class="rule" style="left:40px;top:196px;width:1520px"></div>
+
+  <!-- row one: the reader -->
+  <div class="tile" style="left:40px;top:214px;width:440px;height:280px">
+    <div class="h">/FOLLOW  <span>·  ONE WALLET, EVERY FILL</span></div>
+    <div class="cmd">/follow unipcs<small>EVERY FILL, 20 SECONDS AFTER THE BLOCK</small></div>
+    <div id="tape"></div>
+    <div class="line" style="position:absolute;left:0;top:254px">FREE <b>3</b> WALLETS · PRO <b>50</b> · REAL FILLS ONLY</div>
+  </div>
+  <div class="vrule" style="left:512px;top:214px;height:280px"></div>
+
+  <div class="tile" style="left:544px;top:214px;width:480px;height:280px">
+    <div class="h">/PAPER  <span>·  $100 INTO EVERY ALERT, OUT AT THE HOUR READ</span></div>
+    <div class="num" id="paper-big" style="position:absolute;left:0;top:36px;font-size:72px;color:var(--green)">+$2,807</div>
+    <div class="line" style="position:absolute;left:292px;top:40px">ON <b>$9,200</b> STAKED<br><b>92</b> TRADES · <b>34%</b> WON<br>BEST <i>+$2,494</i> · WORST <b>−$99</b></div>
+    <canvas id="curve" width="480" height="130" style="position:absolute;left:0;top:128px"></canvas>
+    <div class="tag" style="left:0;top:262px">SINCE 11 SEP  ·  DEAD AND SEEDED COUNT AGAINST IT</div>
+  </div>
+  <div class="vrule" style="left:1056px;top:214px;height:280px"></div>
+
+  <div class="tile" style="left:1088px;top:214px;width:472px;height:280px">
+    <div class="h">/INVITE  <span>·  A LINK OF YOUR OWN</span></div>
+    <div class="num" style="position:absolute;left:0;top:34px;font-size:84px">7<span style="font-size:30px;letter-spacing:.06em;color:var(--graphite);margin-left:10px">DAYS</span></div>
+    <div class="line" style="position:absolute;left:0;top:132px">OF <b>PRO</b> FOR THE ONE WHO JOINS BY YOUR LINK,<br><b>7 MORE</b> FOR YOU. ONLY A CHAT THE BOT NEVER SAW<br>COUNTS, AND <b>10</b> A MONTH AT MOST.</div>
+    <canvas id="chain" width="472" height="46" style="position:absolute;left:0;top:210px"></canvas>
+    <div class="tag" style="left:0;top:262px">372 CHATS TODAY  ·  THE ONES THAT STAY WERE INVITED</div>
+  </div>
+
+  <div class="rule" style="left:40px;top:512px;width:1520px"></div>
+
+  <!-- row two: the bots, and the alert's own intelligence -->
+  <div class="tile" style="left:40px;top:530px;width:740px;height:320px">
+    <div class="h">/WEBHOOK  <span>·  THE ALERTS, POSTED TO A BOT'S OWN URL THE SECOND THEY GO OUT</span></div>
+    <div class="num" style="position:absolute;left:0;top:34px;font-size:84px">566K</div>
+    <div class="line" style="position:absolute;left:262px;top:40px">API REQUESTS <b>IN THE LAST 24 HOURS</b>, FROM <b>968</b> ADDRESSES<br><b>48</b> OF THEM OVER 1,000 A DAY · <b>19</b> OVER 5,000 · <b>5</b> OVER 20,000<br>THOSE <b>48</b> ARE <i>95%</i> OF THE TRAFFIC: BOTS THAT COPY US ALL DAY</div>
+    <canvas id="wheel" width="300" height="180" style="position:absolute;left:0;top:118px"></canvas>
+    <div class="line" style="position:absolute;left:316px;top:136px;line-height:2">
+      THE KEY IS PAID IN <b>$FOMOBRAIN</b>, AND THE TOKENS <i>BURN</i><br>
+      <b>48</b> × $20 A MONTH  →  <i>$960</i> BURNED, EVERY MONTH<br>
+      <b>19</b> × $50 API TIER  →  <i>$950</i> BURNED, EVERY MONTH<br>
+      ONE MORE STEP ON THE FLYWHEEL, PAID BY THE MACHINES</div>
+    <div class="tag" style="left:0;top:306px">SIGNED WITH THE KEY  ·  OFF AFTER 20 FAILURES  ·  3 KEYS ISSUED SO FAR, THE DOOR OPENED TODAY</div>
+  </div>
+  <div class="vrule" style="left:812px;top:530px;height:320px"></div>
+
+  <div class="tile" style="left:844px;top:530px;width:716px;height:320px">
+    <div class="h">THE ALERT GOT SMARTER  <span>·  TWO THINGS IT NOW KNOWS BEFORE IT SPEAKS</span></div>
+    <div class="line" style="position:absolute;left:0;top:34px;width:340px">
+      <b style="font-family:var(--sans);font-size:22px;letter-spacing:-.01em">WHO MADE IT</b><br>
+      THE MINT IS THE FIRST TRANSFER FROM ZERO;<br>ITS SENDER IS THE CREATOR. A SECOND TOKEN<br>FROM A KEY WHOSE FIRST WENT SEEDED OR DEAD<br><i>IS NOT PUSHED.</i><br>
+      <span style="color:var(--crimson)">0x16a858…</span> MADE <b>NCAT + CSHIB</b><br>
+      <span style="color:var(--crimson)">0x595a2c…</span> MADE <b>TINU + MUSEB</b><br>ONE KEY, <b>7</b> TOKENS THIS WEEK.</div>
+    <div class="line" style="position:absolute;left:376px;top:34px;width:340px">
+      <b style="font-family:var(--sans);font-size:22px;letter-spacing:-.01em">WHO MOVES TOGETHER</b><br>
+      WALLETS THAT BUY THE SAME TOKENS IN THE<br>SAME MINUTE, WEEK AFTER WEEK, ARE<br><i>ONE OPINION.</i> A BURST NEEDS TWO.<br>
+      FOUND: <b>unipcs · DumbCrayonEater</b><br>· <b>frankdegods</b> — THE SEEDER'S TARGETS,<br>COUNTED ONCE.</div>
+    <div class="stat" style="left:0;top:236px;width:220px"><div class="v" style="color:var(--crimson)">12</div><div class="k">SEEDING WAVES CAUGHT, 7 DAYS</div></div>
+    <div class="stat" style="left:248px;top:236px;width:220px"><div class="v">134</div><div class="k">FAKE FILLS MARKED</div></div>
+    <div class="stat" style="left:496px;top:236px;width:220px"><div class="v" style="color:var(--green)">0</div><div class="k">PUSHED SINCE THE FIX</div></div>
+  </div>
+
+  <div class="foot" style="left:40px">API LOG 17–18 SEP  ·  PUSH LEDGER SINCE 11 SEP  ·  FILLS FROM THE TAPE THIS AFTERNOON  ·  <b>NOTHING HERE IS ADVICE</b></div>
+  <div class="foot" style="right:40px"><b>@FomoBrainRH</b>  ·  <b>fomoradar.app</b></div>
+</div></div>
+<script>
+(() => {
+  'use strict';
+  const still = new URLSearchParams(location.search).has('still') || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const GREEN = '#00ff85', CRIMSON = '#ff003d', WHITE = '#fff', GRAPHITE = '#949494', LINE = '#2a2a2a', CARBON = '#606060';
+
+  // ---- the follow tape: real fills from this afternoon, scrolling like the chat would
+  const FILLS = [
+    ['NotARandomUser', 82, 'bought', '$5.2K', 'MOO', '20 s'],
+    ['NachSOL', 82, 'bought', '$18.0K', 'JUGGERNAUT', '31 s'],
+    ['NachSOL', 82, 'sold', '$2.2K', 'FLYBRAIN', '1 min'],
+    ['unipcs', 96, 'sold', '$305', 'TRIBES', '3 min'],
+    ['NachSOL', 82, 'bought', '$2.5K', 'SWARM', '4 min'],
+    ['NotARandomUser', 82, 'bought', '$5.0K', 'MOO', '5 min'],
+  ];
+  const tape = document.getElementById('tape');
+  const rows = FILLS.map((f, i) => {
+    const d = document.createElement('div'); d.className = 'row';
+    d.innerHTML = `<i class="${f[2] === 'sold' ? 's' : ''}">${f[2] === 'sold' ? '▽' : '▲'}</i> <b>${f[0]}</b> ${f[1]} ${f[2]} <b>${f[3]}</b> of $${f[4]}<em>${f[5]} ago</em>`;
+    d.style.top = (i * 25) + 'px'; tape.appendChild(d); return d;
+  });
+
+  // ---- the paper curve: the running total, trade by trade
+  const TOTAL = [0,24,-50,5,20,64,98,87,81,4,-49,-65,-92,-186,3,269,220,154,72,51,10,-43,6,-2,181,171,248,175,798,737,727,672,651,568,578,543,718,893,807,815,823,812,806,784,719,682,585,489,429,465,515,471,530,441,363,337,377,314,216,128,34,1247,3741,3661,3624,3587,3489,3390,3313,3347,3270,3192,3188,3097,3004,3069,3094,3060,3105,3045,3047,2964,2966,2968,2901,2900,2895,2890,2891,2806,2774,2807];
+  const cc = document.getElementById('curve'), cx = cc.getContext('2d');
+  const CW = 480, CH = 130, lo = Math.min(0, ...TOTAL), hi = Math.max(...TOTAL);
+  const px = i => 4 + (i / (TOTAL.length - 1)) * (CW - 8), py = v => 6 + (1 - (v - lo) / (hi - lo)) * (CH - 22);
+  function drawCurve(t) {
+    cx.clearRect(0, 0, CW, CH);
+    cx.strokeStyle = LINE; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(0, py(0)); cx.lineTo(CW, py(0)); cx.stroke();
+    cx.fillStyle = CARBON; cx.font = '10px "JetBrains Mono", monospace'; cx.textAlign = 'right'; cx.fillText('0', CW - 2, py(0) - 3);
+    cx.strokeStyle = GREEN; cx.lineWidth = 2; cx.beginPath();
+    TOTAL.forEach((v, i) => i ? cx.lineTo(px(i), py(v)) : cx.moveTo(px(i), py(v))); cx.stroke();
+    // the light: one dot replaying the run, a glow behind it
+    if (!still) {
+      const k = (t / 6000) % 1, i = k * (TOTAL.length - 1), a = Math.floor(i), b = Math.min(a + 1, TOTAL.length - 1), f = i - a;
+      const x = px(a) + (px(b) - px(a)) * f, y = py(TOTAL[a]) + (py(TOTAL[b]) - py(TOTAL[a])) * f;
+      const g = cx.createRadialGradient(x, y, 0, x, y, 26); g.addColorStop(0, 'rgba(0,255,133,.55)'); g.addColorStop(1, 'rgba(0,255,133,0)');
+      cx.fillStyle = g; cx.fillRect(x - 26, y - 26, 52, 52);
+      cx.fillStyle = WHITE; cx.fillRect(x - 3, y - 3, 6, 6);
+    }
+    const last = TOTAL.length - 1; cx.fillStyle = GREEN; cx.fillRect(px(last) - 3, py(TOTAL[last]) - 3, 6, 6);
+    cx.fillStyle = GRAPHITE; cx.textAlign = 'left'; cx.fillText('11 SEP', 4, CH - 2); cx.textAlign = 'right'; cx.fillText('18 SEP', CW - 2, CH - 2);
+  }
+
+  // ---- the invite chain: links lighting up one after another
+  const ch = document.getElementById('chain'), hx = ch.getContext('2d');
+  function drawChain(t) {
+    hx.clearRect(0, 0, 472, 46);
+    const n = 9, w = 40, gap = 12, y = 23;
+    for (let i = 0; i < n; i++) {
+      const x = 4 + i * (w + gap);
+      const lit = still ? (i < 4) : (((t / 700) % (n + 3)) > i);
+      hx.strokeStyle = lit ? GREEN : LINE; hx.lineWidth = 2; hx.strokeRect(x, y - 10, w, 20);
+      if (i < n - 1) { hx.strokeStyle = lit ? GREEN : LINE; hx.beginPath(); hx.moveTo(x + w, y); hx.lineTo(x + w + gap, y); hx.stroke(); }
+      hx.fillStyle = lit ? GREEN : CARBON; hx.font = 'bold 10px "JetBrains Mono", monospace'; hx.textAlign = 'center';
+      hx.fillText(i === 0 ? 'YOU' : '+7D', x + w / 2, y + 4);
+    }
+  }
+
+  // ---- the flywheel: bots pay, tokens burn, a pulse going round
+  const wc = document.getElementById('wheel'), wx = wc.getContext('2d');
+  const STEPS = ['BOTS READ', 'BOTS PAY', 'TOKENS BURN', 'SUPPLY ↓', 'PRO GROWS'];
+  function drawWheel(t) {
+    wx.clearRect(0, 0, 300, 180);
+    const cxp = 150, cyp = 92, r = 60;
+    wx.strokeStyle = LINE; wx.lineWidth = 2; wx.beginPath(); wx.arc(cxp, cyp, r, 0, Math.PI * 2); wx.stroke();
+    STEPS.forEach((s, i) => {
+      const a = -Math.PI / 2 + (i / STEPS.length) * Math.PI * 2;
+      const x = cxp + Math.cos(a) * r, y = cyp + Math.sin(a) * r;
+      wx.fillStyle = i === 2 ? CRIMSON : WHITE; wx.fillRect(x - 4, y - 4, 8, 8);
+      wx.fillStyle = i === 2 ? CRIMSON : GRAPHITE; wx.font = 'bold 10px "JetBrains Mono", monospace';
+      wx.textAlign = x < cxp - 10 ? 'right' : x > cxp + 10 ? 'left' : 'center';
+      const lx = cxp + Math.cos(a) * (r + 14), ly = cyp + Math.sin(a) * (r + 14) + 4;
+      wx.fillText(s, lx, ly);
+    });
+    const k = still ? 0.62 : (t / 4000) % 1;
+    const a = -Math.PI / 2 + k * Math.PI * 2, x = cxp + Math.cos(a) * r, y = cyp + Math.sin(a) * r;
+    wx.strokeStyle = GREEN; wx.lineWidth = 3; wx.beginPath(); wx.arc(cxp, cyp, r, a - 0.9, a); wx.stroke();
+    const g = wx.createRadialGradient(x, y, 0, x, y, 22); g.addColorStop(0, 'rgba(0,255,133,.6)'); g.addColorStop(1, 'rgba(0,255,133,0)');
+    wx.fillStyle = g; wx.fillRect(x - 22, y - 22, 44, 44); wx.fillStyle = WHITE; wx.fillRect(x - 3, y - 3, 6, 6);
+    wx.fillStyle = GREEN; wx.font = 'bold 20px "Space Grotesk", sans-serif'; wx.textAlign = 'center'; wx.fillText('$FOMOBRAIN', cxp, cyp - 2);
+    wx.fillStyle = GRAPHITE; wx.font = 'bold 9px "JetBrains Mono", monospace'; wx.fillText('THE FLYWHEEL, ONE STEP MORE', cxp, cyp + 16);
+  }
+
+  // ---- the board's light: a slow scan across everything, and the tape moving
+  const art = document.getElementById('art'), ax = art.getContext('2d');
+  art.width = 1600; art.height = 900;
+  function drawArt(t) {
+    ax.clearRect(0, 0, 1600, 900);
+    if (still) return;
+    const x = ((t / 9000) % 1) * 1700 - 50;
+    const g = ax.createLinearGradient(x - 90, 0, x + 90, 0);
+    g.addColorStop(0, 'rgba(0,255,133,0)'); g.addColorStop(0.5, 'rgba(0,255,133,.07)'); g.addColorStop(1, 'rgba(0,255,133,0)');
+    ax.fillStyle = g; ax.fillRect(x - 90, 14, 180, 872);
+  }
+  let t0 = null;
+  function frame(ts) {
+    if (t0 === null) t0 = ts; const t = ts - t0;
+    drawArt(t); drawCurve(t); drawChain(t); drawWheel(t);
+    if (!still) {
+      const shift = (t / 2500) % FILLS.length;
+      rows.forEach((d, i) => { const pos = ((i - shift) % FILLS.length + FILLS.length) % FILLS.length; d.style.top = (pos * 25) + 'px'; d.style.opacity = pos < 0.3 ? String(pos / 0.3) : '1'; });
+      requestAnimationFrame(frame);
+    }
+  }
+  requestAnimationFrame(frame);
+
+  const board = document.getElementById('board');
+  const fit = () => { const k = Math.min(innerWidth / 1600, innerHeight / 900); board.style.transform = `scale(${k})`; };
+  addEventListener('resize', fit); fit();
+})();
+</script>
+</body>
+</html>
