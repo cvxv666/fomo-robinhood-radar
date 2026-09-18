@@ -163,6 +163,25 @@ export async function get<T>(path: string): Promise<T | null> {
   return (await p) as T | null;
 }
 
+export type RecordRow = {
+  id: number; ts: number; kind: 'burst' | 'launch'; mint: string; sym: string; px: number | null;
+  wallets: number | null; conviction: number | null; heat: number | null; liq: number | null; chats: number;
+  followup_at: number | null; best: number | null; peak_min: number | null; hour: number | null;
+  vol_usd: number | null; now: number | null; seeded: boolean; unsellable: boolean;
+  verdict: 'honeypot' | 'seeded' | 'open' | 'unmeasured' | 'dead' | '2x' | 'above' | 'below'; paper: number | null;
+};
+export type Record = {
+  days: number; kind: string; stake: number; followup_min: number;
+  totals: { pushes: number; bursts: number; launches: number; measured: number; clean: number; above_entry: number;
+            reached_2x: number; median_best: number | null; seeded: number; dead: number; honeypot: number;
+            paper: { stake: number; trades: number; staked: number; pnl: number; wins: number; win_rate: number | null;
+                     best: number | null; worst: number | null } };
+  curve: { ts: number; sym: string; mint: string; kind: string; pnl: number; total: number }[];
+  pushes: RecordRow[];
+};
+export const getRecord = (days = 30, kind: 'burst' | 'launch' | null = null) =>
+  get<Record>(`/api/record?days=${days}${kind ? `&kind=${kind}` : ''}`);
+
 export const getStats = () => get<Stats>('/api/stats');
 export const getSignals = (hours = 24, limit = 40) =>
   get<{ hours: number; count: number; signals: Signal[] }>(`/api/signals?hours=${hours}&limit=${limit}`);

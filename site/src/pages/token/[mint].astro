@@ -5,6 +5,7 @@ import Search from '../../components/Search.astro';
 import Ident from '../../components/Ident.astro';
 import Chart from '../../components/Chart.astro';
 import { getToken, getChart, usd, ago, amount, multiple } from '../../lib/api';
+import { fomoToken } from '../../lib/links';
 
 const { mint } = Astro.params;
 const t = mint ? await getToken(mint) : null;
@@ -45,7 +46,13 @@ const desc = t.is_quote
     {!t.is_quote && hasFlow && !t.seeded?.seeded && <span class="badge follow">conviction {conv.toFixed(1)}</span>}
     {!t.is_quote && !hasFlow && !hasBook && <span class="badge tag">untracked</span>}
   </div>
-  <p class="addr" style="margin-bottom:20px">{t.mint}</p>
+  <p class="addr" style="margin-bottom:12px">{t.mint}</p>
+  {!t.is_quote && (
+    <p class="trade" style="margin-bottom:20px">
+      <a class="btn go" href={fomoToken(t.mint, t.chain ?? 'robinhood')} rel="noopener">Buy on fomo →</a>
+      <span class="hint">opens the token on fomo.family</span>
+    </p>
+  )}
 
   {t.sellable === 0 && (
     <p class="note flagged">

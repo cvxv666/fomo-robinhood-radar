@@ -1,0 +1,113 @@
+---
+import Base from '../layouts/Base.astro';
+import Search from '../components/Search.astro';
+import { getRecord } from '../lib/api';
+
+const days = [7, 30, 90].includes(Number(Astro.url.searchParams.get('days'))) ? Number(Astro.url.searchParams.get('days')) : 30;
+const rep = await getRecord(days, null);
+const p = rep?.totals.paper;
+const curve = rep?.curve ?? [];
+const money = (v: number) => `${v >= 0 ? '+' : '−'}$${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+const when = (ts: number) => new Date(ts * 1000).toISOString().slice(5, 16).replace('T', ' ');
+// the equity curve as one polyline: x by trade, y by running total, zero drawn
+const W = 1000, H = 260, PAD = 8;
+const totals = curve.map((c) => c.total);
+const lo = Math.min(0, ...totals), hi = Math.max(0, ...totals);
+const sy = (v: number) => (hi === lo ? H / 2 : PAD + ((hi - v) / (hi - lo)) * (H - 2 * PAD));
+const sx = (i: number) => (curve.length <= 1 ? W / 2 : PAD + (i / (curve.length - 1)) * (W - 2 * PAD));
+const path = curve.map((c, i) => `${i ? 'L' : 'M'}${sx(i).toFixed(1)},${sy(c.total).toFixed(1)}`).join(' ');
+const last = curve.at(-1);
+---
+<Base
+  title="Paper — $100 into every alert, out at the hour read"
+  description="The paper run of the FOMO Robinhood Radar bot: a hundred dollars into every burst and launch at the entry price, out at the hour-later read the chats received. The running total, the win rate, the best and the worst, trade by trade."
+  section="record"
+>
+  <div class="pagehead">
+    <h1 style="font-size:clamp(28px,5vw,44px)">Paper</h1>
+    <span class="badge">{p?.trades ?? 0} trades · {days} days</span>
+  </div>
+  <p class="verdict" style="margin-bottom:20px">
+    A hundred dollars into <b>every</b> alert at the entry, out at the {rep?.followup_min ?? 60}-minute read the chats
+    got — the seeded ones and the dead ones included, because those alerts went out too. Not a strategy: the hour
+    is simply where the follow-up looks. It is the number anyone can check against the messages in their own chat.
+  </p>
+
+  <nav class="filters mono">
+    {[7, 30, 90].map((d) => <a href={`/paper?days=${d}`} aria-current={d === days ? 'page' : undefined}>{d}d</a>)}
+    <span class="sep">·</span>
+    <a href={`/record?days=${days}`}>the record →</a>
+  </nav>
+
+  {!rep && <p class="empty">The data service is not answering.</p>}
+
+  {p && (
+    <dl class="strip">
+      <div><dt>Result</dt><dd class={p.pnl >= 0 ? 'g' : 'c'}>{money(p.pnl)}<small>on ${p.staked.toLocaleString('en-US')} staked · {p.staked ? `${(100 * p.pnl / p.staked).toFixed(0)}%` : '—'}</small></dd></div>
+      <div><dt>Trades</dt><dd>{p.trades}</dd></div>
+      <div><dt>Won</dt><dd class="g">{p.wins}<small>{p.win_rate === null ? '—' : `${Math.round(100 * p.win_rate)}%`}</small></dd></div>
+      <div><dt>Best</dt><dd class="g">{p.best === null ? '—' : money(p.best)}</dd></div>
+      <div><dt>Worst</dt><dd class="c">{p.worst === null ? '—' : money(p.worst)}</dd></div>
+    </dl>
+  )}
+
+  {curve.length > 1 && (
+    <figure class="curve">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="running paper total, trade by trade">
+        <line x1="0" x2={W} y1={sy(0)} y2={sy(0)} class="zero" />
+        <path d={path} class={last && last.total >= 0 ? 'up' : 'down'} />
+        {last && <circle cx={sx(curve.length - 1)} cy={sy(last.total)} r="4" class={last.total >= 0 ? 'up' : 'down'} />}
+      </svg>
+      <figcaption class="mono">running total after each closed trade · zero line · {curve.length} trades</figcaption>
+    </figure>
+  )}
+
+  {curve.length > 0 && (
+    <div class="tablewrap">
+      <table class="rec mono">
+        <thead><tr><th>#</th><th>when · utc</th><th>token</th><th class="r">trade</th><th class="r">running</th></tr></thead>
+        <tbody>
+          {[...curve].reverse().map((c, i) => (
+            <tr>
+              <td class="m">{curve.length - i}</td>
+              <td class="m">{when(c.ts)}</td>
+              <td><span class={`k ${c.kind}`}>{c.kind === 'burst' ? '▲' : '◆'}</span><a class="tk" href={`/token/${c.mint}`}>${c.sym}</a></td>
+              <td class={`r ${c.pnl >= 0 ? 'g' : 'c'}`}>{money(c.pnl)}</td>
+              <td class={`r ${c.total >= 0 ? 'g' : 'c'}`}>{money(c.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  {rep && curve.length === 0 && <p class="empty">No closed alerts in this window yet.</p>}
+
+  <div style="margin-top:var(--section)"><Search /></div>
+</Base>
+
+<style>
+  .filters { display: flex; gap: 14px; align-items: center; font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 18px; }
+  .filters a { color: var(--graphite); text-decoration: none; }
+  .filters a[aria-current='page'] { color: #fff; border-bottom: 1px solid var(--green); }
+  .filters .sep { color: var(--carbon); }
+  .strip dd small { display: block; font-size: 11px; color: var(--graphite); font-weight: 400; margin-top: 2px; }
+  .curve { margin: 22px 0 0; }
+  .curve svg { width: 100%; height: 200px; display: block; border: 1px solid var(--carbon); background: #000; }
+  .curve .zero { stroke: var(--carbon); stroke-width: 1; }
+  .curve path { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .curve path.up, .curve circle.up { stroke: var(--green); fill: none; }
+  .curve circle.up { fill: var(--green); }
+  .curve path.down, .curve circle.down { stroke: var(--crimson); }
+  .curve circle.down { fill: var(--crimson); }
+  .curve figcaption { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--graphite); margin-top: 8px; }
+  .tablewrap { overflow-x: auto; margin-top: 18px; }
+  .rec { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .rec th, .rec td { padding: 9px 10px; border-bottom: 1px solid var(--carbon); text-align: left; white-space: nowrap; }
+  .rec th { font-weight: 400; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--graphite); }
+  .rec .r { text-align: right; }
+  .rec .tk { color: #fff; text-decoration: none; font-weight: 700; }
+  .rec .tk:hover { color: var(--amber); }
+  .rec .k { display: inline-block; width: 16px; color: var(--graphite); }
+  .rec .k.burst { color: var(--green); }
+</style>

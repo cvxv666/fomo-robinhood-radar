@@ -4,6 +4,8 @@
  * under the token block on the home page, so the two things a visitor can take away - the
  * address and the alerts - are next to each other, above the data.
  */
+import { fomoHome } from '../lib/links';
+
 const bot = (import.meta.env.PUBLIC_TELEGRAM_BOT ?? 'fomoradarRH_bot').trim().replace(/^@/, '');
 const link = `https://t.me/${bot}`;
 ---
@@ -25,6 +27,7 @@ const link = `https://t.me/${bot}`;
       <li><b>/top</b> the leaderboard, by judgement — free, always</li>
       <li><b>/pro</b> the alerts and the live feeds, $20 in $FOMOBRAIN, burned</li>
     </ul>
+    <p class="join">Every alert carries a buy link. Not on fomo yet? <a href={fomoHome()} rel="noopener">Join fomo.family →</a></p>
   </div>
 </section>
 
@@ -65,6 +68,8 @@ const link = `https://t.me/${bot}`;
     color: #949494; border-top: 1px solid #2a2a2a; padding-top: 7px;
   }
   .what b { color: #ffffff; font-weight: 500; display: inline-block; min-width: 56px; }
+  .join { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; color: #949494; margin: 4px 0 0; }
+  .join a { color: #00ff85; }
   @media (max-width: 900px) {
     .bot { grid-template-columns: 1fr; padding: 22px 18px; gap: 20px; }
   }

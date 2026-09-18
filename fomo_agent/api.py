@@ -23,7 +23,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
-from . import db
+from . import db, links
 from .config import settings
 from .pipeline import analyze, keys, pro
 from .sources.rpc import QUOTE_TOKENS
@@ -335,6 +335,21 @@ def candles_for(pool: str, chain_name: str, span: str) -> list[list[float]]:
 
 # ---------------------------------------------------------------- routes
 
+@app.get("/api/record", tags=["signals"])
+def record_route(
+    days: int = Query(30, ge=1, le=120),
+    kind: str | None = Query(None, pattern="^(burst|launch)$"),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict:
+    """Every alert the bot sent in the window and what came of each: entry, the hour's peak and
+    when, where it sits now, what traded, a verdict - and the paper run those rows make, a
+    hundred dollars into every alert at the entry and out at the hour read. The record is what
+    the messages in a subscriber's chat add up to; nothing here is recomputed to look better."""
+    from .pipeline import record
+
+    return record.report(conn, days=days, kind=kind)
+
+
 @app.get("/api/pro", tags=["meta"])
 def pro_terms(conn: sqlite3.Connection = Depends(get_conn)) -> dict:
     """What PRO costs and where it is paid: the terms the /pro page shows before there is a quote."""
@@ -585,6 +600,7 @@ def token(
             a = analyze.analyze_token(conn, mint, hours)
     a["tracked"] = bool(a["holders"] or a["flow"])
     a["is_quote"] = a["mint"] in QUOTE_TOKENS
+    a["links"] = links.token_links(a["mint"], a.get("chain") or "robinhood")
     return a
 
 

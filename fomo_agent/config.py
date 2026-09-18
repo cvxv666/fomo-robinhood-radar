@@ -236,6 +236,12 @@ class Settings:
     # Where the site answers. The bot links tokens to it, and Astro bakes the same value into
     # every canonical and og:url at build time, so the two cannot disagree.
     public_site_url: str = field(default_factory=lambda: _env("PUBLIC_SITE_URL", "").rstrip("/"))
+    # Every link to fomo.family carries the radar's referral: the token page a push points at, the
+    # profile a trader page points at, the home link in the help. FOMO_REF_CODE is the code, the
+    # param is how fomo reads it, FOMO_REF_URL is the plain invite link (derived when empty).
+    fomo_ref_code: str = field(default_factory=lambda: _env("FOMO_REF_CODE", "").strip())
+    fomo_ref_param: str = field(default_factory=lambda: _env("FOMO_REF_PARAM", "ref").strip())
+    fomo_ref_url: str = field(default_factory=lambda: _env("FOMO_REF_URL", "").strip())
     api_cors_origins: tuple[str, ...] = field(default_factory=lambda: tuple(
         o.strip() for o in _env("API_CORS_ORIGINS", "").split(",") if o.strip()))
 

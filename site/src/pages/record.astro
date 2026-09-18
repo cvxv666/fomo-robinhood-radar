@@ -1,0 +1,124 @@
+---
+import Base from '../layouts/Base.astro';
+import Search from '../components/Search.astro';
+import { getRecord, usd, type RecordRow } from '../lib/api';
+
+const days = [7, 30, 90].includes(Number(Astro.url.searchParams.get('days'))) ? Number(Astro.url.searchParams.get('days')) : 30;
+const kindParam = Astro.url.searchParams.get('kind');
+const kind = kindParam === 'burst' || kindParam === 'launch' ? kindParam : null;
+const rep = await getRecord(days, kind);
+const t = rep?.totals;
+const pct = (a: number, b: number) => (b ? `${Math.round((100 * a) / b)}%` : '—');
+const x = (v: number | null) => (v === null ? '—' : `${v.toFixed(2)}×`);
+const tone = (v: number | null) => (v === null ? 'm' : v >= 2 ? 'g' : v < 1 ? 'c' : '');
+const when = (ts: number) => new Date(ts * 1000).toISOString().slice(5, 16).replace('T', ' ');
+const badge = (r: RecordRow) =>
+  r.verdict === '2x' ? ['g', 'reached 2×'] : r.verdict === 'above' ? ['', 'above entry'] : r.verdict === 'below' ? ['c', 'never above']
+  : r.verdict === 'dead' ? ['m', 'dead pool'] : r.verdict === 'seeded' ? ['flag', 'seeded'] : r.verdict === 'honeypot' ? ['flag', 'honeypot']
+  : r.verdict === 'open' ? ['amber', 'open'] : ['m', 'unmeasured'];
+const money = (v: number) => `${v >= 0 ? '+' : '−'}$${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+const qs = (d: number, k: string | null) => `/record?days=${d}${k ? `&kind=${k}` : ''}`;
+---
+<Base
+  title="The record — every alert the bot sent, and what came of it"
+  description="Every burst and launch the FOMO Robinhood Radar bot pushed to Telegram, with the entry price, the hour's peak and when it came, where the price sits now, what traded, and a verdict. Seeded and unsellable tokens stay on the list with that word on them."
+  section="record"
+>
+  <div class="pagehead">
+    <h1 style="font-size:clamp(28px,5vw,44px)">The record</h1>
+    <span class="badge">{t?.pushes ?? 0} alerts · {days} days</span>
+  </div>
+  <p class="verdict" style="margin-bottom:20px">
+    Every alert the bot sent, as the chats received it. The <b>entry</b> is the last trusted fill before the
+    message; the <b>peak</b> is the pool's own candles inside the hour after it, the same read the chats got
+    {rep?.followup_min ?? 60} minutes later; <b>now</b> is the stored quote against the entry. A token later
+    found to be seeded or unsellable stays on the list with that word on it, because the alert did go out.
+  </p>
+
+  <nav class="filters mono">
+    {[7, 30, 90].map((d) => <a href={qs(d, kind)} aria-current={d === days ? 'page' : undefined}>{d}d</a>)}
+    <span class="sep">·</span>
+    <a href={qs(days, null)} aria-current={kind === null ? 'page' : undefined}>all</a>
+    <a href={qs(days, 'burst')} aria-current={kind === 'burst' ? 'page' : undefined}>bursts</a>
+    <a href={qs(days, 'launch')} aria-current={kind === 'launch' ? 'page' : undefined}>launches</a>
+  </nav>
+
+  {!rep && <p class="empty">The data service is not answering.</p>}
+
+  {t && (
+    <dl class="strip">
+      <div><dt>Alerts</dt><dd>{t.pushes}</dd></div>
+      <div><dt>Traded above entry</dt><dd class="g">{t.clean ? `${t.above_entry} of ${t.clean}` : '—'}<small>{pct(t.above_entry, t.clean)}</small></dd></div>
+      <div><dt>Reached 2×</dt><dd>{t.clean ? `${t.reached_2x} of ${t.clean}` : '—'}<small>{pct(t.reached_2x, t.clean)}</small></dd></div>
+      <div><dt>Median peak</dt><dd>{x(t.median_best)}</dd></div>
+      <div><dt>Seeded · dead</dt><dd class="c">{t.seeded} · {t.dead}</dd></div>
+      <div><dt>Paper, ${t.paper.stake} each</dt><dd class={t.paper.pnl >= 0 ? 'g' : 'c'}><a href="/paper">{money(t.paper.pnl)}</a><small>{t.paper.trades} trades</small></dd></div>
+    </dl>
+  )}
+
+  {rep && rep.pushes.length > 0 && (
+    <div class="tablewrap">
+      <table class="rec mono">
+        <thead>
+          <tr>
+            <th>when · utc</th><th>token</th><th>chats</th><th class="r">entry</th>
+            <th class="r">peak</th><th class="r">at</th><th class="r">hour</th><th class="r">now</th><th class="r">traded</th><th>verdict</th><th class="r">paper</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rep.pushes.map((r) => {
+            const [cls, label] = badge(r);
+            return (
+              <tr class={r.verdict === 'seeded' || r.verdict === 'honeypot' ? 'seeded' : ''}>
+                <td class="m">{when(r.ts)}</td>
+                <td><span class={`k ${r.kind}`}>{r.kind === 'burst' ? '▲' : '◆'}</span><a class="tk" href={`/token/${r.mint}`}>${r.sym}</a></td>
+                <td class="m">{r.chats}</td>
+                <td class="r m">{r.px === null ? '—' : r.px < 0.001 ? r.px.toExponential(2) : r.px.toPrecision(3)}</td>
+                <td class={`r ${tone(r.best)}`}>{x(r.best)}</td>
+                <td class="r m">{r.peak_min === null ? '—' : `+${r.peak_min}m`}</td>
+                <td class={`r ${tone(r.hour)}`}>{x(r.hour)}</td>
+                <td class={`r ${tone(r.now)}`}>{x(r.now)}</td>
+                <td class="r m">{r.vol_usd ? usd(r.vol_usd) : '—'}</td>
+                <td><span class={`badge ${cls}`}>{label}</span></td>
+                <td class={`r ${r.paper === null ? 'm' : r.paper >= 0 ? 'g' : 'c'}`}>{r.paper === null ? '—' : money(r.paper)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  {rep && rep.pushes.length === 0 && <p class="empty">No alerts in this window.</p>}
+
+  <p class="note" style="margin-top:var(--section)">
+    <b>How to read it.</b> "Traded above entry" counts alerts whose pool printed a higher price than the
+    entry at any point in the hour after the message — the value of an alert is in the best price, not
+    in holding to the close. <b>Seeded</b> means the "cohort" was fills pushed into trusted wallets by
+    somebody else (the token page says how); <b>dead pool</b> means nobody traded it after the alert.
+    Both went out, so both are on the list and both count against us in the paper run.
+  </p>
+
+  <div style="margin-top:var(--section)"><Search /></div>
+</Base>
+
+<style>
+  .filters { display: flex; gap: 14px; align-items: center; font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 18px; }
+  .filters a { color: var(--graphite); text-decoration: none; }
+  .filters a[aria-current='page'] { color: #fff; border-bottom: 1px solid var(--green); }
+  .filters .sep { color: var(--carbon); }
+  .strip dd small { display: block; font-size: 11px; color: var(--graphite); font-weight: 400; margin-top: 2px; }
+  .strip dd a { color: inherit; text-decoration: none; }
+  .tablewrap { overflow-x: auto; margin-top: 18px; }
+  .rec { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .rec th, .rec td { padding: 9px 10px; border-bottom: 1px solid var(--carbon); text-align: left; white-space: nowrap; }
+  .rec th { font-weight: 400; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--graphite); }
+  .rec .r { text-align: right; }
+  .rec tr.seeded td { color: var(--carbon); }
+  .rec tr.seeded td .badge { color: var(--crimson); }
+  .rec .tk { color: #fff; text-decoration: none; font-weight: 700; }
+  .rec .tk:hover { color: var(--amber); }
+  .rec .k { display: inline-block; width: 16px; color: var(--graphite); }
+  .rec .k.burst { color: var(--green); }
+  .badge.amber { color: var(--amber); }
+</style>

@@ -1,5 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
+import { fomoProfile } from '../../lib/links';
 import Search from '../../components/Search.astro';
 import Meter from '../../components/Meter.astro';
 import { getTrader, usd, ago, amount, pct, multiple, stateLabel, verdictClass, verdictLabel } from '../../lib/api';
@@ -34,6 +35,7 @@ const winners = closed.filter((p) => (p.realized ?? 0) > 0).length;
       </div>
       {t.summary && <p class="verdict">{t.summary}</p>}
       <p class="addr">{t.address}</p>
+      {t.handle && <p class="trade"><a class="btn" href={fomoProfile(t.handle)} rel="noopener">Profile on fomo →</a></p>}
     </div>
   </div>
 

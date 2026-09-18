@@ -7,7 +7,7 @@ interface Props {
   title: string;
   description: string;
   /** Which nav item is current */
-  section?: 'signals' | 'fresh' | 'exits' | 'leaderboard' | 'about' | 'pro' | null;
+  section?: 'signals' | 'bursts' | 'fresh' | 'exits' | 'leaderboard' | 'record' | 'about' | 'pro' | null;
   /** Keep this page out of search results (thin or address-specific pages) */
   noindex?: boolean;
 }
@@ -69,6 +69,7 @@ const repo = import.meta.env.PUBLIC_REPO_URL ?? '';
         <a href="/fresh" aria-current={section === 'fresh' ? 'page' : undefined}>fresh</a>
         <a href="/exits" aria-current={section === 'exits' ? 'page' : undefined}>exits</a>
         <a href="/leaderboard" aria-current={section === 'leaderboard' ? 'page' : undefined}>leaderboard</a>
+        <a href="/record" aria-current={section === 'record' ? 'page' : undefined}>record</a>
         <a href="/about" aria-current={section === 'about' ? 'page' : undefined}>about</a>
         <a href="/pro" aria-current={section === 'pro' ? 'page' : undefined}>pro</a>
       </nav>
@@ -85,6 +86,7 @@ const repo = import.meta.env.PUBLIC_REPO_URL ?? '';
     <footer class="foot">
       <span>FOMO Robinhood Radar · research, not financial advice</span>
       <span>Robinhood Chain · 4663</span>
+      <a href={fomoHome()} rel="noopener">trade on fomo.family</a>
       <a href="/docs">API</a>
       {repo && <a href={repo}>source</a>}
     </footer>

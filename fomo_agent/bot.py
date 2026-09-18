@@ -22,6 +22,7 @@ import time
 import httpx
 
 from . import db
+from . import links as links_
 from .config import settings
 from .pipeline import analyze, pro, pushes
 
@@ -180,10 +181,10 @@ def token_link(mint: str | None, label: str) -> str:
 
 
 def token_lines(mint: str) -> list[str]:
-    """The contract, tappable to copy, and the two places worth opening it in."""
-    links = [f'<a href="https://fomo.family/tokens/robinhood/{esc(mint)}">fomo</a>']
+    """The contract, tappable to copy, and the two places worth opening it in - the buy first."""
+    links = [f'<a href="{esc(links_.fomo_token(mint))}">buy on fomo</a>']
     if settings.public_site_url:
-        links.insert(0, f'<a href="{settings.public_site_url}/token/{esc(mint)}">breakdown</a>')
+        links.append(f'<a href="{esc(links_.site_token(mint))}">breakdown</a>')
     return [f"<code>{esc(mint)}</code>", " · ".join(links) + f" · /token_{esc(mint)}"]
 
 
@@ -398,8 +399,8 @@ def fmt_launch(t: dict, now: int | None = None) -> str:
     out.append(who_line(t.get("who"), t.get("scores")))
     if clone_line(t, now):
         out.append(clone_line(t, now))
-    out.append(f"\n<code>{esc(t['mint'])}</code>")
-    out.append(f"/token_{esc(t['mint'])}")
+    out.append("")
+    out.extend(token_lines(t["mint"]))
     return "\n".join(out)
 
 
@@ -524,9 +525,12 @@ HELP = """<b>FOMO ROBINHOOD RADAR</b>
 /fresh — launches they are entering early
 /exits — where they are getting out
 /top — the leaderboard, ranked by judgement
+/record — every alert sent and what came of it · /paper — the paper run
 
 <b>Alerts</b> are on for this chat: bursts the moment they form, launches while they are still
 early, and one digest a day. /stop turns them off, /start turns them back on.
+
+Every alert carries a <b>buy on fomo</b> link. Not on fomo.family yet? {fomo}
 
 Research, not financial advice."""
 
@@ -537,12 +541,15 @@ HELP_PRO = """<b>FOMO ROBINHOOD RADAR</b>
 · a token address → who holds it, at what cost, and what they said
 · a trader's handle → the verdict and their open book
 
-<b>Free:</b> /top — the leaderboard, ranked by judgement — and one digest a day.
+<b>Free:</b> /top — the leaderboard, ranked by judgement — one digest a day, /record — every alert
+sent and what came of it, /paper — the paper run.
 
 <b>PRO — the alerts and the live feeds:</b>
 · a <b>burst</b> the moment it forms, a <b>launch</b> while it is still early
 · /hot /signals /fresh /exits whenever you ask
 /pro — {days} days for ${usd}, paid in ${symbol} and burned. {state}
+
+Every alert carries a <b>buy on fomo</b> link. Not on fomo.family yet? {fomo}
 
 Research, not financial advice."""
 
@@ -551,7 +558,7 @@ def help_text(conn, chat_id, now: int | None = None) -> str:
     """The help, with the PRO line in it once there is a gate: what is free, what is not, and
     where this chat stands."""
     if not pro.enabled():
-        return HELP
+        return HELP.format(fomo=links_.fomo_home())
     now = now or db.now()
     end = pro.paid_until(conn, chat_id)
     if end and end > now:
@@ -560,7 +567,7 @@ def help_text(conn, chat_id, now: int | None = None) -> str:
         state = f"This chat: free until {pro._date(settings.pro_grace_until)}, then /pro."
     else:
         state = "This chat: free tier."
-    return HELP_PRO.format(days=settings.pro_days, usd=f"{settings.pro_price_usd:g}",
+    return HELP_PRO.format(fomo=links_.fomo_home(), days=settings.pro_days, usd=f"{settings.pro_price_usd:g}",
                            symbol=settings.pro_token_symbol, state=state)
 
 
@@ -610,6 +617,8 @@ COMMANDS = [
     ("fresh", "launches the cohort is entering early"),
     ("exits", "where the cohort is getting out"),
     ("top", "the leaderboard, by judgement"),
+    ("record", "every alert sent and what came of it"),
+    ("paper", "$100 into every alert, out at the hour read"),
     ("pro", "the alerts and the live feeds, paid in the token"),
     ("apikey", "a PRO key for the API: 600 requests a minute"),
     ("stop", "stop the alerts"),
@@ -765,6 +774,52 @@ def fmt_followup(row, m: dict) -> str:
     ]) + ("\n(from the tape only)" if m.get("witness") == "tape" else "")
 
 
+def fmt_record(rep: dict) -> str:
+    """The record, in a message: the totals, then the last ten alerts with their verdicts."""
+    t = rep["totals"]
+    x = lambda v: "\u2014" if v is None else f"\u00d7{v:.2f}"  # noqa: E731
+    head = [f"<b>THE RECORD</b> \u00b7 last {rep['days']} days", ""]
+    if not t["pushes"]:
+        return head[0] + "\n\nNo alerts in the window."
+    head.append(rows([
+        ("alerts", f"{t['pushes']} ({t['bursts']} bursts, {t['launches']} launches)"),
+        ("measured", f"{t['clean']}" + (f" + {t['seeded']} seeded" if t["seeded"] else "") + (f" + {t['dead']} dead" if t["dead"] else "") + (f" + {t['honeypot']} honeypot" if t["honeypot"] else "")),
+        ("above entry", f"{t['above_entry']} of {t['clean']}" + (f" ({100 * t['above_entry'] // t['clean']}%)" if t["clean"] else "")),
+        ("reached \u00d72", f"{t['reached_2x']} of {t['clean']}"),
+        ("median peak", x(t["median_best"])),
+        ("paper", f"{'+' if t['paper']['pnl'] >= 0 else '-'}${abs(t['paper']['pnl']):,.0f} on ${t['paper']['staked']:,.0f}"),
+    ]))
+    head.append("")
+    marks = {"burst": "\u25b2", "launch": "\u25c6"}
+    for r in rep["pushes"][:10]:
+        peak = x(r["best"]) + (f" +{r['peak_min']}m" if r.get("peak_min") is not None else "")
+        head.append(f"{marks[r['kind']]} {token_link(r['mint'], r['sym'])} \u00b7 {pushes.fmt_time(r['ts'])} \u00b7 peak {peak} \u00b7 now {x(r['now'])} \u00b7 <i>{r['verdict']}</i>")
+    if len(rep["pushes"]) > 10:
+        head.append(f"\u2026 and {len(rep['pushes']) - 10} more" + (f" \u2014 {settings.public_site_url}/record" if settings.public_site_url else ""))
+    return "\n".join(head)
+
+
+def fmt_paper(rep: dict) -> str:
+    """The paper run: a hundred dollars into every alert at the entry, out at the hour read."""
+    p = rep["totals"]["paper"]
+    if not p["trades"]:
+        return f"<b>PAPER</b> \u00b7 last {rep['days']} days\n\nNo closed alerts in the window yet."
+    minus = "\u2212"
+    sign = lambda v: f"{'+' if v >= 0 else minus}${abs(v):,.0f}"  # noqa: E731
+    out = [f"<b>PAPER</b> \u00b7 ${p['stake']:.0f} into every alert at the entry, out at the {rep['followup_min']}-minute read \u00b7 last {rep['days']} days", ""]
+    out.append(rows([
+        ("result", f"{sign(p['pnl'])} on ${p['staked']:,.0f} ({100 * p['pnl'] / p['staked']:+.0f}%)"),
+        ("trades", f"{p['trades']} \u00b7 {p['wins']} won ({100 * (p['win_rate'] or 0):.0f}%)"),
+        ("best", sign(p["best"])),
+        ("worst", sign(p["worst"])),
+    ]))
+    out.append("")
+    for c in rep["curve"][-6:][::-1]:
+        out.append(f"{sign(c['pnl'])} {token_link(c['mint'], c['sym'])} \u00b7 {pushes.fmt_time(c['ts'])} \u00b7 running {sign(c['total'])}")
+    out.append("\nNot a strategy: the hour is where the follow-up looks. The record is what your own chat says." + (f" {settings.public_site_url}/paper" if settings.public_site_url else ""))
+    return "\n".join(out)
+
+
 def followups(conn, tg: Telegram, now: int | None = None) -> int:
     """Every push whose hour is up: measure, tell the chats that got it, close the row."""
     now = now or db.now()
@@ -875,7 +930,7 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
     """Route one message to its answer. Pure enough to test without a network."""
     text = (text or "").strip()
     if not text:
-        return HELP
+        return help_text(conn, chat_id)
     parts = text.split()
     cmd, args = parts[0].lower().split("@")[0], parts[1:]
 
@@ -931,6 +986,12 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
         from .pipeline.health import report
 
         return fmt_health(report(conn))
+    if cmd in ("/record", "/paper"):
+        from .pipeline import record as record_
+
+        days = int(args[0]) if args and args[0].isdigit() else 7
+        rep = record_.report(conn, days=min(days, 120))
+        return fmt_paper(rep) if cmd == "/paper" else fmt_record(rep)
     if cmd == "/signals":
         hours = int(args[0]) if args and args[0].isdigit() else 24
         chain = settings.dex_chains[0] if settings.dex_chains else None
