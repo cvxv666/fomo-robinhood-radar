@@ -321,6 +321,11 @@ MIGRATIONS: dict[int, str] = {
       address TEXT PRIMARY KEY, crew INTEGER NOT NULL, size INTEGER NOT NULL, updated_at INTEGER NOT NULL
     );
     """,
+    28: """
+    -- the trail read beside the hour read: out at the first 20% pullback from the running high
+    -- inside the hour, from the same candles (hot.outcome, TRAIL_DROP)
+    ALTER TABLE pushes ADD COLUMN trail_x REAL;
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

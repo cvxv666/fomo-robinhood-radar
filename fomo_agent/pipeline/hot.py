@@ -220,16 +220,38 @@ def outcome(conn: sqlite3.Connection, mint: str, ts: int, px: float | None,
         ratio = since[0][1] / px
         unit = next((f for f in (1.0, 1e3, 1e-3, 1e6, 1e-6) if 0.2 <= ratio / f <= 5), None)
         since = [] if unit is None else [[c[0], *[v / unit for v in c[1:5]], *c[5:]] for c in since]
+    trail = None
     if since:
         # with candles that agree with the fill, the pool's high is the answer and the tape is
         # not consulted for the peak: a tape row can be mispriced - one FRONTIER sell carried a
         # dollar leg four times the pool's price that minute and read as 9.3x against a real 4x
         best = max(c[2] for c in since) / px
         quote = since[-1][4] / px
+        # the trail: out at the first candle whose low is `trail_drop` under the running high,
+        # at that level; else at the last close. The hour exit sells the peak short on most
+        # alerts (the record: 88% trade above the call, 35% close the hour above it); this is
+        # the same candles read the way a reader who rides the peak would
+        high, drop = px, settings.trail_drop
+        for i, c in enumerate(since):
+            # the alert's own candle: its high and its low are in an unknown order, so only a
+            # dip under the entry's stop counts, and the high it leaves behind is its close
+            if i == 0:
+                if c[3] <= px * (1 - drop):
+                    trail = 1 - drop
+                    break
+                high = max(high, c[4])
+                continue
+            high = max(high, c[2])
+            if c[3] <= high * (1 - drop):
+                trail = high * (1 - drop) / px
+                break
+        else:
+            trail = since[-1][4] / px
     return {
         "best": round(best, 2) if best is not None else None,
         "last": round(later[-1] / px, 2) if later else None,
         "now": round(quote, 2) if quote is not None else None,
+        "trail": round(trail, 2) if trail is not None else None,
         "fills": len(later),
     }
 

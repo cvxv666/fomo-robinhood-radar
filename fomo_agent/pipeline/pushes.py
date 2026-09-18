@@ -93,7 +93,7 @@ def measure(conn: sqlite3.Connection, row: sqlite3.Row, gt=None, now: int | None
         hi = max(after, key=lambda c: c[2])
         peak_min = max(0, round((hi[0] + 150 - ts) / 60))   # the middle of the candle that held the high
     vol = round(sum(c[5] for c in after if len(c) > 5)) if after else None
-    return {"best": o["best"], "peak_min": peak_min, "now": o["now"], "vol": vol,
+    return {"best": o["best"], "peak_min": peak_min, "now": o["now"], "vol": vol, "trail": o.get("trail"),
             "witness": "candles" if candles else ("tape" if o["best"] is not None else "none")}
 
 
@@ -108,8 +108,8 @@ def recipients(conn: sqlite3.Connection, row: sqlite3.Row) -> list[str]:
 def close(conn: sqlite3.Connection, row_id: int, m: dict, now: int | None = None) -> None:
     now = now or db.now()
     with db.tx(conn):
-        conn.execute("UPDATE pushes SET followup_at=?, best=?, peak_min=?, now_x=?, vol_usd=? WHERE id=?",
-                     (now, m.get("best"), m.get("peak_min"), m.get("now"), m.get("vol"), row_id))
+        conn.execute("UPDATE pushes SET followup_at=?, best=?, peak_min=?, now_x=?, vol_usd=?, trail_x=? WHERE id=?",
+                     (now, m.get("best"), m.get("peak_min"), m.get("now"), m.get("vol"), m.get("trail"), row_id))
 
 
 def fmt_time(ts: int) -> str:

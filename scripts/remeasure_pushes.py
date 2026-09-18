@@ -20,8 +20,8 @@ conn = db.connect()
 gt = GeckoTerminal()
 rows = conn.execute(
     "SELECT p.*, tk.pool_address, tk.chain, COALESCE(tk.symbol, substr(p.mint,1,8)) sym FROM pushes p LEFT JOIN tokens tk ON tk.mint = p.mint "
-    "WHERE p.followup_at IS NOT NULL AND p.vol_usd IS NULL ORDER BY p.ts").fetchall()
-print(f"{len(rows)} rows measured by the tape alone")
+    "WHERE p.followup_at IS NOT NULL AND (p.vol_usd IS NULL OR p.trail_x IS NULL) ORDER BY p.ts").fetchall()
+print(f"{len(rows)} rows to read again (tape-only, or without the trail read)")
 fixed = cleared = 0
 for r in rows:
     candles = []
@@ -37,8 +37,8 @@ for r in rows:
         peak_min = max(0, round((hi[0] + 150 - r["ts"]) / 60)) if o["best"] is not None else None
         vol = round(sum(c[5] for c in after if len(c) > 5))
         with db.tx(conn):
-            conn.execute("UPDATE pushes SET best=?, peak_min=?, now_x=?, vol_usd=? WHERE id=?", (o["best"], peak_min, o["now"], vol, r["id"]))
-        print(f"  {time.strftime('%m-%d %H:%M', time.gmtime(r['ts']))} {r['kind']:6s} {r['sym']:10s} best {r['best']} -> {o['best']}  hour {r['now_x']} -> {o['now']}  vol ${vol:,}")
+            conn.execute("UPDATE pushes SET best=?, peak_min=?, now_x=?, vol_usd=?, trail_x=? WHERE id=?", (o["best"], peak_min, o["now"], vol, o.get("trail"), r["id"]))
+        print(f"  {time.strftime('%m-%d %H:%M', time.gmtime(r['ts']))} {r['kind']:6s} {r['sym']:10s} best {r['best']} -> {o['best']}  hour {r['now_x']} -> {o['now']}  trail {o.get('trail')}  vol ${vol:,}")
         fixed += 1
     else:
         with db.tx(conn):

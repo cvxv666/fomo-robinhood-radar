@@ -239,6 +239,10 @@ class Settings:
     crew_min_shared: int = field(default_factory=lambda: _int("CREW_MIN_SHARED", 4))
     crew_min_share: float = field(default_factory=lambda: _float("CREW_MIN_SHARE", 0.5))
     hot_min_crews: int = field(default_factory=lambda: _int("HOT_MIN_CREWS", 2))
+    # the second paper read on every alert: out at the first pullback this far under the
+    # running high inside the hour, at that level (hot.outcome). Twenty percent: the only rule
+    # in the 18 Sep exit study that paid on both bursts and launches.
+    trail_drop: float = field(default_factory=lambda: _float("TRAIL_DROP", 0.2))
     # The watcher: how often it asks the chain for the blocks since last time, on how much of
     # the RPC allowance, and how far it reads on its first tick or after a stall. The scheduled
     # pass owns anything older than that.

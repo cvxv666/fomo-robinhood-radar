@@ -52,15 +52,18 @@ def rows(conn: sqlite3.Connection, days: int = 30, kind: str | None = None, now:
             "id": r["id"], "ts": r["ts"], "kind": r["kind"], "mint": r["mint"], "sym": r["sym"],
             "px": r["px"], "wallets": r["wallets"], "conviction": r["conviction"], "heat": r["heat"],
             "liq": r["liq"], "chats": r["chats"], "followup_at": r["followup_at"],
-            "best": r["best"], "peak_min": r["peak_min"], "hour": r["now_x"], "vol_usd": r["vol_usd"],
+            "best": r["best"], "peak_min": r["peak_min"], "hour": r["now_x"], "vol_usd": r["vol_usd"], "trail": r["trail_x"],
             # where it sits now, in the same entry price: the stored quote against the entry
             "now": (r["price_usd"] / r["px"]) if r["price_usd"] and r["px"] else None,
             "seeded": bool(r["seeded"]), "unsellable": r["sellable"] == 0,
         }
         d["verdict"] = verdict(d, now)
         # a honeypot's candles can print anything; the stake is gone the moment it is bought
+        closed = d["verdict"] not in ("open", "unmeasured")
         d["paper"] = (-STAKE if d["verdict"] == "honeypot" else round(STAKE * (d["hour"] - 1), 2)) \
-            if (d["hour"] is not None or d["verdict"] == "honeypot") and d["verdict"] not in ("open", "unmeasured") else None
+            if (d["hour"] is not None or d["verdict"] == "honeypot") and closed else None
+        d["paper_trail"] = (-STAKE if d["verdict"] == "honeypot" else round(STAKE * (d["trail"] - 1), 2)) \
+            if (d["trail"] is not None or d["verdict"] == "honeypot") and closed else None
         out.append(d)
     return out
 
@@ -73,6 +76,8 @@ def totals(rs: list[dict]) -> dict:
     bests = sorted(r["best"] for r in clean)
     paper = [r for r in rs if r["paper"] is not None]
     wins = [r for r in paper if r["paper"] > 0]
+    trail = [r for r in rs if r["paper_trail"] is not None]
+    twins = [r for r in trail if r["paper_trail"] > 0]
     return {
         "pushes": len(rs), "bursts": sum(r["kind"] == "burst" for r in rs), "launches": sum(r["kind"] == "launch" for r in rs),
         "measured": len(measured), "clean": len(clean),
@@ -87,20 +92,28 @@ def totals(rs: list[dict]) -> dict:
             "best": max(paper, key=lambda r: r["paper"])["paper"] if paper else None,
             "worst": min(paper, key=lambda r: r["paper"])["paper"] if paper else None,
         },
+        # the same alerts, out at the first pullback under the running high instead of at the hour
+        "paper_trail": {
+            "stake": STAKE, "drop": settings.trail_drop, "trades": len(trail), "staked": STAKE * len(trail),
+            "pnl": round(sum(r["paper_trail"] for r in trail), 2), "wins": len(twins),
+            "win_rate": round(len(twins) / len(trail), 3) if trail else None,
+            "best": max(trail, key=lambda r: r["paper_trail"])["paper_trail"] if trail else None,
+            "worst": min(trail, key=lambda r: r["paper_trail"])["paper_trail"] if trail else None,
+        },
     }
 
 
-def curve(rs: list[dict]) -> list[dict]:
-    """The paper run as an equity curve, oldest first: cumulative P&L after each closed trade."""
+def curve(rs: list[dict], key: str = "paper") -> list[dict]:
+    """A paper run as an equity curve, oldest first: cumulative P&L after each closed trade."""
     total = 0.0
     out = []
-    for r in sorted((r for r in rs if r["paper"] is not None), key=lambda r: r["ts"]):
-        total += r["paper"]
-        out.append({"ts": r["ts"], "sym": r["sym"], "mint": r["mint"], "kind": r["kind"], "pnl": r["paper"], "total": round(total, 2)})
+    for r in sorted((r for r in rs if r[key] is not None), key=lambda r: r["ts"]):
+        total += r[key]
+        out.append({"ts": r["ts"], "sym": r["sym"], "mint": r["mint"], "kind": r["kind"], "pnl": r[key], "total": round(total, 2)})
     return out
 
 
 def report(conn: sqlite3.Connection, days: int = 30, kind: str | None = None, now: int | None = None) -> dict:
     rs = rows(conn, days, kind, now)
     return {"days": days, "kind": kind or "all", "stake": STAKE, "followup_min": settings.telegram_followup_min,
-            "totals": totals(rs), "curve": curve(rs), "pushes": rs}
+            "trail_drop": settings.trail_drop, "totals": totals(rs), "curve": curve(rs), "curve_trail": curve(rs, "paper_trail"), "pushes": rs}
