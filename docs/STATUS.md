@@ -31,6 +31,39 @@ Trenches переехал на rhtrenches.com (301, клиент теперь и
 fomo.family стоит, нужен перелогин (`scripts/fomo_session_from_curl.py`); анонс окончания grace
 20 сен; ротация fomoapi-ключа.
 
+**Сессия 22, продолжение (18 сен): три волны продукта.** *Волна 1:* `links.py` / `site/src/lib/links.ts` —
+каждая ссылка на fomo.family с рефкодом (`FOMO_REF_CODE`, `FOMO_REF_PARAM`, `FOMO_REF_URL`; код ещё не
+задан), «buy on fomo» первым в каждом пуше, кнопка на токене, профиль у трейдера, футер, блок бота,
+`links` в `/api/token`. `pipeline/record.py` + `/record` и `/paper` (сайт, бот, `/api/record`): все
+алерты с 11 сен (леджер добит `scripts/backfill_pushes.py` теми же свечами): 70 из 84 выше входа
+(83%), 23 до ×2, медиана ×1.50; paper $100 в каждый алерт по входу, выход по часовому чтению:
++$2,807 на $9,200, 92 сделки, 34% в плюс. `pipeline/follows.py` — `/follow <handle>`: все филлы
+кошелька через тик (free 3 / PRO 50 / 30 в час, только настоящие филлы). `pipeline/board.py` +
+`assets/boards/day.html` — борд дня из леджера, рендер playwright на сервере
+(`/opt/fomoradar/pw`, `BOARD_DIR=/opt/fomoradar/boards`), `radar-board.timer` 07:05 UTC ежедневно и
+недельный по понедельникам 07:20; `fomo-radar board [--hours 168] [--post]`. *Волна 2:*
+`pipeline/webhooks.py` — `/webhook <https url>` для PRO-ключа: burst/launch/followup POST-ом с
+`X-Radar-Signature` (HMAC ключом), в потоке, выкл после 20 отказов; `pipeline/referrals.py` —
+`/invite`, неделя PRO обоим, до 10 в месяц; `pipeline/prefs.py` — `/alerts`, `/minconv`, `/quiet`,
+`/settings` (порог conviction теперь свой у чата, NULL пока не задан — раньше копировался и не
+читался); `pipeline/cards.py` + `assets/boards/card.html` — карточка 1200×675 при пике ≥ ×2: в чаты
+фото с follow-up-подписью, в X отдельным постом, в Discord; `pipeline/discord.py` —
+`DISCORD_WEBHOOK_URL` зеркалит алерты/follow-up/карточки (нужен вебхук канала от автора).
+*Волна 3:* `pipeline/deployers.py` — создатель токена с чейна (mint = первый Transfer с нуля;
+прямой деплой → отправитель, через фабрику → первый не-контрактный получатель после сжигания;
+fomo-кошельки — EOA с делегацией EIP-7702, 23 байта кода), репутация: молодой токен не пушится,
+если у создателя за неделю уже есть seeded/unsellable/dead (`DEPLOYER_MAX_BAD=1`); NCAT и CSHIB —
+один ключ `0x16a858…`, TINU и MUSEB — `0x595a2c…`. `pipeline/crews.py` — кошельки, покупающие
+одни токены в одну минуту (≥4 общих за неделю, ≥50% меньшего), одна команда = одно мнение,
+бёрсту нужно ≥2 (`HOT_MIN_CREWS`); на проде команда unipcs+DumbCrayonEater+frankdegods — это
+«VIP-цели» сеятеля ($199–$304 за 1–3 мин до очереди по $30), окно пометки волн расширено на 5
+мин назад. `scripts/exit_rule.py` — все правила выхода по леджеру (hold N / tp+sl / trail), первый
+прогон см. ниже. **Сайт лежал 40 минут (09:14–09:54 UTC)** из-за отсутствующего импорта в
+лейауте при статусе 200 — деплой теперь читает тела страниц. **Не сделано:** execution engine —
+в `docs/fomo-endpoints.md` нет эндпоинта покупки, нужен захват реальной покупки в HAR
+(`scripts/capture_fomo_endpoints.py`); мультичейн — отдельный проект (Helius/Codex бюджет,
+FOMO_SESSION, второй бот). Volна-1 пункт 1 ждёт рефкод.
+
 **Сессия 21: PRO — доступ к алертам за токен, сожжённый. `pipeline/pro.py`.**
 
 **Как работает.** `/pro` в боте → точное число $FOMOBRAIN на $20 по цене пула (основание,
