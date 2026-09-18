@@ -100,4 +100,4 @@ for name, fn in RULES:
     b = [STAKE * v for r, v in res if r["kind"] == "burst"]
     l = [STAKE * v for r, v in res if r["kind"] == "launch"]
     print(f"{name:22s} {len(pnl):3d} {sum(pnl):+9.0f} {sum(pnl) / len(pnl):+9.1f} {100 * wins / len(pnl):5.0f} {med:+7.0f} {max(pnl):+7.0f} {min(pnl):+7.0f}   {sum(b):+.0f} / {sum(l):+.0f}")
-print(f"\ngecko requests: {gt.requests}  ({time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(now))})")
+print(f"\n({time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(now))}, {HOURS}h horizon; a candle that touches both stop and target counts as the stop)")
