@@ -67,14 +67,18 @@
   <div class="rule" style="top:134px"></div>
 
   <!-- 1. /paper: the receipt -->
-  <div class="lab" style="left:40px;top:148px">/PAPER  <span>·  $100 INTO EVERY ALERT AT THE CALL, OUT AT THE HOUR READ  ·  THE RECEIPT</span></div>
-  <div class="num" id="paper-big" style="left:40px;top:180px;font-size:112px;color:var(--green)"></div>
-  <div class="cap" style="left:40px;top:292px"><b id="p-trades"></b> TRADES  ·  <b id="p-win"></b> WON  ·  BEST <i id="p-best"></i>  ·  WORST <s id="p-worst"></s></div>
-  <canvas class="v" id="ring" width="150" height="150" style="left:600px;top:158px"></canvas>
-  <div class="cap" style="left:766px;top:186px">OF ALERTS TRADED<br>ABOVE THE CALL<br><b id="p-above"></b> MEASURED<br>SINCE <span id="p-since"></span></div>
+  <div class="lab" style="left:40px;top:148px">/PAPER  <span>·  $100 INTO EVERY ALERT AT THE CALL, READ TWO WAYS FROM THE SAME CANDLES  ·  THE RECEIPT</span></div>
+  <canvas class="v" id="ring" width="150" height="150" style="left:40px;top:166px"></canvas>
+  <div class="cap" style="left:206px;top:192px">OF ALERTS TRADED<br>ABOVE THE CALL<br><b id="p-above"></b> MEASURED<br><b id="p-2x"></b> REACHED ×2</div>
+  <div class="cap" style="left:470px;top:170px;line-height:1.5">OUT AT THE HOUR READ</div>
+  <div class="num" id="paper-big" style="left:470px;top:194px;font-size:52px"></div>
+  <div class="cap" style="left:470px;top:250px;line-height:1.6"><b id="p-trades"></b> TRADES · <b id="p-win"></b> WON<br>BEST <i id="p-best"></i> · WORST <s id="p-worst"></s></div>
+  <div class="cap" style="left:770px;top:170px;line-height:1.5">TRAIL −<span id="t-drop"></span>% INSIDE THE HOUR</div>
+  <div class="num" id="trail-big" style="left:770px;top:194px;font-size:52px;color:var(--green)"></div>
+  <div class="cap" style="left:770px;top:250px;line-height:1.6"><b id="t-trades"></b> TRADES · <b id="t-win"></b> WON<br>BEST <i id="t-best"></i> · WORST <s id="t-worst"></s></div>
   <canvas class="v" id="curve" width="1000" height="118" style="left:40px;top:322px"></canvas>
-  <div class="hook" style="left:40px;top:444px">THE LOSS IS CAPPED AT <s id="p-worst2"></s>. THE WIN IS NOT: <i id="p-best2"></i> ON ONE CALL.</div>
-  <div class="cap" style="left:40px;top:472px">AT $1,000 A CALL: <i id="p-1000"></i>  ·  EVERY TRADE IS ON <b><span id="p-site"></span>/paper</b> — CHECK IT</div>
+  <div class="hook" id="p-hook" style="left:40px;top:444px"></div>
+  <div class="cap" style="left:40px;top:472px">SOLID: SOLD AT THE HOUR READ · DASHED: SOLD AT THE FIRST PULLBACK A FIFTH UNDER THE HIGH  ·  EVERY TRADE IS ON <b><span id="p-site"></span>/paper</b></div>
   <div class="rule" style="top:500px"></div>
 
   <!-- 2. /follow: the wallet -->
@@ -134,9 +138,16 @@
   $('h-alerts').textContent = H.alerts; $('h-since').textContent = H.since; $('h-above').textContent = H.above_pct + '%';
   $('p-trades').textContent = H.paper.trades; $('p-win').textContent = H.paper.win_pct + '%';
   $('p-best').textContent = money(H.paper.best || 0); $('p-worst').textContent = money(H.paper.worst || 0);
-  $('p-above').textContent = `${H.above_n} OF ${H.clean}`; $('p-since').textContent = H.since;
-  $('p-worst2').textContent = money(H.paper.worst || 0); $('p-best2').textContent = money(H.paper.best || 0);
-  $('p-1000').textContent = money(H.paper.at_1000); $('p-site').textContent = H.site || 'fomoradar.app';
+  $('p-above').textContent = `${H.above_n} OF ${H.clean}`; $('p-2x').textContent = H.reached_2x;
+  const Q = H.paper.trail;
+  $('t-drop').textContent = Q.drop; $('t-trades').textContent = Q.trades; $('t-win').textContent = Q.win_pct + '%';
+  $('t-best').textContent = money(Q.best || 0); $('t-worst').textContent = money(Q.worst || 0);
+  $('trail-big').textContent = money(Q.pnl); $('trail-big').style.color = Q.pnl >= 0 ? GREEN : CRIMSON;
+  $('paper-big').style.color = H.paper.pnl >= 0 ? WHITE : CRIMSON;
+  $('p-hook').innerHTML = H.paper.pnl < 0 && Q.pnl > H.paper.pnl
+    ? `THE HOUR EXIT SELLS THE PEAK SHORT: <s>${money(H.paper.pnl)}</s>. STEP OFF AT −${Q.drop}% FROM THE HIGH: <i>${money(Q.pnl)}</i>.`
+    : `THE LOSS IS CAPPED AT <s>${money(H.paper.worst || 0)}</s>. THE WIN IS NOT: <i>${money(H.paper.best || 0)}</i> ON ONE CALL.`;
+  $('p-site').textContent = H.site || 'fomoradar.app';
   $('f-top').textContent = H.stars[0] ? H.stars[0].pnl : '—'; $('f-free').textContent = H.follow.free; $('f-pro').textContent = H.follow.pro;
   $('cards').innerHTML = H.stars.slice(0, 4).map((s, i) => `<div class="card${i === 0 ? ' hot' : ''}" style="left:${40 + i * 244}px;top:582px"><div class="n">${esc(s.handle)}</div><div class="s">${s.score}</div><div class="p">30 DAYS  <b>${esc(s.pnl)}</b></div><div class="c">/follow ${esc(s.handle)}</div></div>`).join('');
   $('i-days').textContent = H.invite.days; $('i-days2').textContent = H.invite.days; $('i-month').textContent = Math.round(30 / Math.max(1, H.invite.days));
@@ -150,6 +161,7 @@
 
   // ---- 1. the receipt: the number counts with the curve, the ring fills
   const bigEl = $('paper-big'); const T = H.paper.curve.length > 1 ? H.paper.curve : [0, H.paper.pnl];
+  const TT = H.paper.trail.curve.length > 1 ? H.paper.trail.curve : [0, H.paper.trail.pnl];
   const rc = $('ring'), rx = rc.getContext('2d'), above = H.above_pct / 100;
   function drawRing(t) {
     rx.clearRect(0, 0, 150, 150);
@@ -159,8 +171,9 @@
     rx.fillStyle = WHITE; rx.font = 'bold 40px "Space Grotesk", sans-serif'; rx.textAlign = 'center'; rx.fillText(Math.round(above * 100 * k) + '%', 75, 90);
   }
   const cv = $('curve'), cx = cv.getContext('2d');
-  const CW = 1000, CH = 118, lo = Math.min(0, ...T), hi = Math.max(1, ...T);
+  const CW = 1000, CH = 118, lo = Math.min(0, ...T, ...TT), hi = Math.max(1, ...T, ...TT);
   const px = i => 4 + (i / (T.length - 1)) * (CW - 44), py = v => 12 + (1 - (v - lo) / (hi - lo)) * (CH - 42);
+  const pxT = i => 4 + (i / (TT.length - 1)) * (CW - 44);
   function drawCurve(t) {
     cx.clearRect(0, 0, CW, CH);
     const k = still ? 1 : Math.min(1, t / 2200), n = Math.max(2, Math.round(1 + k * (T.length - 1)));
@@ -168,13 +181,18 @@
     cx.fillStyle = LINE; cx.fillRect(0, py(0), CW, 1);
     cx.beginPath(); cx.moveTo(px(0), py(0)); for (let i = 0; i < n; i++) cx.lineTo(px(i), py(T[i])); cx.lineTo(px(n - 1), py(0)); cx.closePath();
     cx.fillStyle = 'rgba(0,255,133,.07)'; cx.fill();
-    cx.strokeStyle = GREEN; cx.lineWidth = 2.5; cx.beginPath(); for (let i = 0; i < n; i++) i ? cx.lineTo(px(i), py(T[i])) : cx.moveTo(px(i), py(T[i])); cx.stroke();
+    // the trail run, dashed and quiet, drawn to the same scale
+    const nT = Math.max(2, Math.round(1 + k * (TT.length - 1)));
+    cx.save(); cx.setLineDash([4, 4]); cx.strokeStyle = GRAPHITE; cx.lineWidth = 1.5; cx.beginPath(); for (let i = 0; i < nT; i++) i ? cx.lineTo(pxT(i), py(TT[i])) : cx.moveTo(pxT(i), py(TT[i])); cx.stroke(); cx.restore();
+    cx.strokeStyle = T[n - 1] >= 0 ? GREEN : CRIMSON; cx.lineWidth = 2.5; cx.beginPath(); for (let i = 0; i < n; i++) i ? cx.lineTo(px(i), py(T[i])) : cx.moveTo(px(i), py(T[i])); cx.stroke();
     for (let i = 1; i < n; i++) { const d = T[i] - T[i - 1]; cx.fillStyle = d > 0 ? GREEN : d < 0 ? CRIMSON : CARBON; cx.fillRect(px(i) - 2, CH - 18, 4, Math.max(2, Math.min(12, Math.abs(d) / 30))); }
     const j = H.paper.best_index || 0;
     if (H.paper.best_sym && n > j && j > 0) { cx.fillStyle = WHITE; cx.font = mono(10); cx.textAlign = 'left'; cx.fillText(`${H.paper.best_sym}${H.paper.best_x ? '  ×' + (H.paper.best_x >= 10 ? Math.round(H.paper.best_x) : H.paper.best_x.toFixed(2)) + ' AT THE HOUR' : ''}  ·  ${money(H.paper.best)}`, px(j) + 10, py(T[j]) + 22); }
     const x = px(n - 1), y = py(T[n - 1]);
-    const g = cx.createRadialGradient(x, y, 0, x, y, 28); g.addColorStop(0, 'rgba(0,255,133,.6)'); g.addColorStop(1, 'rgba(0,255,133,0)');
+    const col = T[n - 1] >= 0 ? '0,255,133' : '255,0,61';
+    const g = cx.createRadialGradient(x, y, 0, x, y, 28); g.addColorStop(0, `rgba(${col},.6)`); g.addColorStop(1, `rgba(${col},0)`);
     cx.fillStyle = g; cx.fillRect(x - 28, y - 28, 56, 56); cx.fillStyle = WHITE; cx.fillRect(x - 3, y - 3, 7, 7);
+    const xt = pxT(nT - 1), yt = py(TT[nT - 1]); cx.fillStyle = GRAPHITE; cx.fillRect(xt - 3, yt - 3, 6, 6);
     cx.fillStyle = GRAPHITE; cx.font = mono(10); cx.textAlign = 'left'; cx.fillText(H.since, 4, CH - 2); cx.textAlign = 'right'; cx.fillText(H.date.slice(0, 6), CW - 2, CH - 2);
     bigEl.textContent = money(T[n - 1]);
   }

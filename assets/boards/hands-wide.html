@@ -68,14 +68,18 @@
   <div class="rule" style="top:128px"></div>
 
   <!-- A. /paper -->
-  <div class="lab" style="left:40px;top:142px">/PAPER  <span>·  $100 INTO EVERY ALERT AT THE CALL, OUT AT THE HOUR READ  ·  THE RECEIPT</span></div>
-  <div class="num" id="paper-big" style="left:40px;top:172px;font-size:96px;color:var(--green)"></div>
-  <div class="cap" style="left:40px;top:268px"><b id="p-trades"></b> TRADES  ·  <b id="p-win"></b> WON  ·  BEST <i id="p-best"></i>  ·  WORST <s id="p-worst"></s></div>
-  <canvas class="v" id="ring" width="110" height="110" style="left:520px;top:160px"></canvas>
-  <div class="cap" style="left:642px;top:168px">OF ALERTS TRADED<br>ABOVE THE CALL<br><b id="p-above"></b> MEASURED<br>SINCE <span id="p-since"></span></div>
+  <div class="lab" style="left:40px;top:142px">/PAPER  <span>·  $100 INTO EVERY ALERT AT THE CALL, READ TWO WAYS FROM THE SAME CANDLES</span></div>
+  <canvas class="v" id="ring" width="110" height="110" style="left:40px;top:166px"></canvas>
+  <div class="cap" style="left:166px;top:178px">OF ALERTS TRADED<br>ABOVE THE CALL<br><b id="p-above"></b> · <b id="p-2x"></b> REACHED ×2</div>
+  <div class="cap" style="left:380px;top:166px;line-height:1.4">OUT AT THE HOUR READ</div>
+  <div class="num" id="paper-big" style="left:380px;top:188px;font-size:40px"></div>
+  <div class="cap" style="left:380px;top:234px;line-height:1.5"><b id="p-trades"></b> TRADES · <b id="p-win"></b> WON<br>BEST <i id="p-best"></i> · WORST <s id="p-worst"></s></div>
+  <div class="cap" style="left:590px;top:166px;line-height:1.4">TRAIL −<span id="t-drop"></span>% INSIDE THE HOUR</div>
+  <div class="num" id="trail-big" style="left:590px;top:188px;font-size:40px;color:var(--green)"></div>
+  <div class="cap" style="left:590px;top:234px;line-height:1.5"><b id="t-trades"></b> TRADES · <b id="t-win"></b> WON<br>BEST <i id="t-best"></i> · WORST <s id="t-worst"></s></div>
   <canvas class="v" id="curve" width="740" height="100" style="left:40px;top:296px"></canvas>
-  <div class="hook" style="left:40px;top:408px">THE LOSS IS CAPPED AT <s id="p-worst2"></s>. THE WIN IS NOT: <i id="p-best2"></i> ON ONE CALL.</div>
-  <div class="cap" style="left:40px;top:434px">AT $1,000 A CALL: <i id="p-1000"></i>  ·  EVERY TRADE IS ON <b><span id="p-site"></span>/paper</b></div>
+  <div class="hook" id="p-hook" style="left:40px;top:408px;font-size:16px"></div>
+  <div class="cap" style="left:40px;top:434px">SOLID: AT THE HOUR · DASHED: TRAIL  ·  EVERY TRADE IS ON <b><span id="p-site"></span>/paper</b></div>
   <div class="vrule" style="left:800px;top:142px;height:320px"></div>
 
   <!-- B. /follow -->
@@ -94,7 +98,7 @@
   <div class="vrule" style="left:540px;top:492px;height:358px"></div>
 
   <!-- D. /webhook -->
-  <div class="lab" style="left:572px;top:492px">/WEBHOOK &lt;url&gt;  <span>·  EVERY ALERT POSTED TO YOUR OWN BOT  ·  PRO KEY</span></div>
+  <div class="lab" style="left:572px;top:492px">/WEBHOOK &lt;url&gt;  <span>·  EVERY ALERT TO YOUR OWN BOT</span></div>
   <div class="num" style="left:572px;top:522px;font-size:72px"><span id="a-heavy"></span><small>BOTS HEAVY ENOUGH TO PAY</small></div>
   <div class="cap" style="left:572px;top:600px"><b id="a-req"></b> API REQUESTS A DAY  ·  <b id="a-readers"></b> READERS<br>THE <span id="a-heavy2"></span> ARE <i id="a-share"></i> OF IT  ·  IF THEY PAY: <i>≈ <span id="a-burn"></span></i> BURNED A MONTH</div>
   <canvas class="v" id="hours" width="400" height="26" style="left:572px;top:660px"></canvas>
@@ -103,7 +107,7 @@
   <div class="vrule" style="left:1080px;top:492px;height:358px"></div>
 
   <!-- E. the seeder -->
-  <div class="lab" style="left:1112px;top:492px">THE ALERT GOT SMARTER  <span>·  WHO MADE IT · WHO MOVES TOGETHER</span></div>
+  <div class="lab" style="left:1112px;top:492px">SMARTER ALERTS  <span>·  WHO MADE IT · WHO MOVES AS ONE</span></div>
   <div class="hook" id="s-hook" style="left:1112px;top:520px;white-space:normal;width:440px;line-height:1.25"></div>
   <canvas class="v" id="waves" width="448" height="60" style="left:1112px;top:606px"></canvas>
   <canvas class="v" id="smart" width="280" height="60" style="left:1112px;top:690px"></canvas>
@@ -133,9 +137,16 @@
   $('h-alerts').textContent = H.alerts; $('h-since').textContent = H.since; $('h-above').textContent = H.above_pct + '%';
   $('p-trades').textContent = H.paper.trades; $('p-win').textContent = H.paper.win_pct + '%';
   $('p-best').textContent = money(H.paper.best || 0); $('p-worst').textContent = money(H.paper.worst || 0);
-  $('p-above').textContent = `${H.above_n} OF ${H.clean}`; $('p-since').textContent = H.since;
-  $('p-worst2').textContent = money(H.paper.worst || 0); $('p-best2').textContent = money(H.paper.best || 0);
-  $('p-1000').textContent = money(H.paper.at_1000); $('p-site').textContent = H.site || 'fomoradar.app';
+  $('p-above').textContent = `${H.above_n} OF ${H.clean}`; $('p-2x').textContent = H.reached_2x;
+  const Q = H.paper.trail;
+  $('t-drop').textContent = Q.drop; $('t-trades').textContent = Q.trades; $('t-win').textContent = Q.win_pct + '%';
+  $('t-best').textContent = money(Q.best || 0); $('t-worst').textContent = money(Q.worst || 0);
+  $('trail-big').textContent = money(Q.pnl); $('trail-big').style.color = Q.pnl >= 0 ? GREEN : CRIMSON;
+  $('paper-big').style.color = H.paper.pnl >= 0 ? WHITE : CRIMSON;
+  $('p-hook').innerHTML = H.paper.pnl < 0 && Q.pnl > H.paper.pnl
+    ? `THE HOUR EXIT SELLS THE PEAK SHORT: <s>${money(H.paper.pnl)}</s>. STEP OFF AT −${Q.drop}% FROM THE HIGH: <i>${money(Q.pnl)}</i>.`
+    : `THE LOSS IS CAPPED AT <s>${money(H.paper.worst || 0)}</s>. THE WIN IS NOT: <i>${money(H.paper.best || 0)}</i> ON ONE CALL.`;
+  $('p-site').textContent = H.site || 'fomoradar.app';
   $('f-top').textContent = H.stars[0] ? H.stars[0].pnl : '—'; $('f-free').textContent = H.follow.free; $('f-pro').textContent = H.follow.pro;
   $('cards').innerHTML = H.stars.slice(0, 4).map((s, i) => `<div class="card${i === 0 ? ' hot' : ''}" style="left:${832 + (i % 2) * 244}px;top:${200 + Math.floor(i / 2) * 88}px"><div class="n">${esc(s.handle)}</div><div class="s">${s.score}</div><div class="p">30 DAYS  <b>${esc(s.pnl)}</b></div><div class="c">/follow ${esc(s.handle)}</div></div>`).join('');
   $('i-days').textContent = H.invite.days; $('i-month').textContent = Math.round(30 / Math.max(1, H.invite.days));
@@ -148,6 +159,7 @@
   $('qr').src = H.qr || ''; $('qr').alt = 't.me/' + H.bot;
 
   const bigEl = $('paper-big'); const T = H.paper.curve.length > 1 ? H.paper.curve : [0, H.paper.pnl];
+  const TT = H.paper.trail.curve.length > 1 ? H.paper.trail.curve : [0, H.paper.trail.pnl];
   const rc = $('ring'), rx = rc.getContext('2d'), above = H.above_pct / 100;
   function drawRing(t) {
     rx.clearRect(0, 0, 110, 110);
@@ -157,8 +169,9 @@
     rx.fillStyle = WHITE; rx.font = 'bold 28px "Space Grotesk", sans-serif'; rx.textAlign = 'center'; rx.fillText(Math.round(above * 100 * k) + '%', 55, 65);
   }
   const cv = $('curve'), cx = cv.getContext('2d');
-  const CW = 740, CH = 100, lo = Math.min(0, ...T), hi = Math.max(1, ...T);
+  const CW = 740, CH = 100, lo = Math.min(0, ...T, ...TT), hi = Math.max(1, ...T, ...TT);
   const px = i => 4 + (i / (T.length - 1)) * (CW - 40), py = v => 10 + (1 - (v - lo) / (hi - lo)) * (CH - 36);
+  const pxT = i => 4 + (i / (TT.length - 1)) * (CW - 40);
   function drawCurve(t) {
     cx.clearRect(0, 0, CW, CH);
     const k = still ? 1 : Math.min(1, t / 2200), n = Math.max(2, Math.round(1 + k * (T.length - 1)));
@@ -166,13 +179,17 @@
     cx.fillStyle = LINE; cx.fillRect(0, py(0), CW, 1);
     cx.beginPath(); cx.moveTo(px(0), py(0)); for (let i = 0; i < n; i++) cx.lineTo(px(i), py(T[i])); cx.lineTo(px(n - 1), py(0)); cx.closePath();
     cx.fillStyle = 'rgba(0,255,133,.07)'; cx.fill();
-    cx.strokeStyle = GREEN; cx.lineWidth = 2.5; cx.beginPath(); for (let i = 0; i < n; i++) i ? cx.lineTo(px(i), py(T[i])) : cx.moveTo(px(i), py(T[i])); cx.stroke();
+    const nT = Math.max(2, Math.round(1 + k * (TT.length - 1)));
+    cx.save(); cx.setLineDash([4, 4]); cx.strokeStyle = GRAPHITE; cx.lineWidth = 1.5; cx.beginPath(); for (let i = 0; i < nT; i++) i ? cx.lineTo(pxT(i), py(TT[i])) : cx.moveTo(pxT(i), py(TT[i])); cx.stroke(); cx.restore();
+    cx.strokeStyle = T[n - 1] >= 0 ? GREEN : CRIMSON; cx.lineWidth = 2.5; cx.beginPath(); for (let i = 0; i < n; i++) i ? cx.lineTo(px(i), py(T[i])) : cx.moveTo(px(i), py(T[i])); cx.stroke();
     for (let i = 1; i < n; i++) { const d = T[i] - T[i - 1]; cx.fillStyle = d > 0 ? GREEN : d < 0 ? CRIMSON : CARBON; cx.fillRect(px(i) - 2, CH - 14, 3, Math.max(2, Math.min(9, Math.abs(d) / 40))); }
     const j = H.paper.best_index || 0;
     if (H.paper.best_sym && n > j && j > 0) { cx.fillStyle = WHITE; cx.font = mono(9); cx.textAlign = 'left'; cx.fillText(`${H.paper.best_sym}${H.paper.best_x ? '  ×' + (H.paper.best_x >= 10 ? Math.round(H.paper.best_x) : H.paper.best_x.toFixed(2)) + ' AT THE HOUR' : ''}  ·  ${money(H.paper.best)}`, px(j) + 8, py(T[j]) + 18); }
     const x = px(n - 1), y = py(T[n - 1]);
-    const g = cx.createRadialGradient(x, y, 0, x, y, 24); g.addColorStop(0, 'rgba(0,255,133,.6)'); g.addColorStop(1, 'rgba(0,255,133,0)');
+    const col = T[n - 1] >= 0 ? '0,255,133' : '255,0,61';
+    const g = cx.createRadialGradient(x, y, 0, x, y, 24); g.addColorStop(0, `rgba(${col},.6)`); g.addColorStop(1, `rgba(${col},0)`);
     cx.fillStyle = g; cx.fillRect(x - 24, y - 24, 48, 48); cx.fillStyle = WHITE; cx.fillRect(x - 3, y - 3, 6, 6);
+    const xt = pxT(nT - 1), yt = py(TT[nT - 1]); cx.fillStyle = GRAPHITE; cx.fillRect(xt - 3, yt - 3, 6, 6);
     cx.fillStyle = GRAPHITE; cx.font = mono(9); cx.textAlign = 'left'; cx.fillText(H.since, 4, CH - 1); cx.textAlign = 'right'; cx.fillText(H.date.slice(0, 6), CW - 2, CH - 1);
     bigEl.textContent = money(T[n - 1]);
   }

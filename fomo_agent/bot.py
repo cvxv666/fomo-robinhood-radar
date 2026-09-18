@@ -840,12 +840,16 @@ def fmt_paper(rep: dict) -> str:
     minus = "\u2212"
     sign = lambda v: f"{'+' if v >= 0 else minus}${abs(v):,.0f}"  # noqa: E731
     out = [f"<b>PAPER</b> \u00b7 ${p['stake']:.0f} into every alert at the entry, out at the {rep['followup_min']}-minute read \u00b7 last {rep['days']} days", ""]
+    q = rep["totals"]["paper_trail"]
     out.append(rows([
-        ("result", f"{sign(p['pnl'])} on ${p['staked']:,.0f} ({100 * p['pnl'] / p['staked']:+.0f}%)"),
+        ("at the hour", f"{sign(p['pnl'])} on ${p['staked']:,.0f} ({100 * p['pnl'] / p['staked']:+.0f}%)"),
         ("trades", f"{p['trades']} \u00b7 {p['wins']} won ({100 * (p['win_rate'] or 0):.0f}%)"),
-        ("best", sign(p["best"])),
-        ("worst", sign(p["worst"])),
+        ("best / worst", f"{sign(p['best'])} / {sign(p['worst'])}"),
+        (f"trail \u2212{100 * q['drop']:.0f}%", f"{sign(q['pnl'])} on ${q['staked']:,.0f}" if q["trades"] else "\u2014"),
+        ("trades", f"{q['trades']} \u00b7 {q['wins']} won ({100 * (q['win_rate'] or 0):.0f}%)" if q["trades"] else "\u2014"),
     ]))
+    out.append("")
+    out.append("<i>Same alerts, two ways out: sold at the hour read, or at the first pullback a fifth under the running high inside that hour.</i>")
     out.append("")
     for c in rep["curve"][-6:][::-1]:
         out.append(f"{sign(c['pnl'])} {token_link(c['mint'], c['sym'])} \u00b7 {pushes.fmt_time(c['ts'])} \u00b7 running {sign(c['total'])}")

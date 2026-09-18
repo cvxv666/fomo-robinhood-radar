@@ -87,11 +87,17 @@ def api_day() -> dict:
     return out
 
 
+def _money(v: float) -> str:
+    return f"{'+' if v >= 0 else '-'}${abs(v):,.0f}"
+
+
 def data(conn: sqlite3.Connection, now: int | None = None) -> dict:
     now = now or db.now()
     rep = record.report(conn, days=30, now=now)
     t = rep["totals"]
     curve = [round(c["total"]) for c in rep["curve"]]
+    curve_trail = [round(c["total"]) for c in rep["curve_trail"]]
+    q = t["paper_trail"]
     best = max((c for c in rep["curve"]), key=lambda c: c["pnl"], default=None)
     best_row = next((r for r in rep["pushes"] if best and r["mint"] == best["mint"] and r["paper"] == best["pnl"]), None)
 
@@ -127,7 +133,10 @@ def data(conn: sqlite3.Connection, now: int | None = None) -> dict:
                   "best": t["paper"]["best"], "worst": t["paper"]["worst"], "curve": curve,
                   "best_sym": best["sym"] if best else None, "best_x": round(best_row["hour"], 2) if best_row and best_row.get("hour") else None,
                   "best_index": curve.index(round(max(rep["curve"], key=lambda c: c["pnl"])["total"])) if rep["curve"] else 0,
-                  "at_1000": round(t["paper"]["pnl"] * 10)},
+                  "at_1000": round(t["paper"]["pnl"] * 10),
+                  "trail": {"pnl": q["pnl"], "trades": q["trades"], "win_pct": round(100 * (q["win_rate"] or 0)), "best": q["best"], "worst": q["worst"],
+                            "drop": round(100 * q["drop"]), "curve": curve_trail, "at_1000": round(q["pnl"] * 10)}},
+        "reached_2x": t["reached_2x"],
         "stars": [{"handle": s["handle"], "score": s["score"], "pnl": _usd(s["pnl_30d"])} for s in stars],
         "follow": {"free": settings.follow_free_max, "pro": settings.follow_pro_max},
         "invite": {"days": settings.pro_referral_days, "max": settings.pro_referral_max_per_month},
@@ -203,8 +212,10 @@ def run(conn: sqlite3.Connection, out_dir: pathlib.Path | None = None, post: boo
             if client is None:
                 from ..sources.x import XClient
                 client = XClient()
+            q = d["paper"]["trail"]
             text = (f"What the radar can do, from what it did.\n\n"
-                    f"${d['paper']['pnl']:,.0f} on $100 into every alert · {d['above_pct']}% traded above the call · "
+                    f"{d['above_pct']}% of alerts traded above the call · $100 into every one: {_money(d['paper']['pnl'])} at the hour, "
+                    f"{_money(q['pnl'])} stepping off at -{q['drop']}% from the high · "
                     f"{d['api']['requests'] // 1000}K API reads a day from {d['api']['readers']} bots\n\n"
                     f"/follow · /paper · /invite · /webhook — bot in bio")[:280]
             mid = client.upload(out_dir / "hands-wide.png")

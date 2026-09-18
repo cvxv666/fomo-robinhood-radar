@@ -173,14 +173,19 @@ export type RecordRow = {
   followup_at: number | null; best: number | null; peak_min: number | null; hour: number | null;
   vol_usd: number | null; now: number | null; seeded: boolean; unsellable: boolean;
   verdict: 'honeypot' | 'seeded' | 'open' | 'unmeasured' | 'dead' | '2x' | 'above' | 'below'; paper: number | null;
+  trail: number | null; paper_trail: number | null;
 };
 export type Record = {
   days: number; kind: string; stake: number; followup_min: number;
   totals: { pushes: number; bursts: number; launches: number; measured: number; clean: number; above_entry: number;
             reached_2x: number; median_best: number | null; seeded: number; dead: number; honeypot: number;
             paper: { stake: number; trades: number; staked: number; pnl: number; wins: number; win_rate: number | null;
-                     best: number | null; worst: number | null } };
+                     best: number | null; worst: number | null };
+            paper_trail: { stake: number; drop: number; trades: number; staked: number; pnl: number; wins: number; win_rate: number | null;
+                           best: number | null; worst: number | null } };
+  trail_drop: number;
   curve: { ts: number; sym: string; mint: string; kind: string; pnl: number; total: number }[];
+  curve_trail: { ts: number; sym: string; mint: string; kind: string; pnl: number; total: number }[];
   pushes: RecordRow[];
 };
 export const getRecord = (days = 30, kind: 'burst' | 'launch' | null = null) =>

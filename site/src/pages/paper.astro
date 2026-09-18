@@ -6,17 +6,22 @@ import { getRecord } from '../lib/api';
 const days = [7, 30, 90].includes(Number(Astro.url.searchParams.get('days'))) ? Number(Astro.url.searchParams.get('days')) : 30;
 const rep = await getRecord(days, null);
 const p = rep?.totals.paper;
+const q = rep?.totals.paper_trail;
 const curve = rep?.curve ?? [];
+const curveT = rep?.curve_trail ?? [];
 const money = (v: number) => `${v >= 0 ? '+' : '−'}$${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 const when = (ts: number) => new Date(ts * 1000).toISOString().slice(5, 16).replace('T', ' ');
 // the equity curve as one polyline: x by trade, y by running total, zero drawn
 const W = 1000, H = 260, PAD = 8;
-const totals = curve.map((c) => c.total);
+const totals = [...curve.map((c) => c.total), ...curveT.map((c) => c.total)];
 const lo = Math.min(0, ...totals), hi = Math.max(0, ...totals);
 const sy = (v: number) => (hi === lo ? H / 2 : PAD + ((hi - v) / (hi - lo)) * (H - 2 * PAD));
 const sx = (i: number) => (curve.length <= 1 ? W / 2 : PAD + (i / (curve.length - 1)) * (W - 2 * PAD));
 const path = curve.map((c, i) => `${i ? 'L' : 'M'}${sx(i).toFixed(1)},${sy(c.total).toFixed(1)}`).join(' ');
+const sxT = (i: number) => (curveT.length <= 1 ? W / 2 : PAD + (i / (curveT.length - 1)) * (W - 2 * PAD));
+const pathT = curveT.map((c, i) => `${i ? 'L' : 'M'}${sxT(i).toFixed(1)},${sy(c.total).toFixed(1)}`).join(' ');
 const last = curve.at(-1);
+const lastT = curveT.at(-1);
 ---
 <Base
   title="Paper — $100 into every alert, out at the hour read"
@@ -28,9 +33,11 @@ const last = curve.at(-1);
     <span class="badge">{p?.trades ?? 0} trades · {days} days</span>
   </div>
   <p class="verdict" style="margin-bottom:20px">
-    A hundred dollars into <b>every</b> alert at the entry, out at the {rep?.followup_min ?? 60}-minute read the chats
-    got — the seeded ones and the dead ones included, because those alerts went out too. Not a strategy: the hour
-    is simply where the follow-up looks. It is the number anyone can check against the messages in their own chat.
+    A hundred dollars into <b>every</b> alert at the entry, read two ways from the same candles: out at the
+    {rep?.followup_min ?? 60}-minute read the chats got, or out at the first pullback a fifth under the running high
+    inside that hour (<b>trail −{Math.round((rep?.trail_drop ?? 0.2) * 100)}%</b>). The seeded and the dead are
+    included, because those alerts went out; a honeypot is the stake gone. Not a strategy — the number anyone can
+    check against the messages in their own chat.
   </p>
 
   <nav class="filters mono">
@@ -43,11 +50,10 @@ const last = curve.at(-1);
 
   {p && (
     <dl class="strip">
-      <div><dt>Result</dt><dd class={p.pnl >= 0 ? 'g' : 'c'}>{money(p.pnl)}<small>on ${p.staked.toLocaleString('en-US')} staked · {p.staked ? `${(100 * p.pnl / p.staked).toFixed(0)}%` : '—'}</small></dd></div>
-      <div><dt>Trades</dt><dd>{p.trades}</dd></div>
-      <div><dt>Won</dt><dd class="g">{p.wins}<small>{p.win_rate === null ? '—' : `${Math.round(100 * p.win_rate)}%`}</small></dd></div>
-      <div><dt>Best</dt><dd class="g">{p.best === null ? '—' : money(p.best)}</dd></div>
-      <div><dt>Worst</dt><dd class="c">{p.worst === null ? '—' : money(p.worst)}</dd></div>
+      <div><dt>At the hour read</dt><dd class={p.pnl >= 0 ? 'g' : 'c'}>{money(p.pnl)}<small>on ${p.staked.toLocaleString('en-US')} · {p.trades} trades · {p.win_rate === null ? '—' : `${Math.round(100 * p.win_rate)}%`} won</small></dd></div>
+      <div><dt>Best · worst</dt><dd>{p.best === null ? '—' : money(p.best)}<small>{p.worst === null ? '—' : money(p.worst)}</small></dd></div>
+      {q && <div><dt>Trail −{Math.round(q.drop * 100)}% inside the hour</dt><dd class={q.pnl >= 0 ? 'g' : 'c'}>{money(q.pnl)}<small>on ${q.staked.toLocaleString('en-US')} · {q.trades} trades · {q.win_rate === null ? '—' : `${Math.round(100 * q.win_rate)}%`} won</small></dd></div>}
+      {q && <div><dt>Best · worst</dt><dd>{q.best === null ? '—' : money(q.best)}<small>{q.worst === null ? '—' : money(q.worst)}</small></dd></div>}
     </dl>
   )}
 
@@ -55,27 +61,33 @@ const last = curve.at(-1);
     <figure class="curve">
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="running paper total, trade by trade">
         <line x1="0" x2={W} y1={sy(0)} y2={sy(0)} class="zero" />
+        {curveT.length > 1 && <path d={pathT} class="trail" />}
         <path d={path} class={last && last.total >= 0 ? 'up' : 'down'} />
         {last && <circle cx={sx(curve.length - 1)} cy={sy(last.total)} r="4" class={last.total >= 0 ? 'up' : 'down'} />}
+        {lastT && <circle cx={sxT(curveT.length - 1)} cy={sy(lastT.total)} r="3" class="traildot" />}
       </svg>
-      <figcaption class="mono">running total after each closed trade · zero line · {curve.length} trades</figcaption>
+      <figcaption class="mono">running total after each closed trade · solid: at the hour read · thin: trail −{Math.round((rep?.trail_drop ?? 0.2) * 100)}% · {curve.length} trades</figcaption>
     </figure>
   )}
 
   {curve.length > 0 && (
     <div class="tablewrap">
       <table class="rec mono">
-        <thead><tr><th>#</th><th>when · utc</th><th>token</th><th class="r">trade</th><th class="r">running</th></tr></thead>
+        <thead><tr><th>#</th><th>when · utc</th><th>token</th><th class="r">at the hour</th><th class="r">running</th><th class="r">trail</th></tr></thead>
         <tbody>
-          {[...curve].reverse().map((c, i) => (
+          {[...curve].reverse().map((c, i) => {
+            const tr = rep?.pushes.find((r) => r.mint === c.mint && r.ts === c.ts);
+            return (
             <tr>
               <td class="m">{curve.length - i}</td>
               <td class="m">{when(c.ts)}</td>
               <td><span class={`k ${c.kind}`}>{c.kind === 'burst' ? '▲' : '◆'}</span><a class="tk" href={`/token/${c.mint}`}>${c.sym}</a></td>
               <td class={`r ${c.pnl >= 0 ? 'g' : 'c'}`}>{money(c.pnl)}</td>
               <td class={`r ${c.total >= 0 ? 'g' : 'c'}`}>{money(c.total)}</td>
+              <td class={`r ${tr?.paper_trail == null ? 'm' : tr.paper_trail >= 0 ? 'g' : 'c'}`}>{tr?.paper_trail == null ? '—' : money(tr.paper_trail)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -99,6 +111,8 @@ const last = curve.at(-1);
   .curve path.up, .curve circle.up { stroke: var(--green); fill: none; }
   .curve circle.up { fill: var(--green); }
   .curve path.down, .curve circle.down { stroke: var(--crimson); }
+  .curve path.trail { stroke: var(--graphite); stroke-width: 1; stroke-dasharray: 3 3; }
+  .curve circle.traildot { fill: var(--graphite); stroke: none; }
   .curve circle.down { fill: var(--crimson); }
   .curve figcaption { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--graphite); margin-top: 8px; }
   .tablewrap { overflow-x: auto; margin-top: 18px; }
