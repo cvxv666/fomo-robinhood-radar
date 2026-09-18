@@ -67,7 +67,10 @@ class FakeRpc:
         T = TRANSFER_TOPIC
         if len(topics) == 1:
             # every transfer of the token after the mint: the launch contract pays the creator first
-            return [{"address": address, "transactionHash": "0xbuy", "blockNumber": hex(1_000_101), "logIndex": "0x1",
+            # the pool manager is paid first (bytecode by the kilobyte), the creator's wallet second
+            return [{"address": address, "transactionHash": "0xlp", "blockNumber": hex(1_000_101), "logIndex": "0x0",
+                     "topics": [T, "0x" + "0" * 24 + "e" * 40, "0x" + "0" * 24 + "9" * 40], "data": "0x" + "1".rjust(64, "0")},
+                    {"address": address, "transactionHash": "0xbuy", "blockNumber": hex(1_000_101), "logIndex": "0x1",
                      "topics": [T, "0x" + "0" * 24 + "e" * 40, "0x" + "0" * 24 + "c" * 40], "data": "0x" + "1".rjust(64, "0")}]
         tx = "0xdeploy" if address == M[0] else "0xfactory" if address == M[1] else None
         minted_to = ("0x" + "0" * 24 + address[2:]) if address == M[0] else "0x" + "0" * 24 + "e" * 40
@@ -80,6 +83,8 @@ class FakeRpc:
                 return {"from": "0xKEY" + "1" * 36, "to": None, "input": "0x60a06040" + "00" * 100}
             return {"from": "0xRELAYER" + "2" * 32, "to": "0xFACTORY" + "3" * 32,
                     "input": "0xb052ffc8" + "0" * 64 + "0" * 24 + "c" * 40 + "0" * 64}
+        if method == "eth_getCode":
+            return "0x" + "ef0100" + "1" * 40 if h == "0x" + "c" * 40 else "0x" + "60" * 300
         if h == "0xdeploy":
             return {"to": None}
         return {"to": "0xFACTORY" + "3" * 32}

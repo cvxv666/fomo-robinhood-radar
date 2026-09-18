@@ -66,9 +66,27 @@ def find(rpc, conn: sqlite3.Connection, mint: str) -> dict | None:
         if not t:
             continue
         infra.add(t["frm"])          # anything that pays out is a contract, not a person
-        if t["to"] not in infra and t["to"] != t["frm"]:
+        if t["to"] not in infra and t["to"] != t["frm"] and not is_contract(rpc, t["to"]):
             return {"creator": t["to"].lower(), "via": "factory", "factory": to.lower(), "block": block, "tx": lg["transactionHash"]}
     return {"creator": "", "via": "factory", "factory": to.lower(), "block": block, "tx": lg["transactionHash"]}
+
+
+_code: dict[str, bool] = {}
+
+
+def is_contract(rpc, address: str) -> bool:
+    """A pool, a hook, a manager: bytecode by the kilobyte. A fomo wallet is an EOA with an
+    EIP-7702 delegation on it - 23 bytes of code - and is a person for this purpose."""
+    a = address.lower()
+    if a not in _code:
+        try:
+            code = rpc.call("eth_getCode", [a, "latest"]) or "0x"
+        except Exception:  # noqa: BLE001 - unknown is not a contract
+            return False
+        _code[a] = len(code) > 100
+        if len(_code) > 5000:
+            _code.clear()
+    return _code[a]
 
 
 def ensure(conn: sqlite3.Connection, mint: str, rpc=None, now: int | None = None) -> str | None:
