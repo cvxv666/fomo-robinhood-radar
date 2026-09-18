@@ -1,0 +1,18 @@
+[Unit]
+Description=FOMO Robinhood Radar - the hands board, redrawn from the day's numbers
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=radar
+Group=radar
+WorkingDirectory=/opt/fomoradar/app
+EnvironmentFile=/opt/fomoradar/app/.env
+Environment=PYTHONIOENCODING=utf-8
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/fomoradar/pw
+ExecStart=/opt/fomoradar/venv/bin/python -m fomo_agent.cli hands --video
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/fomoradar

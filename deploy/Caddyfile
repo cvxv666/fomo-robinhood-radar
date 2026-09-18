@@ -23,6 +23,12 @@ fomoradar.app {
 	handle /docs* {
 		reverse_proxy 127.0.0.1:8000
 	}
+	# the boards the radar draws every morning: the page a screenshot came from, one click away
+	handle_path /boards/* {
+		root * /opt/fomoradar/boards
+		file_server
+		header Cache-Control "public, max-age=300"
+	}
 	handle /redoc* {
 		reverse_proxy 127.0.0.1:8000
 	}

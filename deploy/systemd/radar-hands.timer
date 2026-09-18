@@ -1,0 +1,9 @@
+[Unit]
+Description=FOMO Robinhood Radar - the hands board, every morning after the day board
+
+[Timer]
+OnCalendar=*-*-* 07:10:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

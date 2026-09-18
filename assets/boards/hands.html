@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOMO Radar — the radar got hands</title>
+<!--
+  The "hands" board, vertical (1080x1350), filled from window.HANDS by pipeline/hands.py every
+  morning: one anchor number and one moving thing per feature, the Telegram command on every
+  block, every figure from the ledger, the tape and the API log of the last day. The receipt
+  first, then the tools, then the machines that pay, then the one who tried to fool it. Light
+  moves; nothing appears late. ?still=1 holds the frame. Nothing here is advice.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root { --black:#000; --white:#fff; --carbon:#606060; --graphite:#949494; --line:#2a2a2a; --green:#00ff85; --crimson:#ff003d; --amber:#ff8a00; --yellow:#fcff76;
+          --sans:"Space Grotesk", system-ui, sans-serif; --mono:"JetBrains Mono", ui-monospace, monospace; }
+  html, body { margin:0; height:100%; background:var(--black); color:var(--white); overflow:hidden; font-family:var(--mono); }
+  .stage { position:fixed; inset:0; display:grid; place-items:center; }
+  .board { position:relative; width:1080px; height:1350px; transform-origin:center center; background:var(--black); overflow:hidden; }
+  canvas.fx { position:absolute; left:0; top:0; width:1080px; height:1350px; pointer-events:none; }
+  .frame { position:absolute; inset:14px; border:2px solid var(--white); pointer-events:none; }
+  .abs { position:absolute; }
+  .eyebrow { left:40px; top:38px; font-size:12px; font-weight:700; letter-spacing:.14em; white-space:nowrap; }
+  .eyebrow span { color:var(--graphite); font-weight:400; }
+  .led { display:inline-block; width:10px; height:10px; background:var(--green); margin-right:12px; vertical-align:-1px; animation:blink 2.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+  .big { font-family:var(--sans); font-weight:700; letter-spacing:-.02em; line-height:.86; white-space:nowrap; }
+  #title { left:40px; top:62px; font-size:58px; }
+  #title i { font-style:normal; color:var(--green); }
+  #hud { position:absolute; right:40px; top:76px; text-align:right; font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--graphite); line-height:1.9; white-space:nowrap; }
+  #hud b { color:var(--white); } #hud i { color:var(--green); font-style:normal; }
+  .rule { position:absolute; left:40px; width:1000px; height:2px; background:var(--white); }
+  .lab { position:absolute; font-size:12px; font-weight:700; letter-spacing:.14em; white-space:nowrap; }
+  .lab span { color:var(--graphite); font-weight:400; }
+  .lab i { font-style:normal; color:var(--green); }
+  .cap { position:absolute; font-size:11px; font-weight:700; letter-spacing:.12em; color:var(--graphite); white-space:nowrap; line-height:1.9; }
+  .cap b { color:var(--white); } .cap i { color:var(--green); font-style:normal; } .cap s { color:var(--crimson); text-decoration:none; }
+  .num { position:absolute; font-family:var(--sans); font-weight:700; letter-spacing:-.03em; line-height:.86; white-space:nowrap; }
+  .num small { font-size:12px; letter-spacing:.14em; color:var(--graphite); margin-left:14px; font-family:var(--mono); font-weight:700; vertical-align:8px; }
+  canvas.v { position:absolute; }
+  .hook { position:absolute; font-family:var(--sans); font-weight:700; font-size:20px; letter-spacing:-.005em; line-height:1.2; white-space:nowrap; }
+  .hook i { font-style:normal; color:var(--green); } .hook s { text-decoration:none; color:var(--crimson); }
+  .card { position:absolute; width:226px; height:88px; border:1px solid var(--line); padding:10px 12px; box-sizing:border-box; }
+  .card .n { font-family:var(--sans); font-weight:700; font-size:20px; letter-spacing:-.01em; white-space:nowrap; }
+  .card .s { position:absolute; right:12px; top:10px; font-size:11px; font-weight:700; color:var(--green); letter-spacing:.1em; }
+  .card .p { margin-top:8px; font-size:11px; letter-spacing:.1em; color:var(--graphite); white-space:nowrap; }
+  .card .p b { color:var(--white); }
+  .card .c { position:absolute; left:12px; bottom:9px; font-size:10px; letter-spacing:.12em; color:var(--green); }
+  .card.hot { border-color:var(--green); }
+  .stamp { position:absolute; border:2px solid var(--crimson); color:var(--crimson); font-size:11px; font-weight:700; letter-spacing:.2em; padding:4px 8px; transform:rotate(-6deg); }
+  .qr { position:absolute; right:40px; top:1226px; width:70px; height:70px; image-rendering:pixelated; }
+  .foot { position:absolute; top:1312px; font-size:11px; letter-spacing:.1em; color:var(--carbon); white-space:nowrap; }
+  .foot b { color:var(--graphite); font-weight:700; }
+  @media (prefers-reduced-motion: reduce) { .led { animation:none; } }
+</style>
+</head>
+<body>
+<div class="stage"><div class="board" id="board">
+  <canvas class="fx" id="art"></canvas>
+  <div class="frame"></div>
+
+  <div class="abs eyebrow"><span class="led"></span>FOMO ROBINHOOD RADAR  <span>·  WHAT IT CAN DO, FROM WHAT IT DID  ·  <span id="date"></span></span></div>
+  <div class="abs big" id="title">THE RADAR GOT <i>HANDS.</i></div>
+  <div id="hud"><b id="h-alerts"></b> ALERTS ON THE RECORD SINCE <span id="h-since"></span><br><i id="h-above"></i> TRADED ABOVE THE CALL<br>THIS BOARD REDRAWS ITSELF AT 07:10 UTC</div>
+  <div class="rule" style="top:134px"></div>
+
+  <!-- 1. /paper: the receipt -->
+  <div class="lab" style="left:40px;top:148px">/PAPER  <span>·  $100 INTO EVERY ALERT AT THE CALL, OUT AT THE HOUR READ  ·  THE RECEIPT</span></div>
+  <div class="num" id="paper-big" style="left:40px;top:180px;font-size:112px;color:var(--green)"></div>
+  <div class="cap" style="left:40px;top:292px"><b id="p-trades"></b> TRADES  ·  <b id="p-win"></b> WON  ·  BEST <i id="p-best"></i>  ·  WORST <s id="p-worst"></s></div>
+  <canvas class="v" id="ring" width="150" height="150" style="left:600px;top:158px"></canvas>
+  <div class="cap" style="left:766px;top:186px">OF ALERTS TRADED<br>ABOVE THE CALL<br><b id="p-above"></b> MEASURED<br>SINCE <span id="p-since"></span></div>
+  <canvas class="v" id="curve" width="1000" height="118" style="left:40px;top:322px"></canvas>
+  <div class="hook" style="left:40px;top:444px">THE LOSS IS CAPPED AT <s id="p-worst2"></s>. THE WIN IS NOT: <i id="p-best2"></i> ON ONE CALL.</div>
+  <div class="cap" style="left:40px;top:472px">AT $1,000 A CALL: <i id="p-1000"></i>  ·  EVERY TRADE IS ON <b><span id="p-site"></span>/paper</b> — CHECK IT</div>
+  <div class="rule" style="top:500px"></div>
+
+  <!-- 2. /follow: the wallet -->
+  <div class="lab" style="left:40px;top:510px">/FOLLOW &lt;handle&gt;  <span>·  THAT WALLET'S EVERY FILL IN YOUR CHAT, 20 SECONDS AFTER THE BLOCK</span></div>
+  <div class="hook" style="left:40px;top:540px">FOLLOW THE WALLET THAT MADE <i id="f-top"></i> IN 30 DAYS.</div>
+  <div id="cards"></div>
+  <canvas class="v" id="race" width="1000" height="60" style="left:40px;top:684px"></canvas>
+  <div class="cap" style="left:40px;top:748px">FREE <b id="f-free"></b> WALLETS  ·  PRO <b id="f-pro"></b>  ·  REAL FILLS ONLY  ·  <i>15× FASTER</i> THAN A SCREENER'S FIVE-MINUTE REFRESH</div>
+  <div class="rule" style="top:780px"></div>
+
+  <!-- 3. /invite: pro for free -->
+  <div class="lab" style="left:40px;top:794px">/INVITE  <span>·  YOUR OWN LINK  ·  <span id="i-days"></span> DAYS OF PRO FOR WHOEVER JOINS BY IT, <span id="i-days2"></span> FOR YOU</span></div>
+  <div class="num" style="left:40px;top:826px;font-size:64px"><span id="i-month"></span><small>INVITES = A MONTH OF PRO</small></div>
+  <canvas class="v" id="fuse" width="620" height="44" style="left:420px;top:828px"></canvas>
+  <div class="cap" style="left:40px;top:896px">UP TO <b id="i-max"></b> A MONTH  ·  <b id="i-total"></b> DAYS  ·  ONLY A CHAT THE BOT NEVER SAW COUNTS</div>
+  <div class="rule" style="top:928px"></div>
+
+  <!-- 4. /webhook: the machines pay -->
+  <div class="lab" style="left:40px;top:942px">/WEBHOOK &lt;url&gt;  <span>·  EVERY ALERT POSTED TO YOUR OWN BOT THE SECOND IT GOES OUT  ·  PRO KEY, PAID IN $FOMOBRAIN, BURNED</span></div>
+  <div class="num" style="left:40px;top:974px;font-size:96px"><span id="a-heavy"></span><small>BOTS HEAVY ENOUGH TO PAY</small></div>
+  <div class="cap" style="left:40px;top:1070px"><b id="a-req"></b> API REQUESTS A DAY FROM <b id="a-readers"></b> READERS  ·  THE <span id="a-heavy2"></span> ARE <i id="a-share"></i> OF IT</div>
+  <canvas class="v" id="hours" width="400" height="30" style="left:40px;top:1112px"></canvas>
+  <canvas class="v" id="wheel" width="240" height="180" style="left:480px;top:966px"></canvas>
+  <div id="uas" class="cap" style="left:740px;top:970px;width:300px;height:96px;overflow:hidden;line-height:1.75"></div>
+  <div class="cap" style="left:740px;top:1074px">THEY ALREADY COPY US. IF THEY PAY:<br><i>≈ <span id="a-burn"></span> OF $FOMOBRAIN</i><br>BURNED, EVERY MONTH</div>
+  <div class="rule" style="top:1152px"></div>
+
+  <!-- 5. the seeder -->
+  <div class="lab" style="left:40px;top:1166px">THE ALERT GOT SMARTER  <span>·  WHAT IT CHECKS BEFORE IT SPEAKS: WHO MADE THE TOKEN, WHO MOVES TOGETHER, WHO IS FAKING IT</span></div>
+  <div class="hook" id="s-hook" style="left:40px;top:1196px"></div>
+  <canvas class="v" id="waves" width="640" height="60" style="left:40px;top:1234px"></canvas>
+  <canvas class="v" id="smart" width="280" height="60" style="left:700px;top:1234px"></canvas>
+  <div class="cap" style="right:40px;top:1210px;line-height:1">THE BOT</div>
+  <img class="qr" id="qr" alt="" src="">
+
+  <div class="foot" style="left:40px">LEDGER SINCE <span id="foot-since"></span>  ·  THE TAPE  ·  API LOG, LAST 24H  ·  <b>NOT ADVICE</b></div>
+  <div class="foot" style="right:130px"><b id="foot-handle"></b>  ·  <b id="foot-site"></b></div>
+</div></div>
+<script>
+/*HANDS*/
+</script>
+<script>
+(() => {
+  'use strict';
+  const H = window.HANDS; if (!H) return;
+  const still = new URLSearchParams(location.search).has('still') || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const GREEN = '#00ff85', CRIMSON = '#ff003d', WHITE = '#fff', GRAPHITE = '#949494', LINE = '#2a2a2a', CARBON = '#606060';
+  const $ = id => document.getElementById(id);
+  const mono = px => `bold ${px}px "JetBrains Mono", monospace`;
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const money = v => (v >= 0 ? '+' : '−') + '$' + Math.abs(Math.round(v)).toLocaleString('en-US');
+  const big = v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? Math.round(v / 1e3) + 'K' : String(v);
+  if (still) document.querySelectorAll('.led').forEach(e => { e.style.animation = 'none'; });
+
+  // ---- the words
+  $('date').textContent = H.date;
+  $('h-alerts').textContent = H.alerts; $('h-since').textContent = H.since; $('h-above').textContent = H.above_pct + '%';
+  $('p-trades').textContent = H.paper.trades; $('p-win').textContent = H.paper.win_pct + '%';
+  $('p-best').textContent = money(H.paper.best || 0); $('p-worst').textContent = money(H.paper.worst || 0);
+  $('p-above').textContent = `${H.above_n} OF ${H.clean}`; $('p-since').textContent = H.since;
+  $('p-worst2').textContent = money(H.paper.worst || 0); $('p-best2').textContent = money(H.paper.best || 0);
+  $('p-1000').textContent = money(H.paper.at_1000); $('p-site').textContent = H.site || 'fomoradar.app';
+  $('f-top').textContent = H.stars[0] ? H.stars[0].pnl : '—'; $('f-free').textContent = H.follow.free; $('f-pro').textContent = H.follow.pro;
+  $('cards').innerHTML = H.stars.slice(0, 4).map((s, i) => `<div class="card${i === 0 ? ' hot' : ''}" style="left:${40 + i * 244}px;top:582px"><div class="n">${esc(s.handle)}</div><div class="s">${s.score}</div><div class="p">30 DAYS  <b>${esc(s.pnl)}</b></div><div class="c">/follow ${esc(s.handle)}</div></div>`).join('');
+  $('i-days').textContent = H.invite.days; $('i-days2').textContent = H.invite.days; $('i-month').textContent = Math.round(30 / Math.max(1, H.invite.days));
+  $('i-max').textContent = H.invite.max; $('i-total').textContent = H.invite.max * H.invite.days;
+  $('a-heavy').textContent = H.api.heavy; $('a-heavy2').textContent = H.api.heavy; $('a-req').textContent = big(H.api.requests); $('a-readers').textContent = H.api.readers.toLocaleString('en-US');
+  $('a-share').textContent = H.api.heavy_share + '%'; $('a-burn').textContent = '$' + H.api.burn.toLocaleString('en-US');
+  $('uas').innerHTML = H.api.uas.slice(0, 5).map(([n, v]) => `<div>${esc(n)}<span style="float:right"><b>${big(v)}</b></span></div>`).join('');
+  $('s-hook').innerHTML = H.seeder.fills ? `SOMEONE SPENT <s>$${H.seeder.usd.toLocaleString('en-US')}</s> TO FAKE <s>${H.seeder.fills}</s> BUYS INTO OUR BEST WALLETS. ALERTS SENT: <i>${H.seeder.sent}</i>.` : 'NOBODY TRIED TO FAKE A BUY THIS WEEK. THE DOOR IS STILL LOCKED.';
+  $('foot-since').textContent = H.since; $('foot-handle').textContent = '@' + H.handle; $('foot-site').textContent = H.site || '';
+  $('qr').src = H.qr || ''; $('qr').alt = 't.me/' + H.bot;
+
+  // ---- 1. the receipt: the number counts with the curve, the ring fills
+  const bigEl = $('paper-big'); const T = H.paper.curve.length > 1 ? H.paper.curve : [0, H.paper.pnl];
+  const rc = $('ring'), rx = rc.getContext('2d'), above = H.above_pct / 100;
+  function drawRing(t) {
+    rx.clearRect(0, 0, 150, 150);
+    const k = still ? 1 : Math.min(1, t / 2200);
+    rx.lineWidth = 10; rx.strokeStyle = LINE; rx.beginPath(); rx.arc(75, 75, 62, 0, Math.PI * 2); rx.stroke();
+    rx.strokeStyle = GREEN; rx.beginPath(); rx.arc(75, 75, 62, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * above * k); rx.stroke();
+    rx.fillStyle = WHITE; rx.font = 'bold 40px "Space Grotesk", sans-serif'; rx.textAlign = 'center'; rx.fillText(Math.round(above * 100 * k) + '%', 75, 90);
+  }
+  const cv = $('curve'), cx = cv.getContext('2d');
+  const CW = 1000, CH = 118, lo = Math.min(0, ...T), hi = Math.max(1, ...T);
+  const px = i => 4 + (i / (T.length - 1)) * (CW - 44), py = v => 12 + (1 - (v - lo) / (hi - lo)) * (CH - 42);
+  function drawCurve(t) {
+    cx.clearRect(0, 0, CW, CH);
+    const k = still ? 1 : Math.min(1, t / 2200), n = Math.max(2, Math.round(1 + k * (T.length - 1)));
+    for (let g = 0; g <= 4; g++) { cx.fillStyle = '#141414'; cx.fillRect(0, 12 + g * ((CH - 42) / 4), CW, 1); }
+    cx.fillStyle = LINE; cx.fillRect(0, py(0), CW, 1);
+    cx.beginPath(); cx.moveTo(px(0), py(0)); for (let i = 0; i < n; i++) cx.lineTo(px(i), py(T[i])); cx.lineTo(px(n - 1), py(0)); cx.closePath();
+    cx.fillStyle = 'rgba(0,255,133,.07)'; cx.fill();
+    cx.strokeStyle = GREEN; cx.lineWidth = 2.5; cx.beginPath(); for (let i = 0; i < n; i++) i ? cx.lineTo(px(i), py(T[i])) : cx.moveTo(px(i), py(T[i])); cx.stroke();
+    for (let i = 1; i < n; i++) { const d = T[i] - T[i - 1]; cx.fillStyle = d > 0 ? GREEN : d < 0 ? CRIMSON : CARBON; cx.fillRect(px(i) - 2, CH - 18, 4, Math.max(2, Math.min(12, Math.abs(d) / 30))); }
+    const j = H.paper.best_index || 0;
+    if (H.paper.best_sym && n > j && j > 0) { cx.fillStyle = WHITE; cx.font = mono(10); cx.textAlign = 'left'; cx.fillText(`${H.paper.best_sym}${H.paper.best_x ? '  ×' + (H.paper.best_x >= 10 ? Math.round(H.paper.best_x) : H.paper.best_x.toFixed(2)) + ' AT THE HOUR' : ''}  ·  ${money(H.paper.best)}`, px(j) + 10, py(T[j]) + 22); }
+    const x = px(n - 1), y = py(T[n - 1]);
+    const g = cx.createRadialGradient(x, y, 0, x, y, 28); g.addColorStop(0, 'rgba(0,255,133,.6)'); g.addColorStop(1, 'rgba(0,255,133,0)');
+    cx.fillStyle = g; cx.fillRect(x - 28, y - 28, 56, 56); cx.fillStyle = WHITE; cx.fillRect(x - 3, y - 3, 7, 7);
+    cx.fillStyle = GRAPHITE; cx.font = mono(10); cx.textAlign = 'left'; cx.fillText(H.since, 4, CH - 2); cx.textAlign = 'right'; cx.fillText(H.date.slice(0, 6), CW - 2, CH - 2);
+    bigEl.textContent = money(T[n - 1]);
+  }
+
+  // ---- 2. the race
+  const rr = $('race'), rrx = rr.getContext('2d');
+  function drawRace(t) {
+    rrx.clearRect(0, 0, 1000, 60);
+    const lanes = [['THE CHAIN', 0, WHITE], ['YOUR CHAT  ·  20 S', 20, GREEN], ['A SCREENER  ·  5 MIN', 300, CARBON]];
+    const k = still ? 0.5 : (t / 5000) % 1;
+    lanes.forEach(([name, delay, col], i) => {
+      const y = 12 + i * 18;
+      rrx.fillStyle = LINE; rrx.fillRect(150, y, 850, 1);
+      rrx.fillStyle = col; rrx.font = mono(9); rrx.textAlign = 'right'; rrx.fillText(name, 140, y + 3);
+      const prog = Math.max(0, Math.min(1, (k * 400 - delay) / 300)), x = 150 + prog * 850;
+      if (k * 400 >= delay) { const g = rrx.createRadialGradient(x, y, 0, x, y, 12); g.addColorStop(0, col === CARBON ? 'rgba(96,96,96,.8)' : 'rgba(0,255,133,.8)'); g.addColorStop(1, 'rgba(0,0,0,0)'); rrx.fillStyle = g; rrx.fillRect(x - 12, y - 12, 24, 24); rrx.fillStyle = col; rrx.fillRect(x - 3, y - 3, 6, 6); }
+      else { rrx.fillStyle = '#000'; rrx.fillRect(152, y - 6, 52, 12); rrx.fillStyle = CARBON; rrx.font = mono(8); rrx.textAlign = 'left'; rrx.fillText('WAITING', 154, y + 3); }
+    });
+  }
+
+  // ---- 3. the fuse
+  const fc = $('fuse'), fx = fc.getContext('2d');
+  function drawFuse(t) {
+    fx.clearRect(0, 0, 620, 44);
+    const n = Math.min(12, H.invite.max), w = Math.floor((530 - (n - 1) * 10) / n), gap = 10, y = 22, k = still ? Math.ceil(n * 0.4) : ((t / 700) % (n + 3));
+    for (let i = 0; i < n; i++) {
+      const x = 2 + i * (w + gap), lit = k > i;
+      fx.strokeStyle = lit ? GREEN : LINE; fx.lineWidth = 2; fx.strokeRect(x, y - 12, w, 24);
+      if (lit) { fx.fillStyle = 'rgba(0,255,133,.14)'; fx.fillRect(x, y - 12, w, 24); }
+      if (i < n - 1) { fx.strokeStyle = lit ? GREEN : LINE; fx.beginPath(); fx.moveTo(x + w, y); fx.lineTo(x + w + gap, y); fx.stroke(); }
+      fx.fillStyle = lit ? GREEN : CARBON; fx.font = mono(10); fx.textAlign = 'center'; fx.fillText('+' + H.invite.days + 'D', x + w / 2, y + 4);
+    }
+    if (!still) { const x = 2 + Math.min(n, k) * (w + gap); const g = fx.createRadialGradient(x, y, 0, x, y, 16); g.addColorStop(0, 'rgba(0,255,133,.9)'); g.addColorStop(1, 'rgba(0,255,133,0)'); fx.fillStyle = g; fx.fillRect(x - 16, y - 16, 32, 32); }
+    fx.fillStyle = WHITE; fx.font = 'bold 14px "Space Grotesk", sans-serif'; fx.textAlign = 'left'; fx.fillText('PRO  ∞', 2 + n * (w + gap) + 6, y + 5);
+  }
+
+  // ---- 4. the machines
+  const hc = $('hours'), hx = hc.getContext('2d');
+  function drawHours() {
+    hx.clearRect(0, 0, 400, 30); const mx = Math.max(1, ...H.api.hours);
+    H.api.hours.forEach((v, i) => { const h = Math.max(2, Math.round(24 * v / mx)); hx.fillStyle = v === mx ? GREEN : '#3a3a3a'; hx.fillRect(i * 16, 28 - h, 12, h); });
+    hx.fillStyle = CARBON; hx.font = mono(8); hx.textAlign = 'left'; hx.fillText('00:00', 0, 8); hx.textAlign = 'right'; hx.fillText('24H OF API READS · UTC', 400, 8);
+  }
+  const wc = $('wheel'), wx = wc.getContext('2d');
+  const STEPS = ['BOTS READ', 'BOTS PAY', 'BURN', 'SUPPLY ↓', 'PRO GROWS'];
+  function drawWheel(t) {
+    wx.clearRect(0, 0, 240, 180);
+    const cxp = 120, cyp = 92, r = 62, k = still ? 0.3 : (t / 3200) % 1;
+    wx.strokeStyle = LINE; wx.lineWidth = 2; wx.beginPath(); wx.arc(cxp, cyp, r, 0, Math.PI * 2); wx.stroke();
+    const a = -Math.PI / 2 + k * Math.PI * 2, x = cxp + Math.cos(a) * r, y = cyp + Math.sin(a) * r;
+    wx.strokeStyle = GREEN; wx.lineWidth = 4; wx.beginPath(); wx.arc(cxp, cyp, r, a - 1.2, a); wx.stroke();
+    const g = wx.createRadialGradient(x, y, 0, x, y, 22); g.addColorStop(0, 'rgba(0,255,133,.7)'); g.addColorStop(1, 'rgba(0,255,133,0)'); wx.fillStyle = g; wx.fillRect(x - 22, y - 22, 44, 44); wx.fillStyle = WHITE; wx.fillRect(x - 3, y - 3, 6, 6);
+    STEPS.forEach((s, i) => {
+      const a = -Math.PI / 2 + (i / STEPS.length) * Math.PI * 2, x = cxp + Math.cos(a) * r, y = cyp + Math.sin(a) * r;
+      wx.fillStyle = i === 2 ? CRIMSON : WHITE; wx.fillRect(x - 3, y - 3, 6, 6);
+      wx.fillStyle = i === 2 ? CRIMSON : GRAPHITE; wx.font = mono(9); wx.textAlign = x < cxp - 8 ? 'right' : x > cxp + 8 ? 'left' : 'center';
+      wx.fillText(s, cxp + Math.cos(a) * (r + 12), cyp + Math.sin(a) * (r + 12) + 3);
+    });
+    const burned = still ? H.api.burn : Math.round(H.api.burn * Math.min(1, t / 3000));
+    wx.fillStyle = GREEN; wx.font = 'bold 20px "Space Grotesk", sans-serif'; wx.textAlign = 'center'; wx.fillText('$' + burned.toLocaleString('en-US'), cxp, cyp + 1);
+    wx.fillStyle = GRAPHITE; wx.font = mono(8); wx.fillText(`BURNED A MONTH, ${H.api.heavy} × $${H.api.price}`, cxp, cyp + 16);
+  }
+
+  // ---- 5. the seeder
+  const wv = $('waves'), wvx = wv.getContext('2d');
+  function drawWaves(t) {
+    wvx.clearRect(0, 0, 640, 60);
+    const W = 640, hours = 8 * 24, X = h => (h / hours) * W, y = 36;
+    wvx.fillStyle = LINE; wvx.fillRect(0, y, W, 1);
+    for (let d = 0; d <= 8; d++) { wvx.fillStyle = CARBON; wvx.fillRect(X(d * 24), y - 3, 1, 6); wvx.font = mono(8); wvx.textAlign = d === 0 ? 'left' : d === 8 ? 'right' : 'center'; wvx.fillText(H.seeder.days[d] || '', X(d * 24), y + 16); }
+    const ws = H.seeder.waves;
+    ws.forEach((w, i) => {
+      const x = X(w.h);
+      wvx.save(); wvx.translate(x, y); wvx.rotate(Math.PI / 4); wvx.fillStyle = CRIMSON; wvx.fillRect(-4, -4, 8, 8); wvx.restore();
+      const near = ws.filter(o => Math.abs(o.h - w.h) < 14).length;
+      if (near === 1 && (i === 0 || i === ws.length - 1 || i % 3 === 0)) { wvx.fillStyle = GRAPHITE; wvx.font = mono(8); wvx.textAlign = 'center'; wvx.fillText(w.sym, x, y - 12); }
+    });
+    // the busiest evening, named once
+    if (ws.length > 3) {
+      let bestH = ws[0].h, bestN = 0;
+      ws.forEach(w => { const n = ws.filter(o => Math.abs(o.h - w.h) < 6).length; if (n > bestN) { bestN = n; bestH = w.h; } });
+      if (bestN >= 3) { wvx.fillStyle = CRIMSON; wvx.font = mono(8); wvx.textAlign = 'right'; wvx.fillText(`${bestN} WAVES IN ONE EVENING →`, X(bestH) - 8, y - 12); }
+    }
+    const k = still ? 1 : Math.min(1, ((t / 3000) % 1) / 0.2);
+    const quiet = ws.length ? (ws.reduce((a, w) => a + (w.h < 96 ? 1 : 0), 0) <= 1 ? X(58) : X(140)) : X(58);
+    wvx.save(); wvx.translate(quiet, 2); wvx.rotate(-0.08); wvx.globalAlpha = k;
+    wvx.strokeStyle = CRIMSON; wvx.lineWidth = 2; wvx.strokeRect(0, 0, 118, 22); wvx.fillStyle = CRIMSON; wvx.font = mono(11); wvx.textAlign = 'center'; wvx.fillText(`${H.seeder.caught} CAUGHT · ${H.seeder.sent} SENT`, 59, 15); wvx.restore();
+  }
+  const sm = $('smart'), sx = sm.getContext('2d');
+  function drawSmart(t) {
+    sx.clearRect(0, 0, 280, 60);
+    const syms = H.key.syms.length ? [...H.key.syms, '3RD'] : ['1ST', '2ND', '3RD'];
+    sx.fillStyle = CRIMSON; sx.font = mono(9); sx.textAlign = 'left'; sx.fillText(H.key.address || 'A KEY', 0, 14);
+    syms.forEach((s, i) => {
+      const x = 70 + i * 54, third = i === syms.length - 1;
+      sx.strokeStyle = third ? WHITE : CRIMSON; sx.lineWidth = 1.5; sx.strokeRect(x, 2, 46, 16);
+      sx.fillStyle = third ? WHITE : CRIMSON; sx.font = mono(8); sx.textAlign = 'center'; sx.fillText(String(s).slice(0, 6), x + 23, 13);
+      if (third) { const k = still ? 1 : Math.min(1, ((t / 3000) % 1) / 0.25); sx.strokeStyle = CRIMSON; sx.lineWidth = 2; sx.beginPath(); sx.moveTo(x + 2, 3); sx.lineTo(x + 2 + 42 * k, 3 + 14 * k); sx.moveTo(x + 44, 3); sx.lineTo(x + 44 - 42 * k, 3 + 14 * k); sx.stroke(); }
+    });
+    sx.fillStyle = GRAPHITE; sx.font = mono(8); sx.textAlign = 'left'; sx.fillText("A KEY'S THIRD TOKEN: NOT PUSHED", 0, 30);
+    const y = 48, crew = H.crew.length ? H.crew : ['—', '—', '—'];
+    crew.slice(0, 3).forEach((w, i) => {
+      const x = 8 + i * 80; sx.fillStyle = WHITE; sx.beginPath(); sx.arc(x, y, 4, 0, Math.PI * 2); sx.fill();
+      if (i < 2) { sx.strokeStyle = GREEN; sx.lineWidth = 1.5; sx.beginPath(); sx.moveTo(x + 4, y); sx.lineTo(x + 76, y); sx.stroke(); }
+      sx.fillStyle = GRAPHITE; sx.font = mono(7); sx.textAlign = 'center'; sx.fillText(String(w).slice(0, 12), x, y + 11);
+    });
+    if (!still) { const k = (t / 2200) % 1, x = 8 + k * 160; const g = sx.createRadialGradient(x, y, 0, x, y, 10); g.addColorStop(0, 'rgba(0,255,133,.9)'); g.addColorStop(1, 'rgba(0,255,133,0)'); sx.fillStyle = g; sx.fillRect(x - 10, y - 10, 20, 20); }
+    sx.fillStyle = GREEN; sx.font = mono(9); sx.textAlign = 'left'; sx.fillText('= 1 OPINION', 184, y + 3);
+  }
+
+  // ---- the board's light
+  const art = $('art'), ax = art.getContext('2d'); art.width = 1080; art.height = 1350;
+  function drawArt(t) {
+    ax.clearRect(0, 0, 1080, 1350); if (still) return;
+    const y = ((t / 12000) % 1) * 1450 - 50, g = ax.createLinearGradient(0, y - 80, 0, y + 80);
+    g.addColorStop(0, 'rgba(0,255,133,0)'); g.addColorStop(.5, 'rgba(0,255,133,.05)'); g.addColorStop(1, 'rgba(0,255,133,0)');
+    ax.fillStyle = g; ax.fillRect(14, y - 80, 1052, 160);
+  }
+  drawHours();
+  let t0 = null;
+  function frame(ts) { if (t0 === null) t0 = ts; const t = ts - t0; drawArt(t); drawRing(t); drawCurve(t); drawRace(t); drawFuse(t); drawWheel(t); drawWaves(t); drawSmart(t); if (!still) requestAnimationFrame(frame); }
+  requestAnimationFrame(frame);
+  const board = $('board');
+  const fit = () => { const k = Math.min(innerWidth / 1080, innerHeight / 1350); board.style.transform = `scale(${k})`; };
+  addEventListener('resize', fit); fit();
+})();
+</script>
+</body>
+</html>

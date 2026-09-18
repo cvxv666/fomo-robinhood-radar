@@ -480,6 +480,26 @@ def watch_cmd(
         conn.close()
 
 
+@app.command("hands")
+def hands_cmd(
+    post: bool = typer.Option(False, "--post", help="post the wide one to X"),
+    video: bool = typer.Option(False, "--video", help="also record an eight-second loop of the vertical one"),
+    out: Optional[str] = typer.Option(None, "--out", help="directory (default BOARD_DIR or ./boards)"),
+) -> None:
+    """The hands board: what the radar can do, from what it did - both shapes, from today's numbers."""
+    from pathlib import Path
+
+    from .pipeline import hands
+
+    conn = db.connect()
+    try:
+        r = hands.run(conn, out_dir=Path(out) if out else None, post=post, make_video=video)
+    finally:
+        conn.close()
+    for k, v in r.items():
+        typer.echo(f"{k}: {v}")
+
+
 @app.command("board")
 def board_cmd(
     hours: int = typer.Option(24, "--hours", help="24 for the day, 168 for the week"),
