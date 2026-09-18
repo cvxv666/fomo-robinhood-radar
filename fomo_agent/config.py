@@ -216,6 +216,9 @@ class Settings:
     follow_free_max: int = field(default_factory=lambda: _int("FOLLOW_FREE_MAX", 3))
     follow_pro_max: int = field(default_factory=lambda: _int("FOLLOW_PRO_MAX", 50))
     follow_max_per_hour: int = field(default_factory=lambda: _int("FOLLOW_MAX_PER_HOUR", 30))
+    # the morning board (pipeline/board.py): where the html/png land, and the X handle on its foot
+    board_dir: str = field(default_factory=lambda: _env("BOARD_DIR", ""))
+    x_handle: str = field(default_factory=lambda: _env("X_HANDLE", "FomoBrainRH").lstrip("@"))
     # The watcher: how often it asks the chain for the blocks since last time, on how much of
     # the RPC allowance, and how far it reads on its first tick or after a stall. The scheduled
     # pass owns anything older than that.

@@ -84,7 +84,7 @@ if [ -n "$changed" ]; then
 fi
 
 cd "$APP"
-sudo -u radar /opt/fomoradar/venv/bin/pip install -q -e ".[api,dev]"
+sudo -u radar /opt/fomoradar/venv/bin/pip install -q -e ".[api,dev,board]"
 sudo -u radar /opt/fomoradar/venv/bin/python -m pytest -q 2>&1 | tail -1
 
 cd "$APP/site"

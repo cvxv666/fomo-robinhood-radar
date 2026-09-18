@@ -31,7 +31,8 @@ def verdict(r: dict, now: int) -> str:
         return "open" if now - r["ts"] < settings.telegram_followup_min * 60 + 1800 else "unmeasured"
     if r["best"] is None:
         return "unmeasured"
-    if (r["vol_usd"] or 0) < DEAD_USD:
+    # no volume figure is not a dead pool, it is a read the candles did not cover
+    if r["vol_usd"] is not None and r["vol_usd"] < DEAD_USD:
         return "dead"
     if r["best"] >= 2:
         return "2x"

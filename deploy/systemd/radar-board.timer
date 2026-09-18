@@ -1,0 +1,11 @@
+[Unit]
+Description=FOMO Robinhood Radar - the morning board
+
+[Timer]
+# 07:05 UTC: the daily preparation at 06:50 has run, the hour-later reads of the night's alerts
+# are on the ledger, and the account posts at the same minute every day.
+OnCalendar=*-*-* 07:05:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

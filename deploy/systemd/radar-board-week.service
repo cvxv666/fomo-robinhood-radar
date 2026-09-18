@@ -1,0 +1,18 @@
+[Unit]
+Description=FOMO Robinhood Radar - the week as one board, posted to X
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=radar
+Group=radar
+WorkingDirectory=/opt/fomoradar/app
+EnvironmentFile=/opt/fomoradar/app/.env
+Environment=PYTHONIOENCODING=utf-8
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/fomoradar/pw
+ExecStart=/opt/fomoradar/venv/bin/python -m fomo_agent.cli board --hours 168 --post
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/fomoradar

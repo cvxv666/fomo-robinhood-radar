@@ -480,6 +480,28 @@ def watch_cmd(
         conn.close()
 
 
+@app.command("board")
+def board_cmd(
+    hours: int = typer.Option(24, "--hours", help="24 for the day, 168 for the week"),
+    post: bool = typer.Option(False, "--post", help="post it to X with the text"),
+    out: Optional[str] = typer.Option(None, "--out", help="directory for the html/png/txt (default BOARD_DIR or ./boards)"),
+) -> None:
+    """The day (or the week) as one board: the alerts with their hour peak and where they sit now,
+    the tape underneath. Rendered to a PNG; with --post, on X in the morning."""
+    from pathlib import Path
+
+    from .pipeline import board
+
+    conn = db.connect()
+    try:
+        r = board.run(conn, hours=hours, out_dir=Path(out) if out else None, post=post)
+    finally:
+        conn.close()
+    typer.echo(f"{r['png']}  ({r['alerts']} alerts)" + (f"  posted {r['posted']}" if r["posted"] else ""))
+    typer.echo("")
+    typer.echo(r["text"])
+
+
 @app.command("digest")
 def digest_cmd(
     hours: int = typer.Option(24, "--hours", help="window the digest covers"),

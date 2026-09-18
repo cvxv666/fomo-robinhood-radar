@@ -1,0 +1,9 @@
+[Unit]
+Description=FOMO Robinhood Radar - the week's board, Monday morning
+
+[Timer]
+OnCalendar=Mon *-*-* 07:20:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
