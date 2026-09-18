@@ -55,17 +55,35 @@ for p in sorted(pushes.values(), key=lambda p: p["ts"]):
     cds = candles_for(mint)
     o = hot.outcome(conn, mint, ts, px, 86400, now, cds)
     best, nowx = o["best"], o["now"]
-    verdict = ("honeypot" if tk and tk["sellable"] == 0 else "open" if now - ts < 6 * 3600 and (best or 0) < 2 else
+    vol_since = round(sum(c[5] for c in cds if len(c) > 5 and c[0] >= ts - 300)) if cds else None
+    was_seeded = seeded(conn, mint, now)["seeded"]
+    # a pool nobody traded after the push is not flat, it is dead: the price did not move because
+    # nothing happened, and NCAT read 1.02x for a day on $995 of trades
+    verdict = ("honeypot" if tk and tk["sellable"] == 0 else "seeded" if was_seeded else
+               "dead" if cds and now - ts >= 3600 and (vol_since or 0) < 2000 else
+               "open" if now - ts < 6 * 3600 and (best or 0) < 2 else
                "reached 2x" if (best or 0) >= 2 else "failed" if (nowx or 0) < 0.5 and (best or 0) < 1.5 else "flat")
     report.append({"t": hhmm(ts), "kind": p["kind"], "sym": sym, "mint": mint, "chats": len(p["chats"]), "best": best, "now": nowx,
-                   "candles": bool(cds), "seeded": seeded(conn, mint, now)["seeded"], "unsellable": bool(tk and tk["sellable"] == 0),
+                   "vol_since": vol_since, "candles": bool(cds), "seeded": was_seeded, "unsellable": bool(tk and tk["sellable"] == 0),
                    "conv": b["conviction"] if b else None, "wallets": b["wallets"] if b else None, "age_h": round((now - ts) / 3600, 1), "verdict": verdict})
 out("PUSHES", report)
 out("PUSH_TOTALS", {"pushes": len(report), "launch": sum(r["kind"] == "launch" for r in report), "burst": sum(r["kind"] == "burst" for r in report),
                     "reached_2x": sum(r["verdict"] == "reached 2x" for r in report), "failed": sum(r["verdict"] == "failed" for r in report),
                     "flat": sum(r["verdict"] == "flat" for r in report), "open": sum(r["verdict"] == "open" for r in report),
+                    "dead": sum(r["verdict"] == "dead" for r in report), "seeded": sum(r["verdict"] == "seeded" for r in report),
                     "honeypot": sum(r["verdict"] == "honeypot" for r in report), "bursts_recorded": n1("SELECT COUNT(*) FROM bursts WHERE ts >= ?", since)})
 out("UNSELLABLE_24H", [dict(r) for r in conn.execute("SELECT symbol, mint, sell_note FROM tokens WHERE sellable = 0 AND sell_checked_at >= ?", (since,))])
+# the seeding waves provenance.waves caught: one-fill-each buys into a queue of trusted wallets
+waves = []
+for r in conn.execute("SELECT mint, COUNT(DISTINCT address) wallets, MIN(ts) t0, MAX(ts) t1, COUNT(*) fills FROM trades "
+                      "WHERE kind = 'seed' AND ts >= ? GROUP BY mint ORDER BY t0", (since,)):
+    sizes = sorted(x[0] or 0 for x in conn.execute("SELECT usd_value FROM trades WHERE kind='seed' AND mint=?", (r["mint"],)))
+    tk = conn.execute("SELECT symbol FROM tokens WHERE mint=?", (r["mint"],)).fetchone()
+    pushed_before = n1("SELECT COUNT(*) FROM bot_sent WHERE mint IN (?, ?)", r["mint"], "hot:" + r["mint"])
+    waves.append({"t": hhmm(r["t0"]), "sym": (tk["symbol"] if tk else None) or r["mint"][:8], "mint": r["mint"], "wallets": r["wallets"],
+                  "fills": r["fills"], "span_s": r["t1"] - r["t0"], "median_usd": round(sizes[len(sizes) // 2]) if sizes else None,
+                  "pushed_to_chats": pushed_before})
+out("WAVES_24H", waves)
 
 # ── 2. the bot's people
 subs_by_hour = sorted(collections.Counter(time.strftime("%d %H", time.gmtime(r[0])) for r in conn.execute("SELECT subscribed_at FROM bot_subscribers WHERE subscribed_at >= ?", (since,))).items())
@@ -130,6 +148,8 @@ out("DATA", {"trades_24h": n1("SELECT COUNT(*) FROM trades WHERE ts >= ?", since
                             "resolved_24h": n1("SELECT COUNT(*) FROM fomo_users WHERE onchain_address IS NOT NULL AND onchain_at >= ?", since),
                             "with_swaps_to_try": n1("SELECT COUNT(*) FROM fomo_users u WHERE onchain_address IS NULL AND EXISTS (SELECT 1 FROM fomo_swaps s WHERE s.user_id=u.user_id)")},
              "runs_24h": dict(conn.execute("SELECT kind, COUNT(*) FROM runs WHERE started_at >= ? GROUP BY kind", (since,)).fetchall()),
+             # fills are dated by block timestamp, which runs a few minutes ahead of this clock: a
+             # small negative age is the chain's clock, not a fault
              "last_trade_age_min": round((now - n1("SELECT MAX(ts) FROM trades")) / 60, 1),
              "db_mb": round(__import__("os").path.getsize(settings.db_path) / 1e6, 1)})
 logs = {}

@@ -78,8 +78,13 @@ def checks(conn: sqlite3.Connection, rpc: RobinhoodRPC | None = None) -> list[di
     cap = settings.fomoapi_monthly_credits
     fills_age = _age_h(one("SELECT MAX(ts) FROM trades"))
     holdings_age = _age_h(one("SELECT MAX(ts) FROM holdings"))
-    unscored = one("SELECT COUNT(*) FROM traders WHERE score IS NULL AND status IN "
-                   "('tracking','active','watch')")
+    # the same set `score --export` would take: a wallet with nothing on the tape in a month
+    # and no open book is not waiting for a verdict, there is nothing to judge (24 waiting, 9
+    # exported, on 18 Sep)
+    unscored = one("SELECT COUNT(*) FROM traders t WHERE t.score IS NULL AND t.status IN ('tracking','active','watch') "
+                   "AND (EXISTS (SELECT 1 FROM trades tr WHERE tr.address = t.address AND tr.ts >= ?) "
+                   "  OR EXISTS (SELECT 1 FROM fomo_positions p JOIN fomo_users u ON u.user_id = p.user_id "
+                   "             WHERE u.onchain_address = t.address AND p.closed_at IS NULL))", db.now() - 30 * 86400)
     unresolved = one("SELECT COUNT(*) FROM fomo_users WHERE onchain_address IS NULL")
     resolvable = one("SELECT COUNT(*) FROM fomo_users u WHERE u.onchain_address IS NULL AND EXISTS "
                      "(SELECT 1 FROM fomo_swaps s WHERE s.user_id = u.user_id)")

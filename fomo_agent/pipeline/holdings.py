@@ -55,14 +55,25 @@ def mark_holdings(conn: sqlite3.Connection, rpc: RobinhoodRPC | None = None,
         log.info("holdings: nothing stale")
         return stats
 
+    from ..sources.rpc import RpcError
+
     rpc = rpc or RobinhoodRPC()
     rpc.load_decimals(db.token_decimals(conn))
-    balances = rpc.balances(pairs)
-    stats["held"] = sum(1 for v in balances.values() if v > 0)
-    stats["empty"] = sum(1 for v in balances.values() if v <= 0)
-    with db.tx(conn):
-        db.save_holdings(conn, balances)
-        db.save_token_decimals(conn, rpc.known_decimals())
+    # in slices, each saved as it lands: the node says no from time to time, and a pass that
+    # read 1,800 balances before it did used to throw all of them away (50 such passes a day)
+    step = settings.rpc_batch_size * 5
+    for i in range(0, len(pairs), step):
+        try:
+            balances = rpc.balances(pairs[i:i + step])
+        except RpcError as e:
+            stats["stopped"] = f"after {i} of {len(pairs)} pairs: {e}"
+            log.warning("holdings: %s", stats["stopped"])
+            break
+        stats["held"] += sum(1 for v in balances.values() if v > 0)
+        stats["empty"] += sum(1 for v in balances.values() if v <= 0)
+        with db.tx(conn):
+            db.save_holdings(conn, balances)
+            db.save_token_decimals(conn, rpc.known_decimals())
     stats["requests"] = rpc.requests
     log.info("holdings: %s", stats)
     return stats

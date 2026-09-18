@@ -207,7 +207,7 @@ MIGRATIONS: dict[int, str] = {
     18: """
     -- Whose trade a fill really is. A swap delivered to a wallet by an outside key calling the
     -- router, or fifty cents pushed through fomo's own flow to a famous address, both used to
-    -- read as that wallet buying. `kind` is direct / dust / trade once judged, flow between the
+    -- read as that wallet buying. `kind` is direct / dust / seed / trade once judged, flow between the
     -- scan and the size check, and NULL for rows from before this existed, which verify-fills
     -- works through. See pipeline/provenance.py.
     ALTER TABLE trades ADD COLUMN kind TEXT;

@@ -191,6 +191,26 @@ class Settings:
     # famous wallets would hide anybody's token from every feed.
     seed_min_wallets: int = field(default_factory=lambda: _int("SEED_MIN_WALLETS", 3))
     seed_window_h: int = field(default_factory=lambda: _int("SEED_WINDOW_H", 24))
+    # A wave (provenance.waves): this many trusted wallets whose only buy on a token arrives in
+    # a queue - no gap wider than this between one and the next - none of them bigger than this.
+    # The four of 17 Sep were 13 wallets, six seconds apart, $30 to $299; the real bursts of the
+    # same week never had five single-fill wallets inside 45 seconds of each other.
+    seed_wave_min_wallets: int = field(default_factory=lambda: _int("SEED_WAVE_MIN_WALLETS", 5))
+    seed_wave_max_gap_s: int = field(default_factory=lambda: _int("SEED_WAVE_MAX_GAP_S", 45))
+    seed_wave_max_usd: float = field(default_factory=lambda: _float("SEED_WAVE_MAX_USD", 500))
+    # A burst is a cohort arriving, and a cohort takes time: the first and last entrant in the
+    # window at least this far apart. Every real burst of 11-17 Sep spanned six minutes or
+    # more; the seeded ones were done in 95 to 122 seconds.
+    hot_min_span_s: int = field(default_factory=lambda: _int("HOT_MIN_SPAN_S", 180))
+    # Tracked wallets selling at least this share of what the window's entrants bought is a
+    # distribution, not an entry (Hound, 17 Sep: pushed at 0.33x with twenty wallets leaving).
+    hot_max_sell_ratio: float = field(default_factory=lambda: _float("HOT_MAX_SELL_RATIO", 0.5))
+    # A token younger than this (since the cohort's first fill) is pushed only if the pool shows
+    # somebody besides the cohort in it: a sell, or more buyers than the entrants we counted.
+    hot_young_s: int = field(default_factory=lambda: _int("HOT_YOUNG_S", 1800))
+    # A launch whose name was pushed this recently is a clone and is not pushed; a burst on one
+    # needs half again the conviction. Two more PAWSINUs went out the hour after the real one.
+    telegram_clone_hours: int = field(default_factory=lambda: _int("TELEGRAM_CLONE_HOURS", 24))
     # The watcher: how often it asks the chain for the blocks since last time, on how much of
     # the RPC allowance, and how far it reads on its first tick or after a stall. The scheduled
     # pass owns anything older than that.
@@ -265,6 +285,10 @@ class Settings:
     # Tokens re-quoted per pass; DexScreener takes 30 addresses per request, and the collection
     # timer fires four times an hour — enough for the whole book to stay inside the age above.
     price_refresh_limit: int = field(default_factory=lambda: _int("PRICE_REFRESH_LIMIT", 400))
+    # A token stays in the re-quote queue this long after the cohort's last buy of it, unless a
+    # balance or an open fomo position says somebody still holds it. Every buy ever put 6,300
+    # tokens in the queue and the screener answered 429 eight hundred times a day.
+    price_refresh_days: int = field(default_factory=lambda: _int("PRICE_REFRESH_DAYS", 7))
     # On-chain balances: how long a read stays usable, and how many (wallet, token) pairs one pass
     # re-reads. Forty go per request, so 2000 pairs is 50 free RPC calls.
     holdings_max_age_s: int = field(default_factory=lambda: _int("HOLDINGS_MAX_AGE_S", 3600))

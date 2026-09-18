@@ -101,10 +101,23 @@ def test_a_held_token_is_re_quoted_once_its_price_goes_stale(tmp_path):
         db.upsert_token(conn, held, price_usd=0.01, price_at=now - 600, checked_at=now - 600)
     assert stale_price_tokens(conn) == [], "a token just asked about is not asked again"
     assert [r["token"] for r in stale_price_tokens(conn, max_age_s=60)] == [held], "an old one is"
+    # a buy from three weeks ago does not keep a token in the queue on its own ...
+    old = "0x" + "4" * 40
+    with db.tx(conn):
+        db.upsert_token(conn, old, chain="robinhood", symbol="OLD")
+        db.upsert_trader(conn, "0xw", chain="robinhood", status="active")
+        db.insert_trade(conn, sig="0x4", address="0xw", chain="robinhood", mint=old, side="buy",
+                        usd_value=100.0, ts=now - 21 * 86400, source="rpc")
+    assert old not in [r["token"] for r in stale_price_tokens(conn, max_age_s=60)], "nobody has been in it for weeks"
+    # ... but a balance that says the wallet still holds it does
+    with db.tx(conn):
+        db.save_holdings(conn, {("0xw", old): 1234.0})
+    assert old in [r["token"] for r in stale_price_tokens(conn, max_age_s=60)], "still held, still marked"
 
     # a token no source can price is stamped as asked, so it stops crowding out the ones with one
     with db.tx(conn):
         db.upsert_token(conn, held, checked_at=now)
+        db.upsert_token(conn, old, checked_at=now)
     assert stale_price_tokens(conn, max_age_s=60) == []
 
 

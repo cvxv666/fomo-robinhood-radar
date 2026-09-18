@@ -18,3 +18,5 @@ def _no_gate_unless_asked(monkeypatch):
     monkeypatch.setattr(settings, "rpc_urls", [])
     # X posting is off unless a test switches it on
     monkeypatch.setattr(settings, "x_enabled", False)
+    # the older fixtures place a cohort's buys seconds apart; the span rule is tested on its own
+    monkeypatch.setattr(settings, "hot_min_span_s", 0)

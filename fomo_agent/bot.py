@@ -700,7 +700,7 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
     now = now or db.now()
     cutoff = now - settings.telegram_launch_max_age_min * 60
     stale = now - settings.telegram_launch_max_gap_s
-    from .pipeline.safety import check as sell_check
+    from .pipeline.safety import check as sell_check, only_the_cohort
 
     out = []
     for t in analyze.fresh(conn, chain, hours=hours, limit=10)["tokens"]:
@@ -711,7 +711,16 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
             if verdict["sellable"] == 0:
                 log.warning("launch %s not pushed: %s", t["sym"], verdict["note"])
                 continue
-            t["clones"] = analyze.namesakes(conn, t.get("sym"), t["mint"], now)
+            why = only_the_cohort(conn, t["mint"], t["buyers"], now)
+            if why:
+                log.warning("launch %s not pushed: %s", t["sym"], why)
+                continue
+            t["clones"] = analyze.namesakes(conn, t.get("sym"), t["mint"], now, hours=settings.telegram_clone_hours)
+            # the second PAWSINU of the hour is a clone, not a launch: the message that named the
+            # first one already carries the warning, and this one is not sent
+            if any(c.get("pushed_at") for c in t["clones"]):
+                log.warning("launch %s not pushed: a %s was pushed in the last %dh", t["sym"], t["sym"], settings.telegram_clone_hours)
+                continue
             out.append(("launch", t, fmt_launch(t)))
     return out
 

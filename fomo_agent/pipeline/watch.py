@@ -179,7 +179,7 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
     tg = Telegram()
     quiet = settings.telegram_realert_hours * 3600
     sent = 0
-    from .safety import check as sell_check
+    from .safety import check as sell_check, only_the_cohort
 
     for h in burning:
         # the first time a token bursts is the first time anyone tries to sell it in our name
@@ -187,9 +187,18 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
         if verdict["sellable"] == 0:
             log.warning("burst on %s not pushed: %s", h["sym"], verdict["note"])
             continue
+        why = only_the_cohort(conn, h["mint"], h["wallets"], now)
+        if why:
+            log.warning("burst on %s not pushed: %s", h["sym"], why)
+            continue
         key = f"hot:{h['mint']}"
         from .analyze import namesakes
-        h["clones"] = namesakes(conn, h.get("sym"), h["mint"], now)
+        h["clones"] = namesakes(conn, h.get("sym"), h["mint"], now, hours=settings.telegram_clone_hours)
+        # a burst on a name pushed today already needs half again the conviction to be told
+        if any(c.get("pushed_at") for c in h["clones"]) and h["conviction"] < 1.5 * settings.hot_delta:
+            log.warning("burst on %s not pushed: a %s was pushed in the last %dh and conviction %.1f is under %.1f",
+                        h["sym"], h["sym"], settings.telegram_clone_hours, h["conviction"], 1.5 * settings.hot_delta)
+            continue
         text = fmt_hot(h)
         told = 0
         for sub in subs:

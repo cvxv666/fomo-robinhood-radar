@@ -17,9 +17,13 @@ works, 142 signers in a day — so who signed is no help. What is:
     Traders do make small probes, so this is stored and shown, and left out of conviction.
   · `trade`   everything else, which is everything a fomo user actually did.
 
+  · `seed`    a fill inside a wave: one buy apiece into a queue of trusted wallets, seconds
+    apart (see `waves`). Judged by shape, because on 17 Sep the size was raised to $30 and the
+    route was fomo's own, and on chain that is a real buy in every field.
+
 And the rule that turns the attack on itself: a token where several trusted wallets received
-direct or dust buys inside a day is *seeded*, and leaves every feed. The more wallets a seeder
-touches to look like a cohort, the more certainly the token disappears.
+direct, dust or seed buys inside a day is *seeded*, and leaves every feed. The more wallets a
+seeder touches to look like a cohort, the more certainly the token disappears.
 
 A NULL kind is a row from before any of this existed. It passes as a trade until `verify-fills`
 has fetched its receipt, which is a bounded backlog and not a permanent state.
@@ -72,7 +76,66 @@ def classify(conn: sqlite3.Connection, since: int) -> dict:
             (since, floor, ratio)).rowcount
         trade = conn.execute(
             "UPDATE trades SET kind='trade' WHERE kind='flow' AND ts >= ?", (since,)).rowcount
-    return {"dust": dust, "trade": trade}
+    return {"dust": dust, "trade": trade, "waves": len(waves(conn, since))}
+
+
+def waves(conn: sqlite3.Connection, since: int, now: int | None = None, dry: bool = False) -> list[dict]:
+    """The seeder's queue, caught by its shape rather than its size.
+
+    On 2026-09-17, 21:09 to 22:05, four tokens each received one buy apiece into thirteen
+    top-scored wallets, in the same order, six seconds apart, all inside two minutes of the
+    pool's first fill: $30 each on the first two, $32-$94 on the third, $32-$299 on the fourth.
+    Through fomo's own flow, from fomo's own treasury, the recipient in the calldata exactly where
+    a real buy carries it - on chain the two are the same transaction. At $30 the fills beat the
+    dust bar for eight of the thirteen, so a burst fired on each token, and then a launch.
+
+    What a script cannot hide is that it is a script. A cohort arrives over minutes, in mixed
+    sizes, and the ones who mean it buy twice; a seeder's targets each get one fill, in a queue,
+    seconds apart. So: among trusted wallets whose only buy on a token landed inside the window,
+    a run of `seed_wave_min_wallets` first buys with no gap wider than `seed_wave_max_gap_s`,
+    none of them over `seed_wave_max_usd`, is a wave. Every trusted buy of that size on the
+    token around the run becomes `seed` - the second $30 a target got as well - which counts
+    for nothing anywhere, and under the seeded rule the token leaves every feed until real
+    buyers outnumber the targets. `dry` reports without marking, for a replay.
+    """
+    now = now or db.now()
+    n_min, max_gap, max_usd = settings.seed_wave_min_wallets, settings.seed_wave_max_gap_s, settings.seed_wave_max_usd
+    rows = conn.execute(
+        "SELECT tr.mint mint, tr.address address, MIN(tr.ts) ts, COUNT(*) n, MAX(COALESCE(tr.usd_value, 0)) usd "
+        "FROM trades tr JOIN traders t ON t.address = tr.address "
+        "WHERE tr.side = 'buy' AND t.score >= ? AND COALESCE(tr.kind, 'trade') NOT IN ('direct', 'seed') "
+        "AND tr.mint IN (SELECT mint FROM trades WHERE side = 'buy' AND ts >= ? AND ts <= ?) "
+        "GROUP BY tr.mint, tr.address HAVING ts >= ? AND ts <= ?",
+        (TRUSTED, since, now, since, now)).fetchall()
+    by_mint: dict[str, list[tuple[int, str, float]]] = {}
+    for r in rows:
+        if r["n"] == 1 and r["usd"] <= max_usd:
+            by_mint.setdefault(r["mint"], []).append((r["ts"], r["address"], r["usd"]))
+    out = []
+    for mint, cands in by_mint.items():
+        cands.sort()
+        run: list[tuple[int, str, float]] = []
+        for c in cands + [(None, "", 0.0)]:
+            if run and (c[0] is None or c[0] - run[-1][0] > max_gap):
+                if len(run) >= n_min:
+                    sizes = sorted(u for _, _, u in run)
+                    out.append({"mint": mint, "wallets": len(run), "first_ts": run[0][0], "last_ts": run[-1][0],
+                                "span_s": run[-1][0] - run[0][0], "median_usd": sizes[len(sizes) // 2],
+                                "who": [a for _, a, _ in run]})
+                run = []
+            if c[0] is not None:
+                run.append(c)
+    if not dry:
+        with db.tx(conn):
+            for w in out:
+                w["marked"] = conn.execute(
+                    "UPDATE trades SET kind='seed' WHERE mint = ? AND side = 'buy' AND ts BETWEEN ? AND ? "
+                    "AND COALESCE(usd_value, 0) <= ? AND COALESCE(kind, 'trade') != 'direct' "
+                    "AND address IN (SELECT address FROM traders WHERE score >= ?)",
+                    (w["mint"], w["first_ts"] - 60, w["last_ts"] + 60, max_usd, TRUSTED)).rowcount
+                log.warning("wave on %s: %d trusted wallets, one fill each, %ds apart in all, median $%.0f - %d fills marked seed",
+                            w["mint"][:10], w["wallets"], w["span_s"], w["median_usd"], w["marked"])
+    return out
 
 
 # Any query that counts buys toward a signal takes both of these.
@@ -88,8 +151,8 @@ NOT_SEEDED = (
     "  SELECT s.mint FROM trades s JOIN traders st ON st.address = s.address"
     "  WHERE s.side = 'buy' AND st.score >= ? AND s.ts >= ?"
     "  GROUP BY s.mint"
-    "  HAVING COUNT(DISTINCT CASE WHEN s.kind IN ('dust', 'direct') THEN s.address END) >= ?"
-    "     AND COUNT(DISTINCT CASE WHEN s.kind IN ('dust', 'direct') THEN s.address END)"
+    "  HAVING COUNT(DISTINCT CASE WHEN s.kind IN ('dust', 'direct', 'seed') THEN s.address END) >= ?"
+    "     AND COUNT(DISTINCT CASE WHEN s.kind IN ('dust', 'direct', 'seed') THEN s.address END)"
     "       > COUNT(DISTINCT CASE WHEN COALESCE(s.kind, 'trade') = 'trade' THEN s.address END))"
 )
 
@@ -103,23 +166,23 @@ def seeded(conn: sqlite3.Connection, mint: str, now: int | None = None) -> dict:
     """How this token has been seeded, for the page that shows it."""
     now = now or db.now()
     row = conn.execute(
-        "SELECT COUNT(DISTINCT CASE WHEN s.kind IN ('dust','direct') THEN s.address END) wallets, "
+        "SELECT COUNT(DISTINCT CASE WHEN s.kind IN ('dust','direct','seed') THEN s.address END) wallets, "
         "  COUNT(DISTINCT CASE WHEN COALESCE(s.kind,'trade') = 'trade' THEN s.address END) real, "
-        "  SUM(s.kind = 'dust') dust, SUM(s.kind = 'direct') direct, "
-        "  MIN(CASE WHEN s.kind IN ('dust','direct') THEN s.ts END) first_ts "
+        "  SUM(s.kind = 'dust') dust, SUM(s.kind = 'direct') direct, SUM(s.kind = 'seed') seed, "
+        "  MIN(CASE WHEN s.kind IN ('dust','direct','seed') THEN s.ts END) first_ts "
         "FROM trades s JOIN traders st ON st.address = s.address "
         "WHERE s.mint = ? AND s.side = 'buy' AND st.score >= ? AND s.ts >= ?",
         (mint, TRUSTED, now - settings.seed_window_h * 3600)).fetchone()
     wallets, real = row["wallets"] or 0, row["real"] or 0
     return {"wallets": wallets, "real": real, "dust": row["dust"] or 0, "direct": row["direct"] or 0,
-            "first_ts": row["first_ts"],
+            "seed": row["seed"] or 0, "first_ts": row["first_ts"],
             "seeded": wallets >= settings.seed_min_wallets and wallets > real}
 
 
 def resize(conn: sqlite3.Connection) -> dict:
     """Judge every sized fill again under the current floor and ratio. For when the bar moves."""
     with db.tx(conn):
-        conn.execute("UPDATE trades SET kind='flow' WHERE kind IN ('dust', 'trade')")
+        conn.execute("UPDATE trades SET kind='flow' WHERE kind IN ('dust', 'trade', 'seed')")
     return classify(conn, since=0)
 
 

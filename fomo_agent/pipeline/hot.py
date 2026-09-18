@@ -114,6 +114,17 @@ def hot_now(conn: sqlite3.Connection, chain: str | None = None, delta: float = 3
         conv = sum((s / 100.0) ** 2 for _, _, s, _, _, _ in entries)
         if conv < delta or len(entries) < min_wallets:
             continue
+        # a cohort takes time to arrive; five wallets inside two minutes is a script (17 Sep)
+        if entries[-1][0] - entries[0][0] < settings.hot_min_span_s:
+            continue
+        # and it is an entry only if the tape is not busy leaving: Hound was pushed at 0.33x
+        # while twenty tracked wallets sold it
+        bought = sum(u for _, _, _, u, _, _ in entries) or 0.0
+        sold = conn.execute(
+            "SELECT COALESCE(SUM(usd_value), 0) FROM trades WHERE mint=? AND side='sell' AND ts >= ? "
+            "AND COALESCE(kind, 'trade') = 'trade'", (mint, since)).fetchone()[0]
+        if bought and sold >= settings.hot_max_sell_ratio * bought:
+            continue
         first_any = conn.execute("SELECT MIN(ts) FROM trades WHERE mint=?", (mint,)).fetchone()[0]
         age = (now - first_any) if first_any else None
         if max_age_s and age is not None and age > max_age_s:

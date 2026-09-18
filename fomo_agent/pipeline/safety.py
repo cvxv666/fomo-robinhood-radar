@@ -177,6 +177,54 @@ def check(conn: sqlite3.Connection, mint: str, rpc: RobinhoodRPC | None = None, 
     return {"sellable": verdict, "note": note, "checked_at": now, "asked": True}
 
 
+_crowd_cache: dict[str, tuple[int, dict | None]] = {}
+
+
+def crowd(conn: sqlite3.Connection, mint: str, gt=None, now: int | None = None, max_age_s: int = 300) -> dict | None:
+    """Who is in the pool besides us: buyers, sellers and sells in its last hour, as the screener
+    counts them. None when it cannot say (a pool minutes old is often not indexed yet)."""
+    now = now or db.now()
+    hit = _crowd_cache.get(mint)
+    if hit and now - hit[0] < max_age_s:
+        return hit[1]
+    row = conn.execute("SELECT pool_address, chain FROM tokens WHERE mint=?", (mint,)).fetchone()
+    out = None
+    if row and row["pool_address"]:
+        try:
+            if gt is None:
+                from ..sources.geckoterminal import GeckoTerminal
+                gt = GeckoTerminal(patient=False)
+            a = gt.pool(row["chain"] or "robinhood", row["pool_address"])
+            tx = ((a or {}).get("transactions") or {}).get("h1") or {}
+            if a and tx:
+                out = {"buys": int(tx.get("buys") or 0), "sells": int(tx.get("sells") or 0),
+                       "buyers": int(tx.get("buyers") or 0), "sellers": int(tx.get("sellers") or 0)}
+        except Exception as e:  # noqa: BLE001 - the screener being busy is not a verdict
+            log.debug("crowd lookup for %s failed: %s", mint[:10], e)
+    _crowd_cache[mint] = (now, out)
+    return out
+
+
+def only_the_cohort(conn: sqlite3.Connection, mint: str, wallets: int, now: int | None = None, gt=None) -> str | None:
+    """Why a young token should wait, or None if it need not.
+
+    A token the cohort found minutes ago is pushed only when the pool shows somebody else in it:
+    one sell by anyone, or more buyers than the entrants we counted. Thirteen buys into thirteen
+    wallets and not one sell is the seeder's market, not a market. An older token, or one the
+    screener has not indexed yet, is not held on this.
+    """
+    now = now or db.now()
+    first = conn.execute("SELECT MIN(ts) FROM trades WHERE mint=? AND side='buy'", (mint,)).fetchone()[0]
+    if first is None or now - first >= settings.hot_young_s:
+        return None
+    c = crowd(conn, mint, gt=gt, now=now)
+    if not c:
+        return None
+    if c["sells"] == 0 and c["buyers"] <= wallets:
+        return f"{(now - first) // 60} min old and nobody in the pool but the {c['buyers']} buyers we counted, no sell yet"
+    return None
+
+
 def sweep(conn: sqlite3.Connection, limit: int = 12, now: int | None = None, rpc=None, gt=None) -> dict:
     """Ask again about the tokens the cohort touched today whose verdict is missing or stale.
 

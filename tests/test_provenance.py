@@ -63,7 +63,7 @@ def test_dust_is_judged_against_the_wallets_own_size(tmp_path):
     assert provenance.refresh_medians(conn) == 4
     assert conn.execute("SELECT median_buy_usd FROM traders WHERE address=?", (W[0],)).fetchone()[0] == 500.0
     out = provenance.classify(conn, since=now - 7200)
-    assert out == {"dust": 3, "trade": 5}
+    assert out == {"dust": 3, "trade": 5, "waves": 0}
     kinds = dict(conn.execute("SELECT sig, kind FROM trades WHERE mint=?", (SEEDED,)).fetchall())
     assert kinds == {"s0": "dust", "s1": "dust", "s2": "dust", "s3": "trade"}
 
@@ -77,7 +77,7 @@ def test_a_seeded_token_leaves_every_feed_and_the_honest_one_stays(tmp_path):
     provenance.refresh_medians(conn)
     provenance.classify(conn, since=now - 7200)
 
-    assert provenance.seeded(conn, SEEDED, now) == {"wallets": 3, "real": 1, "dust": 3, "direct": 0,
+    assert provenance.seeded(conn, SEEDED, now) == {"wallets": 3, "real": 1, "dust": 3, "direct": 0, "seed": 0,
                                                     "first_ts": now - 602, "seeded": True}
     assert provenance.seeded(conn, HONEST, now)["seeded"] is False
 

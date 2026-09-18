@@ -51,16 +51,22 @@ def stale_price_tokens(conn: sqlite3.Connection, limit: int | None = None,
     last *asked* about rather than on whether it has a price, because a token no source indexes
     would otherwise sit at the front of it forever and starve the ones that do.
     """
-    max_age = db.now() - (settings.price_max_age_s if max_age_s is None else max_age_s)
+    now = db.now()
+    max_age = now - (settings.price_max_age_s if max_age_s is None else max_age_s)
     return conn.execute(
         "SELECT u.token AS token, u.chain AS chain FROM ("
-        "  SELECT mint AS token, chain FROM trades WHERE side='buy'"
-        "  UNION ALL SELECT token, chain FROM fomo_positions"
+        "  SELECT mint AS token, chain FROM trades WHERE side='buy' AND ts >= ?"
+        "  UNION ALL SELECT token, chain FROM fomo_positions WHERE closed_at IS NULL"
+        "  UNION ALL SELECT h.token, t.chain FROM holdings h JOIN traders t ON t.address = h.address WHERE h.amount > 0"
         ") u JOIN tokens t ON t.mint = u.token "
         "WHERE u.chain IS NOT NULL AND (t.checked_at IS NULL OR t.checked_at < ?) "
+        # a token that cannot be sold is re-quoted once a day, not every two hours: its price
+        # marks nothing anybody can realise, and each ask was a single-token call the screener
+        # answered 429 to (278 a day, the same two dozen trap tokens)
+        "AND (COALESCE(t.sellable, 1) != 0 OR COALESCE(t.checked_at, 0) < ?) "
         "GROUP BY u.token, u.chain "
         "ORDER BY COALESCE(t.checked_at, 0) ASC LIMIT ?",
-        (max_age, limit or settings.price_refresh_limit),
+        (now - settings.price_refresh_days * 86400, max_age, now - 86400, limit or settings.price_refresh_limit),
     ).fetchall()
 
 
