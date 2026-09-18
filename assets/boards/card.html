@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FOMO Radar — call card</title>
+<!--
+  One alert that reached twice its entry inside the hour, as one image: the multiple, the token,
+  when the call went out and when the price got there, the read since. Filled from window.CARD by
+  pipeline/cards.py; 1200x675, the shape a post shows whole. Nothing here is advice.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root { --black:#000; --white:#fff; --carbon:#606060; --graphite:#949494; --line:#2a2a2a; --green:#00ff85; --crimson:#ff003d; --amber:#ff8a00;
+          --sans:"Space Grotesk", system-ui, sans-serif; --mono:"JetBrains Mono", ui-monospace, monospace; }
+  html, body { margin:0; height:100%; background:var(--black); color:var(--white); overflow:hidden; font-family:var(--mono); }
+  .stage { position:fixed; inset:0; display:grid; place-items:center; }
+  .card { position:relative; width:1200px; height:675px; background:var(--black); overflow:hidden; transform-origin:center center; }
+  .frame { position:absolute; inset:14px; border:2px solid var(--white); pointer-events:none; }
+  .abs { position:absolute; }
+  .eyebrow { left:40px; top:40px; font-size:14px; font-weight:700; letter-spacing:.14em; white-space:nowrap; }
+  .eyebrow span { color:var(--graphite); font-weight:400; }
+  .led { display:inline-block; width:10px; height:10px; background:var(--green); margin-right:12px; vertical-align:-1px; }
+  .big { font-family:var(--sans); font-weight:700; letter-spacing:-.02em; line-height:.86; }
+  #mult { left:34px; top:96px; font-size:250px; color:var(--green); }
+  #sym { left:40px; top:372px; font-size:64px; letter-spacing:-.01em; white-space:nowrap; }
+  #kind { left:40px; top:452px; font-size:14px; font-weight:700; letter-spacing:.14em; color:var(--graphite); white-space:nowrap; }
+  .rule { position:absolute; height:2px; background:var(--white); }
+  .stat { position:absolute; top:520px; width:250px; border-top:2px solid var(--white); }
+  .stat .v { position:absolute; left:0; top:10px; font-family:var(--sans); font-weight:700; font-size:40px; line-height:1; white-space:nowrap; }
+  .stat .k { position:absolute; left:0; top:58px; font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--graphite); white-space:nowrap; }
+  #right { left:700px; top:110px; width:460px; }
+  #right .line { font-size:15px; font-weight:700; letter-spacing:.1em; color:var(--graphite); line-height:2.1; white-space:nowrap; }
+  #right .line b { color:var(--white); }
+  #right .line i { color:var(--green); font-style:normal; }
+  .foot { position:absolute; top:636px; font-size:11px; letter-spacing:.1em; color:var(--carbon); white-space:nowrap; }
+  .foot b { color:var(--graphite); font-weight:700; }
+  #bar { position:absolute; left:700px; top:300px; width:460px; height:160px; }
+  #bar .hair { position:absolute; left:0; right:0; height:1px; background:var(--line); }
+  #bar .fill { position:absolute; left:0; bottom:0; width:100%; background:var(--green); opacity:.9; }
+  #bar .entry { position:absolute; left:0; right:0; height:2px; background:var(--white); }
+  #bar .lab { position:absolute; right:0; font-size:11px; letter-spacing:.1em; color:var(--graphite); }
+</style>
+</head>
+<body>
+<div class="stage"><div class="card" id="card">
+  <div class="frame"></div>
+  <div class="abs eyebrow"><span class="led"></span>FOMO ROBINHOOD RADAR  <span>·</span>  <span id="date"></span>  <span>·  THE CALL AND THE READ</span></div>
+  <div class="abs big" id="mult"></div>
+  <div class="abs big" id="sym"></div>
+  <div class="abs" id="kind"></div>
+  <div class="abs" id="right">
+    <div class="line" id="l1"></div>
+    <div class="line" id="l2"></div>
+    <div class="line" id="l3"></div>
+    <div class="line" id="l4"></div>
+  </div>
+  <div class="abs" id="bar"></div>
+  <div id="stats"></div>
+  <div class="foot" style="left:40px">ENTRY = LAST TRUSTED FILL BEFORE THE CALL · PEAK FROM THE POOL'S CANDLES · <b>NOT ADVICE</b></div>
+  <div class="foot" style="right:40px" id="foot-right"></div>
+</div></div>
+<script>
+/*CARD*/
+</script>
+<script>
+(() => {
+  'use strict';
+  const C = window.CARD; if (!C) return;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const x = v => (v === null || v === undefined) ? '—' : '×' + v.toFixed(2);
+  $('date').textContent = C.date;
+  $('mult').textContent = x(C.best);
+  $('sym').textContent = '$' + C.sym;
+  $('kind').textContent = C.kind.toUpperCase() + ' · CALLED AT ' + C.called_at + ' UTC · ×1.00 THEN';
+  $('l1').innerHTML = `PEAK <i>${x(C.best)}</i>${C.peak_min !== null && C.peak_min !== undefined ? ` <b>${C.peak_min} MIN</b> AFTER THE CALL` : ' INSIDE THE HOUR'}`;
+  $('l2').innerHTML = `${C.followup_min} MIN LATER <b>${x(C.now)}</b>`;
+  $('l3').innerHTML = C.wallets ? `<b>${C.wallets}</b> TRUSTED WALLETS WERE IN` + (C.conviction ? ` · CONVICTION <b>${C.conviction.toFixed(1)}</b>` : '') : '';
+  const usd = v => v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '$' + Math.round(v / 1e3) + 'K' : '$' + Math.round(v);
+  $('l4').innerHTML = C.vol ? `<b>${usd(C.vol)}</b> TRADED SINCE` : '';
+  // the bar: entry line, the peak as a filled column, the now as a tick
+  const bar = $('bar'); const H = 160; const max = Math.max(C.best, 1.2);
+  const y = v => H - Math.round(H * v / max);
+  [0.5, 1, 1.5, 2, 3, 4, 5].filter(v => v < max).forEach(v => { const h = document.createElement('div'); h.className = 'hair'; h.style.top = y(v) + 'px'; bar.appendChild(h);
+    const l = document.createElement('div'); l.className = 'lab'; l.style.top = (y(v) - 14) + 'px'; l.textContent = '×' + v; bar.appendChild(l); });
+  const f = document.createElement('div'); f.className = 'fill'; f.style.height = (H - y(C.best)) + 'px'; f.style.width = '120px'; f.style.left = '0'; bar.appendChild(f);
+  const e = document.createElement('div'); e.className = 'entry'; e.style.top = y(1) + 'px'; bar.appendChild(e);
+  if (C.now !== null && C.now !== undefined) { const n = document.createElement('div'); n.className = 'fill'; n.style.left = '140px'; n.style.width = '120px'; n.style.height = (H - y(C.now)) + 'px'; n.style.background = C.now >= 1 ? '#fff' : 'var(--crimson)'; bar.appendChild(n); }
+  const tag = (left, text) => { const t = document.createElement('div'); t.className = 'lab'; t.style.top = (H + 6) + 'px'; t.style.right = 'auto'; t.style.left = left + 'px'; t.textContent = text; bar.appendChild(t); };
+  tag(0, 'PEAK'); tag(140, 'NOW');
+  const st = $('stats');
+  [[x(C.best), 'PEAK IN THE HOUR'], [x(C.now), C.followup_min + ' MIN AFTER'], [C.peak_min !== null && C.peak_min !== undefined ? '+' + C.peak_min + ' MIN' : '—', 'TO THE PEAK'], [C.wallets ? String(C.wallets) : '—', 'TRUSTED WALLETS IN']].forEach((s, i) => {
+    const d = document.createElement('div'); d.className = 'stat'; d.style.left = (40 + i * 280) + 'px';
+    d.innerHTML = `<div class="v"${i === 0 ? ' style="color:var(--green)"' : ''}>${esc(s[0])}</div><div class="k">${esc(s[1])}</div>`; st.appendChild(d);
+  });
+  $('foot-right').innerHTML = `<b>@${esc(C.handle)}</b>` + (C.site ? `  ·  <b>${esc(C.site)}</b>` : '');
+  const card = $('card');
+  const fit = () => { const k = Math.min(innerWidth / 1200, innerHeight / 675); card.style.transform = `scale(${k})`; };
+  addEventListener('resize', fit); fit();
+})();
+</script>
+</body>
+</html>

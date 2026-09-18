@@ -24,7 +24,7 @@ import httpx
 from . import db
 from . import links as links_
 from .config import settings
-from .pipeline import analyze, pro, pushes
+from .pipeline import analyze, prefs, pro, pushes
 
 log = logging.getLogger(__name__)
 
@@ -527,6 +527,7 @@ HELP = """<b>FOMO ROBINHOOD RADAR</b>
 /top — the leaderboard, ranked by judgement
 /record — every alert sent and what came of it · /paper — the paper run
 /follow &lt;handle&gt; — that wallet's every fill, within a tick of the chain
+/invite — your link; /settings — what this chat hears
 
 <b>Alerts</b> are on for this chat: bursts the moment they form, launches while they are still
 early, and one digest a day. /stop turns them off, /start turns them back on.
@@ -549,6 +550,8 @@ sent and what came of it, /paper — the paper run.
 · a <b>burst</b> the moment it forms, a <b>launch</b> while it is still early
 · /hot /signals /fresh /exits whenever you ask
 · /follow up to {follows} wallets, every fill within a tick (free: {follows_free})
+· /apikey and /webhook — the alerts POSTed to your own URL as they go out
+/invite — your link, a week of PRO for both · /settings — what this chat hears
 /pro — {days} days for ${usd}, paid in ${symbol} and burned. {state}
 
 Every alert carries a <b>buy on fomo</b> link. Not on fomo.family yet? {fomo}
@@ -620,6 +623,8 @@ COMMANDS = [
     ("exits", "where the cohort is getting out"),
     ("top", "the leaderboard, by judgement"),
     ("follow", "a wallet's every fill, within a tick: /follow <handle>"),
+    ("invite", "your invite link: a week of PRO for both"),
+    ("settings", "what this chat hears: /alerts /minconv /quiet"),
     ("record", "every alert sent and what came of it"),
     ("paper", "$100 into every alert, out at the hour read"),
     ("pro", "the alerts and the live feeds, paid in the token"),
@@ -646,9 +651,8 @@ def subscribe(conn, chat_id, username: str | None, min_conviction: float | None 
         conn.execute(
             "INSERT INTO bot_subscribers(chat_id, username, min_conviction, subscribed_at, active) "
             "VALUES(?,?,?,?,1) ON CONFLICT(chat_id) DO UPDATE SET "
-            "  username=excluded.username, min_conviction=excluded.min_conviction, active=1",
-            (str(chat_id), username, min_conviction if min_conviction is not None
-             else settings.telegram_min_conviction, db.now()),
+            "  username=excluded.username, min_conviction=COALESCE(excluded.min_conviction, bot_subscribers.min_conviction), active=1",
+            (str(chat_id), username, min_conviction, db.now()),
         )
     if existed is None and not backlog:
         try:
@@ -848,14 +852,21 @@ def followups(conn, tg: Telegram, now: int | None = None) -> int:
     """Every push whose hour is up: measure, tell the chats that got it, close the row."""
     now = now or db.now()
     sent = 0
+    from .pipeline import cards, discord, webhooks
+
     for row in pushes.due(conn, now):
         m = pushes.measure(conn, row, now=now)
         if m is None:
             continue   # the screener was busy; next minute
         text = fmt_followup(row, m)
+        # a x2 gets a card: the same read as a picture, with the text as its caption
+        card = cards.make(conn, row, m, now)
         for chat_id in pushes.recipients(conn, row):
             try:
-                tg.send(chat_id, text)
+                if card is not None:
+                    tg.photo(chat_id, card, text)
+                else:
+                    tg.send(chat_id, text)
                 sent += 1
             except Exception as e:  # noqa: BLE001
                 log.warning("followup to %s failed: %s", chat_id, e)
@@ -863,9 +874,13 @@ def followups(conn, tg: Telegram, now: int | None = None) -> int:
                     unsubscribe(conn, chat_id)
         pushes.close(conn, row["id"], m, now)
         log.info("followup %s %s: %s", row["kind"], row["sym"], m)
+        webhooks.fire(conn, "followup", {"mint": row["mint"], "sym": row["sym"], "kind": row["kind"], "pushed_at": row["ts"], **m}, now)
+        discord.send(text, image=card)
         try:
             from .pipeline import xpost
             xpost.reply_followup(conn, row["id"], m, now=now)
+            if card is not None:
+                cards.post(conn, card, cards.data(row, m, now), now=now)
         except Exception as e:  # noqa: BLE001
             log.warning("x reply failed: %s", e)
     return sent
@@ -904,6 +919,9 @@ def broadcast(conn, tg: Telegram) -> dict:
                     or already_sent(conn, sub["chat_id"], f"hot:{t['mint']}", settings.telegram_dedupe_s):
                 stats["skipped"] += 1   # told already, or told of the burst on it minutes ago
                 continue
+            if not prefs.wants(sub, kind, t.get("conviction"), now):
+                stats["skipped"] += 1
+                continue
             try:
                 tg.send(sub["chat_id"], text)
                 mark_sent(conn, sub["chat_id"], t["mint"])
@@ -915,9 +933,13 @@ def broadcast(conn, tg: Telegram) -> dict:
                 log.warning("send to %s failed: %s", sub["chat_id"], e)
                 if gone(e):
                     unsubscribe(conn, sub["chat_id"])
-    for kind, t, _ in items:
+    from .pipeline import discord, webhooks
+
+    for kind, t, text in items:
         if told.get(t["mint"]):
             pushes.record(conn, kind, t, told[t["mint"]], now)
+            webhooks.fire(conn, kind, t, now)
+            discord.send(text)
     if stats["sent"]:
         log.info("broadcast: %s", stats)
     return stats
@@ -966,9 +988,16 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
         # Starting is joining. Three of four thousand visitors found /subscribe on the first
         # day; the alerts are the product, and asking people to opt in twice is how a bot with
         # a hundred readers has three subscribers.
-        subscribe(conn, chat_id, username)
+        was_new = subscribe(conn, chat_id, username)
         if args and args[0].lower() == "pro" and pro.enabled():
             return handle_text(conn, "/pro", chat_id, username)   # the site's button: t.me/<bot>?start=pro
+        if args and args[0].lower().startswith("r") and len(args[0]) == 9:
+            from .pipeline import referrals
+
+            r = referrals.join(conn, chat_id, args[0][1:].lower(), was_new)
+            if r and r["rewarded"]:
+                return (f"Welcome - you came by a reader's invite, so this chat has <b>{r['days']} days of PRO</b> from now, "
+                        f"and so do they.\n\n" + help_text(conn, chat_id))
         return help_text(conn, chat_id)
     if cmd == "/help":
         return help_text(conn, chat_id)
@@ -1010,6 +1039,31 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
         from .pipeline.health import report
 
         return fmt_health(report(conn))
+    if cmd == "/invite":
+        from .pipeline import referrals
+
+        st = referrals.stats(conn, chat_id)
+        days = settings.pro_referral_days
+        return (f"Your invite link:\n{referrals.link(conn, chat_id)}\n\n"
+                + (f"A chat that joins by it gets <b>{days} days of PRO</b>, and so do you, up to {settings.pro_referral_max_per_month} times a month. " if pro.enabled() and days else "")
+                + f"Joined by your link so far: <b>{st['joined']}</b>.")
+    if cmd == "/webhook":
+        from .pipeline import webhooks
+
+        if not pro.entitled(conn, chat_id):
+            return "A webhook is <b>PRO</b>: " + PRO_ONLY.format(days=settings.pro_days, usd=f"{settings.pro_price_usd:g}",
+                                                                 symbol=esc(settings.pro_token_symbol)).replace("This feed is <b>PRO</b>. ", "")
+        if not args:
+            return webhooks.status(conn, chat_id)
+        return webhooks.set_url(conn, chat_id, args[0])[1]
+    if cmd == "/settings":
+        return prefs.describe(conn, chat_id)
+    if cmd == "/alerts":
+        return esc(prefs.set_kinds(conn, chat_id, args[0] if args else "")[1]) if args else prefs.describe(conn, chat_id)
+    if cmd == "/minconv":
+        return esc(prefs.set_min_conviction(conn, chat_id, args[0] if args else "")[1])
+    if cmd == "/quiet":
+        return esc(prefs.set_quiet(conn, chat_id, args[0] if args else "")[1])
     if cmd in ("/follow", "/unfollow", "/following"):
         from .pipeline import follows
 

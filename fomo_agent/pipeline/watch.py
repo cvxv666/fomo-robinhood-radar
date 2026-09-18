@@ -182,9 +182,14 @@ def tell_followers(conn: sqlite3.Connection, sigs: list[str], now: int | None = 
     due = follows.alerts(conn, sigs, now)
     if not due:
         return 0
+    from . import prefs
+
     tg = Telegram()
     sent = 0
     for chat_id, f in due:
+        sub = conn.execute("SELECT * FROM bot_subscribers WHERE chat_id=?", (chat_id,)).fetchone()
+        if sub is not None and prefs.quiet_now(sub, now or db.now()):
+            continue
         try:
             tg.send(chat_id, fmt_fill(f, now))
             sent += 1
@@ -199,6 +204,7 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
     """Tell every subscriber about each burst once. Lazy import: the bot needs a token, this does
     not, and a watcher with no bot configured is still a faster tape."""
     from ..bot import Telegram, fmt_hot, subscribers, already_sent, mark_sent, gone, unsubscribe
+    from . import discord, prefs, webhooks
     from . import pushes as pro_pushes
 
     now = db.now()
@@ -235,6 +241,8 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
             if already_sent(conn, sub["chat_id"], key, quiet) \
                     or already_sent(conn, sub["chat_id"], h["mint"], settings.telegram_dedupe_s):
                 continue
+            if not prefs.wants(sub, "burst", h.get("conviction"), now):
+                continue
             try:
                 tg.send(sub["chat_id"], text)
                 mark_sent(conn, sub["chat_id"], key)
@@ -246,6 +254,8 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
                     unsubscribe(conn, sub["chat_id"])
         if told:
             pro_pushes.record(conn, "burst", h, told, now)
+            webhooks.fire(conn, "burst", h, now)
+            discord.send(text)
     return sent
 
 

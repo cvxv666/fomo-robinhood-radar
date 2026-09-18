@@ -219,6 +219,13 @@ class Settings:
     # the morning board (pipeline/board.py): where the html/png land, and the X handle on its foot
     board_dir: str = field(default_factory=lambda: _env("BOARD_DIR", ""))
     x_handle: str = field(default_factory=lambda: _env("X_HANDLE", "FomoBrainRH").lstrip("@"))
+    # /invite: a week of PRO for the inviter and the invited, at most this many rewards a month
+    pro_referral_days: int = field(default_factory=lambda: _int("PRO_REFERRAL_DAYS", 7))
+    pro_referral_max_per_month: int = field(default_factory=lambda: _int("PRO_REFERRAL_MAX_PER_MONTH", 10))
+    # a call-card is drawn when the hour's peak reaches this multiple of the entry
+    card_min_x: float = field(default_factory=lambda: _float("CARD_MIN_X", 2.0))
+    # a Discord channel webhook that hears every alert and follow-up (pipeline/discord.py)
+    discord_webhook_url: str = field(default_factory=lambda: _env("DISCORD_WEBHOOK_URL", "").strip())
     # The watcher: how often it asks the chain for the blocks since last time, on how much of
     # the RPC allowance, and how far it reads on its first tick or after a stall. The scheduled
     # pass owns anything older than that.

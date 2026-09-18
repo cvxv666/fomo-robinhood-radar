@@ -290,6 +290,25 @@ MIGRATIONS: dict[int, str] = {
     );
     CREATE INDEX IF NOT EXISTS idx_follows_address ON follows(address);
     """,
+    26: """
+    -- A PRO key's webhook (pipeline/webhooks.py), a chat's invite code and what each chat wants
+    -- to hear (pipeline/prefs.py), and who came by whose invite (pipeline/referrals.py).
+    ALTER TABLE api_keys ADD COLUMN webhook_url TEXT;
+    ALTER TABLE api_keys ADD COLUMN webhook_failures INTEGER DEFAULT 0;
+    ALTER TABLE api_keys ADD COLUMN webhook_last INTEGER;
+    ALTER TABLE bot_subscribers ADD COLUMN kinds TEXT;
+    ALTER TABLE bot_subscribers ADD COLUMN quiet_from INTEGER;
+    ALTER TABLE bot_subscribers ADD COLUMN quiet_to INTEGER;
+    ALTER TABLE bot_subscribers ADD COLUMN ref_code TEXT;
+    -- the bar used to be copied from the bot's own on subscribe and never read; now it is the
+    -- chat's, NULL until the chat sets one with /minconv
+    UPDATE bot_subscribers SET min_conviction = NULL;
+    CREATE INDEX IF NOT EXISTS idx_subscribers_ref ON bot_subscribers(ref_code);
+    CREATE TABLE IF NOT EXISTS referrals(
+      chat_id TEXT PRIMARY KEY, referrer TEXT NOT NULL, at INTEGER NOT NULL, rewarded INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer, at);
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

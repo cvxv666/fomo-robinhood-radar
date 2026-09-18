@@ -141,13 +141,13 @@ def html(d: dict) -> str:
     return tpl.replace("/*DAY*/", "window.DAY = " + json.dumps(d, ensure_ascii=False) + ";")
 
 
-def render(html_path: pathlib.Path, png_path: pathlib.Path, scale: int = 2) -> None:
+def render(html_path: pathlib.Path, png_path: pathlib.Path, scale: int = 2, width: int = 1600, height: int = 900) -> None:
     """The board as a PNG at 2x, through a headless browser (playwright, chromium)."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
         b = p.chromium.launch()
-        page = b.new_page(viewport={"width": 1600, "height": 900}, device_scale_factor=scale)
+        page = b.new_page(viewport={"width": width, "height": height}, device_scale_factor=scale)
         page.goto(html_path.resolve().as_uri() + "?still=1")
         page.evaluate("document.fonts.ready.then(() => true)")
         page.wait_for_timeout(1500)
