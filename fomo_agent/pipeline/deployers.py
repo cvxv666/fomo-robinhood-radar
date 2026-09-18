@@ -59,7 +59,8 @@ def find(rpc, conn: sqlite3.Connection, mint: str) -> dict | None:
     from ..sources.rpc import parse_transfer
 
     minted_to = "0x" + lg["topics"][2][-40:]
-    infra = {minted_to.lower(), to.lower(), mint.lower(), "0x" + "0" * 40, *(r.lower() for r in settings.rpc_routers)}
+    # a launch burns part of the supply before anybody buys: the dead address is paid first
+    infra = {minted_to.lower(), to.lower(), mint.lower(), "0x" + "0" * 40, "0x" + "0" * 36 + "dead", *(r.lower() for r in settings.rpc_routers)}
     block = int(lg["blockNumber"], 16)
     later = rpc.logs(block, min(block + 2_000, head), address=mint, topics=[TRANSFER_TOPIC])
     for t in (parse_transfer(e) for e in later[:60]):
