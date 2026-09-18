@@ -128,11 +128,14 @@ def waves(conn: sqlite3.Connection, since: int, now: int | None = None, dry: boo
     if not dry:
         with db.tx(conn):
             for w in out:
+                # the queue is preceded by two or three larger fills into the best-known wallets
+                # (unipcs $299, DumbCrayonEater $149, a minute or three before the $30s): the
+                # window reaches five minutes back for them
                 w["marked"] = conn.execute(
                     "UPDATE trades SET kind='seed' WHERE mint = ? AND side = 'buy' AND ts BETWEEN ? AND ? "
                     "AND COALESCE(usd_value, 0) <= ? AND COALESCE(kind, 'trade') != 'direct' "
                     "AND address IN (SELECT address FROM traders WHERE score >= ?)",
-                    (w["mint"], w["first_ts"] - 60, w["last_ts"] + 60, max_usd, TRUSTED)).rowcount
+                    (w["mint"], w["first_ts"] - 300, w["last_ts"] + 60, max_usd, TRUSTED)).rowcount
                 log.warning("wave on %s: %d trusted wallets, one fill each, %ds apart in all, median $%.0f - %d fills marked seed",
                             w["mint"][:10], w["wallets"], w["span_s"], w["median_usd"], w["marked"])
     return out

@@ -2,6 +2,7 @@
 from fomo_agent import db
 from fomo_agent.config import settings
 from fomo_agent.pipeline import crews, deployers, hot
+from fomo_agent.sources.rpc import TRANSFER_TOPIC
 
 W = ["0x" + f"{i:040x}" for i in range(1, 12)]
 M = ["0x" + c * 40 for c in "abcdefgh"]
@@ -63,8 +64,14 @@ class FakeRpc:
 
     def logs(self, lo, hi, address=None, topics=None):
         self.calls += 1
+        T = TRANSFER_TOPIC
+        if len(topics) == 1:
+            # every transfer of the token after the mint: the launch contract pays the creator first
+            return [{"address": address, "transactionHash": "0xbuy", "blockNumber": hex(1_000_101), "logIndex": "0x1",
+                     "topics": [T, "0x" + "0" * 24 + "e" * 40, "0x" + "0" * 24 + "c" * 40], "data": "0x" + "1".rjust(64, "0")}]
         tx = "0xdeploy" if address == M[0] else "0xfactory" if address == M[1] else None
-        return [{"transactionHash": tx, "blockNumber": hex(1_000_100), "topics": topics}] if tx else []
+        minted_to = ("0x" + "0" * 24 + address[2:]) if address == M[0] else "0x" + "0" * 24 + "e" * 40
+        return [{"transactionHash": tx, "blockNumber": hex(1_000_100), "topics": [T, "0x" + "0" * 64, minted_to]}] if tx else []
 
     def call(self, method, params):
         h = params[0]
@@ -88,7 +95,7 @@ def test_the_creator_is_read_once_and_a_second_token_pays_for_the_first(tmp_path
         buy(conn, "c", W[0], M[2], now - 600)
     rpc = FakeRpc()
     assert deployers.ensure(conn, M[0], rpc, now) == "0xkey" + "1" * 36
-    assert deployers.ensure(conn, M[1], rpc, now) == "0x" + "c" * 40, "the wallet the factory call names"
+    assert deployers.ensure(conn, M[1], rpc, now) == "0x" + "c" * 40, "the first wallet the launch contract paid"
     calls = rpc.calls
     assert deployers.ensure(conn, M[0], rpc, now) == "0xkey" + "1" * 36 and rpc.calls == calls, "stored, not asked again"
     assert deployers.ensure(conn, M[2], rpc, now) is None

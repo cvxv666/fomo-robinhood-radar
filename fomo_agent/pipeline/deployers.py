@@ -4,8 +4,8 @@ The four seeded tokens of 17 Sep were plain contract creations sent by three out
 them by the same key half an hour apart. A real launch mostly comes through fomo's factory, with
 the creator's wallet in the calldata; a token minted to itself by a fresh key is a different
 animal. Either way the chain says who: the first Transfer from the zero address is the mint, its
-transaction is the creation, and the creation's sender - or, through a factory, the wallet named
-in its calldata - is the creator.
+transaction is the creation, and the creation's sender - or, through a factory, the first wallet
+the launch contract pays out to, which on fomo is the creator's own first buy - is the creator.
 
 The creator is stored on the token and read like a reputation: a push on a young token whose
 creator's previous tokens were seeded, unsellable or dead inside the week is not sent, and the
@@ -53,11 +53,22 @@ def find(rpc, conn: sqlite3.Connection, mint: str) -> dict | None:
     if not to or inp[:10] in CREATE_SELECTORS:
         # a plain deployment: the key that sent it made the token
         return {"creator": sender, "via": "deploy", "block": int(lg["blockNumber"], 16), "tx": lg["transactionHash"]}
-    # through a factory: the first address in the calldata that is not the factory, else the sender
-    words = [inp[10 + i:10 + i + 64] for i in range(0, len(inp) - 10, 64)]
-    named = ["0x" + w[24:] for w in words if w[:24] == "0" * 24 and w[24:] not in ("0" * 40,) and ("0x" + w[24:]) != to.lower()]
-    return {"creator": (named[0] if named else sender).lower(), "via": "factory", "factory": to.lower(),
-            "block": int(lg["blockNumber"], 16), "tx": lg["transactionHash"]}
+    # through a factory: the calldata names contracts and a relayer, not the person. On fomo the
+    # creator's own first buy is the first transfer out of the launch contract to a wallet, so
+    # the first recipient that is not infrastructure is taken as the creator.
+    from ..sources.rpc import parse_transfer
+
+    minted_to = "0x" + lg["topics"][2][-40:]
+    infra = {minted_to.lower(), to.lower(), mint.lower(), "0x" + "0" * 40, *(r.lower() for r in settings.rpc_routers)}
+    block = int(lg["blockNumber"], 16)
+    later = rpc.logs(block, min(block + 2_000, head), address=mint, topics=[TRANSFER_TOPIC])
+    for t in (parse_transfer(e) for e in later[:60]):
+        if not t:
+            continue
+        infra.add(t["frm"])          # anything that pays out is a contract, not a person
+        if t["to"] not in infra and t["to"] != t["frm"]:
+            return {"creator": t["to"].lower(), "via": "factory", "factory": to.lower(), "block": block, "tx": lg["transactionHash"]}
+    return {"creator": "", "via": "factory", "factory": to.lower(), "block": block, "tx": lg["transactionHash"]}
 
 
 def ensure(conn: sqlite3.Connection, mint: str, rpc=None, now: int | None = None) -> str | None:
@@ -79,7 +90,7 @@ def ensure(conn: sqlite3.Connection, mint: str, rpc=None, now: int | None = None
     with db.tx(conn):
         conn.execute("UPDATE tokens SET creator=?, created_via=?, creator_at=? WHERE mint=?",
                      (found["creator"] if found else "", found["via"] if found else None, now or db.now(), mint))
-    return found["creator"] if found else None
+    return (found["creator"] or None) if found else None
 
 
 def history(conn: sqlite3.Connection, creator: str, before_mint: str | None = None, days: int | None = None) -> dict:
