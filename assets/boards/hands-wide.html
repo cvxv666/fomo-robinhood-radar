@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOMO Radar — the radar got hands</title>
+<!--
+  The "hands" board, wide (1600x900), filled from window.HANDS by pipeline/hands.py every
+  morning: one anchor number and one moving thing per feature, the Telegram command on every
+  block, every figure from the ledger, the tape and the API log of the last day. The receipt
+  first, then the tools, then the machines that pay, then the one who tried to fool it. Light
+  moves; nothing appears late. ?still=1 holds the frame. Nothing here is advice.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root { --black:#000; --white:#fff; --carbon:#606060; --graphite:#949494; --line:#2a2a2a; --green:#00ff85; --crimson:#ff003d; --amber:#ff8a00; --yellow:#fcff76;
+          --sans:"Space Grotesk", system-ui, sans-serif; --mono:"JetBrains Mono", ui-monospace, monospace; }
+  html, body { margin:0; height:100%; background:var(--black); color:var(--white); overflow:hidden; font-family:var(--mono); }
+  .stage { position:fixed; inset:0; display:grid; place-items:center; }
+  .board { position:relative; width:1600px; height:900px; transform-origin:center center; background:var(--black); overflow:hidden; }
+  canvas.fx { position:absolute; left:0; top:0; width:1600px; height:900px; pointer-events:none; }
+  .frame { position:absolute; inset:14px; border:2px solid var(--white); pointer-events:none; }
+  .abs { position:absolute; }
+  .eyebrow { left:40px; top:38px; font-size:12px; font-weight:700; letter-spacing:.14em; white-space:nowrap; }
+  .eyebrow span { color:var(--graphite); font-weight:400; }
+  .led { display:inline-block; width:10px; height:10px; background:var(--green); margin-right:12px; vertical-align:-1px; animation:blink 2.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+  .big { font-family:var(--sans); font-weight:700; letter-spacing:-.02em; line-height:.86; white-space:nowrap; }
+  #title { left:40px; top:60px; font-size:56px; }
+  #title i { font-style:normal; color:var(--green); }
+  #hud { position:absolute; right:40px; top:76px; text-align:right; font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--graphite); line-height:1.9; white-space:nowrap; }
+  #hud b { color:var(--white); } #hud i { color:var(--green); font-style:normal; }
+  .rule { position:absolute; left:40px; width:1520px; height:2px; background:var(--white); }
+  .vrule { position:absolute; width:2px; background:var(--white); }
+  .lab { position:absolute; font-size:12px; font-weight:700; letter-spacing:.14em; white-space:nowrap; }
+  .lab span { color:var(--graphite); font-weight:400; }
+  .lab i { font-style:normal; color:var(--green); }
+  .cap { position:absolute; font-size:11px; font-weight:700; letter-spacing:.12em; color:var(--graphite); white-space:nowrap; line-height:1.9; }
+  .cap b { color:var(--white); } .cap i { color:var(--green); font-style:normal; } .cap s { color:var(--crimson); text-decoration:none; }
+  .num { position:absolute; font-family:var(--sans); font-weight:700; letter-spacing:-.03em; line-height:.86; white-space:nowrap; }
+  .num small { font-size:12px; letter-spacing:.14em; color:var(--graphite); margin-left:14px; font-family:var(--mono); font-weight:700; vertical-align:8px; }
+  canvas.v { position:absolute; }
+  .hook { position:absolute; font-family:var(--sans); font-weight:700; font-size:18px; letter-spacing:-.005em; line-height:1.2; white-space:nowrap; }
+  .hook i { font-style:normal; color:var(--green); } .hook s { text-decoration:none; color:var(--crimson); }
+  .card { position:absolute; width:226px; height:74px; border:1px solid var(--line); padding:10px 12px; box-sizing:border-box; }
+  .card .n { font-family:var(--sans); font-weight:700; font-size:20px; letter-spacing:-.01em; white-space:nowrap; }
+  .card .s { position:absolute; right:12px; top:10px; font-size:11px; font-weight:700; color:var(--green); letter-spacing:.1em; }
+  .card .p { margin-top:8px; font-size:11px; letter-spacing:.1em; color:var(--graphite); white-space:nowrap; }
+  .card .p b { color:var(--white); }
+  .card .c { position:absolute; left:12px; bottom:9px; font-size:10px; letter-spacing:.12em; color:var(--green); }
+  .card.hot { border-color:var(--green); }
+  .stamp { position:absolute; border:2px solid var(--crimson); color:var(--crimson); font-size:11px; font-weight:700; letter-spacing:.2em; padding:4px 8px; transform:rotate(-6deg); }
+  .qr { position:absolute; right:40px; top:776px; width:64px; height:64px; image-rendering:pixelated; }
+  .foot { position:absolute; top:862px; font-size:11px; letter-spacing:.1em; color:var(--carbon); white-space:nowrap; }
+  .foot b { color:var(--graphite); font-weight:700; }
+  @media (prefers-reduced-motion: reduce) { .led { animation:none; } }
+</style>
+</head>
+<body>
+<div class="stage"><div class="board" id="board">
+  <canvas class="fx" id="art"></canvas>
+  <div class="frame"></div>
+
+  <div class="abs eyebrow"><span class="led"></span>FOMO ROBINHOOD RADAR  <span>·  WHAT IT CAN DO, FROM WHAT IT DID  ·  <span id="date"></span></span></div>
+  <div class="abs big" id="title">THE RADAR GOT <i>HANDS.</i></div>
+  <div id="hud"><b id="h-alerts"></b> ALERTS ON THE RECORD SINCE <span id="h-since"></span><br><i id="h-above"></i> TRADED ABOVE THE CALL<br>THIS BOARD REDRAWS ITSELF AT 07:10 UTC</div>
+  <div class="rule" style="top:128px"></div>
+
+  <!-- A. /paper -->
+  <div class="lab" style="left:40px;top:142px">/PAPER  <span>·  $100 INTO EVERY ALERT AT THE CALL, OUT AT THE HOUR READ  ·  THE RECEIPT</span></div>
+  <div class="num" id="paper-big" style="left:40px;top:172px;font-size:96px;color:var(--green)"></div>
+  <div class="cap" style="left:40px;top:268px"><b id="p-trades"></b> TRADES  ·  <b id="p-win"></b> WON  ·  BEST <i id="p-best"></i>  ·  WORST <s id="p-worst"></s></div>
+  <canvas class="v" id="ring" width="110" height="110" style="left:520px;top:160px"></canvas>
+  <div class="cap" style="left:642px;top:168px">OF ALERTS TRADED<br>ABOVE THE CALL<br><b id="p-above"></b> MEASURED<br>SINCE <span id="p-since"></span></div>
+  <canvas class="v" id="curve" width="740" height="100" style="left:40px;top:296px"></canvas>
+  <div class="hook" style="left:40px;top:408px">THE LOSS IS CAPPED AT <s id="p-worst2"></s>. THE WIN IS NOT: <i id="p-best2"></i> ON ONE CALL.</div>
+  <div class="cap" style="left:40px;top:434px">AT $1,000 A CALL: <i id="p-1000"></i>  ·  EVERY TRADE IS ON <b><span id="p-site"></span>/paper</b></div>
+  <div class="vrule" style="left:800px;top:142px;height:320px"></div>
+
+  <!-- B. /follow -->
+  <div class="lab" style="left:832px;top:142px">/FOLLOW &lt;handle&gt;  <span>·  THAT WALLET'S EVERY FILL IN YOUR CHAT, 20 S AFTER THE BLOCK</span></div>
+  <div class="hook" style="left:832px;top:170px">FOLLOW THE WALLET THAT MADE <i id="f-top"></i> IN 30 DAYS.</div>
+  <div id="cards"></div>
+  <canvas class="v" id="race" width="728" height="56" style="left:832px;top:378px"></canvas>
+  <div class="cap" style="left:832px;top:436px">FREE <b id="f-free"></b> WALLETS  ·  PRO <b id="f-pro"></b>  ·  REAL FILLS ONLY  ·  <i>15× FASTER</i> THAN A SCREENER</div>
+  <div class="rule" style="top:478px"></div>
+
+  <!-- C. /invite -->
+  <div class="lab" style="left:40px;top:492px">/INVITE  <span>·  YOUR OWN LINK  ·  <span id="i-days"></span> DAYS OF PRO FOR BOTH</span></div>
+  <div class="num" style="left:40px;top:522px;font-size:56px"><span id="i-month"></span><small>INVITES = A MONTH OF PRO</small></div>
+  <canvas class="v" id="fuse" width="470" height="40" style="left:40px;top:596px"></canvas>
+  <div class="cap" style="left:40px;top:650px">UP TO <b id="i-max"></b> A MONTH  ·  <b id="i-total"></b> DAYS<br>ONLY A CHAT THE BOT NEVER SAW COUNTS</div>
+  <div class="vrule" style="left:540px;top:492px;height:358px"></div>
+
+  <!-- D. /webhook -->
+  <div class="lab" style="left:572px;top:492px">/WEBHOOK &lt;url&gt;  <span>·  EVERY ALERT POSTED TO YOUR OWN BOT  ·  PRO KEY, BURNED</span></div>
+  <div class="num" style="left:572px;top:522px;font-size:72px"><span id="a-heavy"></span><small>BOTS HEAVY ENOUGH TO PAY</small></div>
+  <div class="cap" style="left:572px;top:600px"><b id="a-req"></b> API REQUESTS A DAY  ·  <b id="a-readers"></b> READERS<br>THE <span id="a-heavy2"></span> ARE <i id="a-share"></i> OF IT  ·  IF THEY PAY: <i>≈ <span id="a-burn"></span></i> BURNED A MONTH</div>
+  <canvas class="v" id="hours" width="400" height="26" style="left:572px;top:660px"></canvas>
+  <div id="uas" class="cap" style="left:572px;top:700px;width:400px;height:60px;overflow:hidden;line-height:1.7"></div>
+  <canvas class="v" id="wheel" width="180" height="140" style="left:876px;top:698px"></canvas>
+  <div class="vrule" style="left:1080px;top:492px;height:358px"></div>
+
+  <!-- E. the seeder -->
+  <div class="lab" style="left:1112px;top:492px">THE ALERT GOT SMARTER  <span>·  WHO MADE IT · WHO MOVES TOGETHER · WHO IS FAKING IT</span></div>
+  <div class="hook" id="s-hook" style="left:1112px;top:520px;white-space:normal;width:440px;line-height:1.25"></div>
+  <canvas class="v" id="waves" width="448" height="60" style="left:1112px;top:606px"></canvas>
+  <canvas class="v" id="smart" width="280" height="60" style="left:1112px;top:690px"></canvas>
+  <div class="cap" style="right:40px;top:760px;line-height:1">THE BOT</div>
+  <img class="qr" id="qr" alt="" src="">
+
+  <div class="foot" style="left:40px">LEDGER SINCE <span id="foot-since"></span>  ·  THE TAPE  ·  API LOG, LAST 24H  ·  <b>NOT ADVICE</b></div>
+  <div class="foot" style="right:40px"><b id="foot-handle"></b>  ·  <b id="foot-site"></b></div>
+</div></div>
+<script>
+/*HANDS*/
+</script>
+<script>
+(() => {
+  'use strict';
+  const H = window.HANDS; if (!H) return;
+  const still = new URLSearchParams(location.search).has('still') || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const GREEN = '#00ff85', CRIMSON = '#ff003d', WHITE = '#fff', GRAPHITE = '#949494', LINE = '#2a2a2a', CARBON = '#606060';
+  const $ = id => document.getElementById(id);
+  const mono = px => `bold ${px}px "JetBrains Mono", monospace`;
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const money = v => (v >= 0 ? '+' : '−') + '$' + Math.abs(Math.round(v)).toLocaleString('en-US');
+  const big = v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? Math.round(v / 1e3) + 'K' : String(v);
+  if (still) document.querySelectorAll('.led').forEach(e => { e.style.animation = 'none'; });
+
+  $('date').textContent = H.date;
+  $('h-alerts').textContent = H.alerts; $('h-since').textContent = H.since; $('h-above').textContent = H.above_pct + '%';
+  $('p-trades').textContent = H.paper.trades; $('p-win').textContent = H.paper.win_pct + '%';
+  $('p-best').textContent = money(H.paper.best || 0); $('p-worst').textContent = money(H.paper.worst || 0);
+  $('p-above').textContent = `${H.above_n} OF ${H.clean}`; $('p-since').textContent = H.since;
+  $('p-worst2').textContent = money(H.paper.worst || 0); $('p-best2').textContent = money(H.paper.best || 0);
+  $('p-1000').textContent = money(H.paper.at_1000); $('p-site').textContent = H.site || 'fomoradar.app';
+  $('f-top').textContent = H.stars[0] ? H.stars[0].pnl : '—'; $('f-free').textContent = H.follow.free; $('f-pro').textContent = H.follow.pro;
+  $('cards').innerHTML = H.stars.slice(0, 4).map((s, i) => `<div class="card${i === 0 ? ' hot' : ''}" style="left:${832 + (i % 2) * 244}px;top:${206 + Math.floor(i / 2) * 84}px"><div class="n">${esc(s.handle)}</div><div class="s">${s.score}</div><div class="p">30 DAYS  <b>${esc(s.pnl)}</b></div><div class="c">/follow ${esc(s.handle)}</div></div>`).join('');
+  $('i-days').textContent = H.invite.days; $('i-month').textContent = Math.round(30 / Math.max(1, H.invite.days));
+  $('i-max').textContent = H.invite.max; $('i-total').textContent = H.invite.max * H.invite.days;
+  $('a-heavy').textContent = H.api.heavy; $('a-heavy2').textContent = H.api.heavy; $('a-req').textContent = big(H.api.requests); $('a-readers').textContent = H.api.readers.toLocaleString('en-US');
+  $('a-share').textContent = H.api.heavy_share + '%'; $('a-burn').textContent = '$' + H.api.burn.toLocaleString('en-US');
+  $('uas').innerHTML = H.api.uas.slice(0, 3).map(([n, v]) => `<div>${esc(n)}<span style="float:right"><b>${big(v)}</b></span></div>`).join('');
+  $('s-hook').innerHTML = H.seeder.fills ? `SOMEONE SPENT <s>$${H.seeder.usd.toLocaleString('en-US')}</s> TO FAKE <s>${H.seeder.fills}</s> BUYS INTO OUR BEST WALLETS. ALERTS SENT: <i>${H.seeder.sent}</i>.` : 'NOBODY TRIED TO FAKE A BUY THIS WEEK. THE DOOR IS STILL LOCKED.';
+  $('foot-since').textContent = H.since; $('foot-handle').textContent = '@' + H.handle; $('foot-site').textContent = H.site || '';
+  $('qr').src = H.qr || ''; $('qr').alt = 't.me/' + H.bot;
+
+  const bigEl = $('paper-big'); const T = H.paper.curve.length > 1 ? H.paper.curve : [0, H.paper.pnl];
+  const rc = $('ring'), rx = rc.getContext('2d'), above = H.above_pct / 100;
+  function drawRing(t) {
+    rx.clearRect(0, 0, 110, 110);
+    const k = still ? 1 : Math.min(1, t / 2200);
+    rx.lineWidth = 8; rx.strokeStyle = LINE; rx.beginPath(); rx.arc(55, 55, 46, 0, Math.PI * 2); rx.stroke();
+    rx.strokeStyle = GREEN; rx.beginPath(); rx.arc(55, 55, 46, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * above * k); rx.stroke();
+    rx.fillStyle = WHITE; rx.font = 'bold 28px "Space Grotesk", sans-serif'; rx.textAlign = 'center'; rx.fillText(Math.round(above * 100 * k) + '%', 55, 65);
+  }
+  const cv = $('curve'), cx = cv.getContext('2d');
+  const CW = 740, CH = 100, lo = Math.min(0, ...T), hi = Math.max(1, ...T);
+  const px = i => 4 + (i / (T.length - 1)) * (CW - 40), py = v => 10 + (1 - (v - lo) / (hi - lo)) * (CH - 36);
+  function drawCurve(t) {
+    cx.clearRect(0, 0, CW, CH);
+    const k = still ? 1 : Math.min(1, t / 2200), n = Math.max(2, Math.round(1 + k * (T.length - 1)));
+    for (let g = 0; g <= 4; g++) { cx.fillStyle = '#141414'; cx.fillRect(0, 10 + g * ((CH - 36) / 4), CW, 1); }
+    cx.fillStyle = LINE; cx.fillRect(0, py(0), CW, 1);
+    cx.beginPath(); cx.moveTo(px(0), py(0)); for (let i = 0; i < n; i++) cx.lineTo(px(i), py(T[i])); cx.lineTo(px(n - 1), py(0)); cx.closePath();
+    cx.fillStyle = 'rgba(0,255,133,.07)'; cx.fill();
+    cx.strokeStyle = GREEN; cx.lineWidth = 2.5; cx.beginPath(); for (let i = 0; i < n; i++) i ? cx.lineTo(px(i), py(T[i])) : cx.moveTo(px(i), py(T[i])); cx.stroke();
+    for (let i = 1; i < n; i++) { const d = T[i] - T[i - 1]; cx.fillStyle = d > 0 ? GREEN : d < 0 ? CRIMSON : CARBON; cx.fillRect(px(i) - 2, CH - 14, 3, Math.max(2, Math.min(9, Math.abs(d) / 40))); }
+    const j = H.paper.best_index || 0;
+    if (H.paper.best_sym && n > j && j > 0) { cx.fillStyle = WHITE; cx.font = mono(9); cx.textAlign = 'left'; cx.fillText(`${H.paper.best_sym}${H.paper.best_x ? '  ×' + (H.paper.best_x >= 10 ? Math.round(H.paper.best_x) : H.paper.best_x.toFixed(2)) + ' AT THE HOUR' : ''}  ·  ${money(H.paper.best)}`, px(j) + 8, py(T[j]) + 18); }
+    const x = px(n - 1), y = py(T[n - 1]);
+    const g = cx.createRadialGradient(x, y, 0, x, y, 24); g.addColorStop(0, 'rgba(0,255,133,.6)'); g.addColorStop(1, 'rgba(0,255,133,0)');
+    cx.fillStyle = g; cx.fillRect(x - 24, y - 24, 48, 48); cx.fillStyle = WHITE; cx.fillRect(x - 3, y - 3, 6, 6);
+    cx.fillStyle = GRAPHITE; cx.font = mono(9); cx.textAlign = 'left'; cx.fillText(H.since, 4, CH - 1); cx.textAlign = 'right'; cx.fillText(H.date.slice(0, 6), CW - 2, CH - 1);
+    bigEl.textContent = money(T[n - 1]);
+  }
+  const rr = $('race'), rrx = rr.getContext('2d');
+  function drawRace(t) {
+    rrx.clearRect(0, 0, 728, 56);
+    const lanes = [['THE CHAIN', 0, WHITE], ['YOUR CHAT  ·  20 S', 20, GREEN], ['A SCREENER  ·  5 MIN', 300, CARBON]];
+    const k = still ? 0.5 : (t / 5000) % 1, L = 150, R = 728;
+    lanes.forEach(([name, delay, col], i) => {
+      const y = 10 + i * 18;
+      rrx.fillStyle = LINE; rrx.fillRect(L, y, R - L, 1);
+      rrx.fillStyle = col; rrx.font = mono(9); rrx.textAlign = 'right'; rrx.fillText(name, L - 10, y + 3);
+      const prog = Math.max(0, Math.min(1, (k * 400 - delay) / 300)), x = L + prog * (R - L);
+      if (k * 400 >= delay) { const g = rrx.createRadialGradient(x, y, 0, x, y, 12); g.addColorStop(0, col === CARBON ? 'rgba(96,96,96,.8)' : 'rgba(0,255,133,.8)'); g.addColorStop(1, 'rgba(0,0,0,0)'); rrx.fillStyle = g; rrx.fillRect(x - 12, y - 12, 24, 24); rrx.fillStyle = col; rrx.fillRect(x - 3, y - 3, 6, 6); }
+      else { rrx.fillStyle = '#000'; rrx.fillRect(L + 2, y - 6, 52, 12); rrx.fillStyle = CARBON; rrx.font = mono(8); rrx.textAlign = 'left'; rrx.fillText('WAITING', L + 4, y + 3); }
+    });
+  }
+  const fc = $('fuse'), fx = fc.getContext('2d');
+  function drawFuse(t) {
+    fx.clearRect(0, 0, 470, 40);
+    const n = Math.min(12, H.invite.max), gap = 8, w = Math.floor((400 - (n - 1) * gap) / n), y = 20, k = still ? Math.ceil(n * 0.4) : ((t / 700) % (n + 3));
+    for (let i = 0; i < n; i++) {
+      const x = 2 + i * (w + gap), lit = k > i;
+      fx.strokeStyle = lit ? GREEN : LINE; fx.lineWidth = 2; fx.strokeRect(x, y - 11, w, 22);
+      if (lit) { fx.fillStyle = 'rgba(0,255,133,.14)'; fx.fillRect(x, y - 11, w, 22); }
+      if (i < n - 1) { fx.strokeStyle = lit ? GREEN : LINE; fx.beginPath(); fx.moveTo(x + w, y); fx.lineTo(x + w + gap, y); fx.stroke(); }
+      fx.fillStyle = lit ? GREEN : CARBON; fx.font = mono(9); fx.textAlign = 'center'; fx.fillText('+' + H.invite.days, x + w / 2, y + 3);
+    }
+    if (!still) { const x = 2 + Math.min(n, k) * (w + gap); const g = fx.createRadialGradient(x, y, 0, x, y, 14); g.addColorStop(0, 'rgba(0,255,133,.9)'); g.addColorStop(1, 'rgba(0,255,133,0)'); fx.fillStyle = g; fx.fillRect(x - 14, y - 14, 28, 28); }
+    fx.fillStyle = WHITE; fx.font = 'bold 13px "Space Grotesk", sans-serif'; fx.textAlign = 'left'; fx.fillText('PRO  ∞', 2 + n * (w + gap) + 6, y + 5);
+  }
+  const hc = $('hours'), hx = hc.getContext('2d');
+  function drawHours() {
+    hx.clearRect(0, 0, 400, 26); const mx = Math.max(1, ...H.api.hours);
+    H.api.hours.forEach((v, i) => { const h = Math.max(2, Math.round(20 * v / mx)); hx.fillStyle = v === mx ? GREEN : '#3a3a3a'; hx.fillRect(i * 16, 24 - h, 12, h); });
+    hx.fillStyle = CARBON; hx.font = mono(8); hx.textAlign = 'right'; hx.fillText('24H OF API READS · UTC', 400, 7);
+  }
+  const wc = $('wheel'), wx = wc.getContext('2d');
+  const STEPS = ['BOTS READ', 'BOTS PAY', 'BURN', 'SUPPLY ↓', 'PRO GROWS'];
+  function drawWheel(t) {
+    wx.clearRect(0, 0, 180, 140);
+    const cxp = 90, cyp = 72, r = 46, k = still ? 0.3 : (t / 3200) % 1;
+    wx.strokeStyle = LINE; wx.lineWidth = 2; wx.beginPath(); wx.arc(cxp, cyp, r, 0, Math.PI * 2); wx.stroke();
+    const a = -Math.PI / 2 + k * Math.PI * 2, x = cxp + Math.cos(a) * r, y = cyp + Math.sin(a) * r;
+    wx.strokeStyle = GREEN; wx.lineWidth = 3; wx.beginPath(); wx.arc(cxp, cyp, r, a - 1.2, a); wx.stroke();
+    const g = wx.createRadialGradient(x, y, 0, x, y, 18); g.addColorStop(0, 'rgba(0,255,133,.7)'); g.addColorStop(1, 'rgba(0,255,133,0)'); wx.fillStyle = g; wx.fillRect(x - 18, y - 18, 36, 36); wx.fillStyle = WHITE; wx.fillRect(x - 2, y - 2, 5, 5);
+    STEPS.forEach((s, i) => {
+      const a = -Math.PI / 2 + (i / STEPS.length) * Math.PI * 2, x = cxp + Math.cos(a) * r, y = cyp + Math.sin(a) * r;
+      wx.fillStyle = i === 2 ? CRIMSON : WHITE; wx.fillRect(x - 2, y - 2, 5, 5);
+      wx.fillStyle = i === 2 ? CRIMSON : GRAPHITE; wx.font = mono(8); wx.textAlign = x < cxp - 6 ? 'right' : x > cxp + 6 ? 'left' : 'center';
+      wx.fillText(s, cxp + Math.cos(a) * (r + 10), cyp + Math.sin(a) * (r + 10) + 3);
+    });
+    const burned = still ? H.api.burn : Math.round(H.api.burn * Math.min(1, t / 3000));
+    wx.fillStyle = GREEN; wx.font = 'bold 16px "Space Grotesk", sans-serif'; wx.textAlign = 'center'; wx.fillText('$' + burned.toLocaleString('en-US'), cxp, cyp + 2);
+    wx.fillStyle = GRAPHITE; wx.font = mono(7); wx.fillText('BURNED A MONTH', cxp, cyp + 14);
+  }
+  const wv = $('waves'), wvx = wv.getContext('2d');
+  function drawWaves(t) {
+    wvx.clearRect(0, 0, 448, 60);
+    const W = 448, hours = 8 * 24, X = h => (h / hours) * W, y = 36, ws = H.seeder.waves;
+    wvx.fillStyle = LINE; wvx.fillRect(0, y, W, 1);
+    for (let d = 0; d <= 8; d += 2) { wvx.fillStyle = CARBON; wvx.fillRect(X(d * 24), y - 3, 1, 6); wvx.font = mono(8); wvx.textAlign = d === 0 ? 'left' : d === 8 ? 'right' : 'center'; wvx.fillText(H.seeder.days[d] || '', X(d * 24), y + 16); }
+    ws.forEach(w => { const x = X(w.h); wvx.save(); wvx.translate(x, y); wvx.rotate(Math.PI / 4); wvx.fillStyle = CRIMSON; wvx.fillRect(-4, -4, 8, 8); wvx.restore(); });
+    if (ws.length > 3) {
+      let bestH = ws[0].h, bestN = 0;
+      ws.forEach(w => { const n = ws.filter(o => Math.abs(o.h - w.h) < 6).length; if (n > bestN) { bestN = n; bestH = w.h; } });
+      if (bestN >= 3) { wvx.fillStyle = CRIMSON; wvx.font = mono(8); wvx.textAlign = 'right'; wvx.fillText(`${bestN} WAVES IN ONE EVENING →`, X(bestH) - 8, y - 12); }
+    }
+    const k = still ? 1 : Math.min(1, ((t / 3000) % 1) / 0.2);
+    wvx.save(); wvx.translate(4, 2); wvx.rotate(-0.08); wvx.globalAlpha = k;
+    wvx.strokeStyle = CRIMSON; wvx.lineWidth = 2; wvx.strokeRect(0, 0, 118, 22); wvx.fillStyle = CRIMSON; wvx.font = mono(11); wvx.textAlign = 'center'; wvx.fillText(`${H.seeder.caught} CAUGHT · ${H.seeder.sent} SENT`, 59, 15); wvx.restore();
+  }
+  const sm = $('smart'), sx = sm.getContext('2d');
+  function drawSmart(t) {
+    sx.clearRect(0, 0, 280, 60);
+    const syms = H.key.syms.length ? [...H.key.syms, '3RD'] : ['1ST', '2ND', '3RD'];
+    sx.fillStyle = CRIMSON; sx.font = mono(9); sx.textAlign = 'left'; sx.fillText(H.key.address || 'A KEY', 0, 14);
+    syms.forEach((s, i) => {
+      const x = 70 + i * 54, third = i === syms.length - 1;
+      sx.strokeStyle = third ? WHITE : CRIMSON; sx.lineWidth = 1.5; sx.strokeRect(x, 2, 46, 16);
+      sx.fillStyle = third ? WHITE : CRIMSON; sx.font = mono(8); sx.textAlign = 'center'; sx.fillText(String(s).slice(0, 6), x + 23, 13);
+      if (third) { const k = still ? 1 : Math.min(1, ((t / 3000) % 1) / 0.25); sx.strokeStyle = CRIMSON; sx.lineWidth = 2; sx.beginPath(); sx.moveTo(x + 2, 3); sx.lineTo(x + 2 + 42 * k, 3 + 14 * k); sx.moveTo(x + 44, 3); sx.lineTo(x + 44 - 42 * k, 3 + 14 * k); sx.stroke(); }
+    });
+    sx.fillStyle = GRAPHITE; sx.font = mono(8); sx.textAlign = 'left'; sx.fillText("A KEY'S THIRD TOKEN: NOT PUSHED", 0, 30);
+    const y = 48, crew = H.crew.length ? H.crew : ['—', '—', '—'];
+    crew.slice(0, 3).forEach((w, i) => {
+      const x = 8 + i * 80; sx.fillStyle = WHITE; sx.beginPath(); sx.arc(x, y, 4, 0, Math.PI * 2); sx.fill();
+      if (i < 2) { sx.strokeStyle = GREEN; sx.lineWidth = 1.5; sx.beginPath(); sx.moveTo(x + 4, y); sx.lineTo(x + 76, y); sx.stroke(); }
+      sx.fillStyle = GRAPHITE; sx.font = mono(7); sx.textAlign = 'center'; sx.fillText(String(w).slice(0, 12), x, y + 11);
+    });
+    if (!still) { const k = (t / 2200) % 1, x = 8 + k * 160; const g = sx.createRadialGradient(x, y, 0, x, y, 10); g.addColorStop(0, 'rgba(0,255,133,.9)'); g.addColorStop(1, 'rgba(0,255,133,0)'); sx.fillStyle = g; sx.fillRect(x - 10, y - 10, 20, 20); }
+    sx.fillStyle = GREEN; sx.font = mono(9); sx.textAlign = 'left'; sx.fillText('= 1 OPINION', 184, y + 3);
+  }
+  const art = $('art'), ax = art.getContext('2d'); art.width = 1600; art.height = 900;
+  function drawArt(t) {
+    ax.clearRect(0, 0, 1600, 900); if (still) return;
+    const x = ((t / 10000) % 1) * 1700 - 50, g = ax.createLinearGradient(x - 90, 0, x + 90, 0);
+    g.addColorStop(0, 'rgba(0,255,133,0)'); g.addColorStop(.5, 'rgba(0,255,133,.06)'); g.addColorStop(1, 'rgba(0,255,133,0)');
+    ax.fillStyle = g; ax.fillRect(x - 90, 14, 180, 872);
+  }
+  drawHours();
+  let t0 = null;
+  function frame(ts) { if (t0 === null) t0 = ts; const t = ts - t0; drawArt(t); drawRing(t); drawCurve(t); drawRace(t); drawFuse(t); drawWheel(t); drawWaves(t); drawSmart(t); if (!still) requestAnimationFrame(frame); }
+  requestAnimationFrame(frame);
+  const board = $('board');
+  const fit = () => { const k = Math.min(innerWidth / 1600, innerHeight / 900); board.style.transform = `scale(${k})`; };
+  addEventListener('resize', fit); fit();
+})();
+</script>
+</body>
+</html>
