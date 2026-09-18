@@ -97,9 +97,7 @@ app = FastAPI(
         "that names your project - requests without one are refused. A PRO subscriber of the "
         "Telegram bot (@fomoradarRH_bot, `/pro`) can ask it for a key with `/apikey` and send it "
         "as `X-API-Key` for 600 a minute. Answers are cached for a few seconds; the feeds move on "
-        "the watcher's tick, not faster.
-
-"
+        "the watcher's tick, not faster.\n\n"
         "**Webhooks:** a PRO key can name an https URL in the bot (`/webhook <url>`). Every burst, "
         "launch and hour-later read is then POSTed there as JSON the second the chats get it: "
         "`{event: burst|launch|followup, ts, chain, mint, symbol, data: {...what the chat was told}, "

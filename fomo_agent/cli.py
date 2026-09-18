@@ -801,6 +801,10 @@ def run(once: bool = typer.Option(False, "--once", help="single pass of every st
         # as the fills we happened to watch
         ("holdings", settings.track_interval, lambda c: hd.mark_holdings(c)),
         ("score", settings.track_interval * 10, lambda c: sc.score_all(c)),
+        # who made what the cohort bought today, a few tokens a pass, so the creator's record is
+        # there before the next push needs it; and the crews, four times a day
+        ("deployers", settings.track_interval, lambda c: __import__("fomo_agent.pipeline.deployers", fromlist=["sweep"]).sweep(c)),
+        ("crews", 6 * 3600, lambda c: __import__("fomo_agent.pipeline.crews", fromlist=["compute"]).compute(c)),
         ("report", settings.report_interval, do_report),
     ]
     last: dict[str, float] = {k: 0.0 for k, _, _ in steps}

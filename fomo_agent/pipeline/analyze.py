@@ -485,6 +485,20 @@ def book(conn: sqlite3.Connection, address: str, user_id: str | None) -> dict:
     }
 
 
+def _creator(conn: sqlite3.Connection, token, mint: str) -> dict | None:
+    """The token's creator and what their other tokens came to, when the chain has said."""
+    if not token or "creator" not in token.keys() or not token["creator"]:
+        return None
+    from .deployers import history
+    h = history(conn, token["creator"], before_mint=mint)
+    return {"address": token["creator"], "via": token["created_via"], **h}
+
+
+def _crews(conn: sqlite3.Connection, addresses: list[str]) -> dict[str, int]:
+    from .crews import of
+    return of(conn, list({a for a in addresses if a}))
+
+
 def analyze_token(conn: sqlite3.Connection, mint: str, hours: int = 48) -> dict:
     """Whose money is in this token, what it cost them, and who moved on it recently."""
     mint = mint.lower() if mint.startswith("0x") else mint
@@ -561,6 +575,8 @@ def analyze_token(conn: sqlite3.Connection, mint: str, hours: int = 48) -> dict:
         # what the tracked wallets' holdings are worth at the token's current price
         "cohort_value": sum(h["value"] for h in holders if h["value"]) or None,
         "seeded": seeded, "flow": flow,
+        "creator": _creator(conn, token, mint),
+        "crews": _crews(conn, [h["address"] for h in holders] + [f["address"] for f in flow]),
         "sellable": token["sellable"] if token else None,
         "sell_note": token["sell_note"] if token else None,
         "bought_usd": sum(f["usd"] or 0 for f in flow if f["side"] == "buy"),

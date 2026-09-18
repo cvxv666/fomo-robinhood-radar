@@ -309,6 +309,18 @@ MIGRATIONS: dict[int, str] = {
     );
     CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer, at);
     """,
+    27: """
+    -- Who made the token (pipeline/deployers.py): the key that deployed it or the wallet a
+    -- factory launch names; '' when the chain could not say. And the crews (pipeline/crews.py):
+    -- wallets that buy the same tokens in the same minute, one row per wallet in a crew.
+    ALTER TABLE tokens ADD COLUMN creator TEXT;
+    ALTER TABLE tokens ADD COLUMN created_via TEXT;
+    ALTER TABLE tokens ADD COLUMN creator_at INTEGER;
+    CREATE INDEX IF NOT EXISTS idx_tokens_creator ON tokens(creator);
+    CREATE TABLE IF NOT EXISTS crews(
+      address TEXT PRIMARY KEY, crew INTEGER NOT NULL, size INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

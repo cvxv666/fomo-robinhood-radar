@@ -62,6 +62,17 @@ const desc = t.is_quote
       of every feed however its numbers read.
     </p>
   )}
+  {t.creator && t.creator.bad > 0 && (
+    <p class="note flagged">
+      <b>The creator's record says no.</b> The key that made this token, {t.creator.address.slice(0, 10)}…, made
+      {t.creator.tokens} other{t.creator.tokens === 1 ? '' : 's'} this week and {t.creator.bad} went seeded, unsellable or dead
+      ({t.creator.symbols.join(', ')}). A young token is not pushed on that record, whatever its numbers.
+    </p>
+  )}
+  {t.creator && t.creator.bad === 0 && t.creator.tokens > 0 && (
+    <p class="note">Made by {t.creator.address.slice(0, 10)}… {t.creator.via === 'factory' ? 'through the launch factory' : 'as a plain deployment'},
+      their {t.creator.tokens + 1}{['st', 'nd', 'rd'][t.creator.tokens] ?? 'th'} token this week; none of the others went bad.</p>
+  )}
   {t.seeded?.seeded && (
     <p class="note flagged">
       <b>This token was pushed into {t.seeded.wallets} trusted wallets rather than bought by them</b>
@@ -130,7 +141,7 @@ const desc = t.is_quote
                 <tbody>
                   {buyers.slice(0, 20).map((b) => (
                     <tr>
-                      <td class="sym"><a href={`/trader/${b.handle ?? b.address}`}>{b.handle ?? b.address.slice(0, 10)}</a></td>
+                      <td class="sym"><a href={`/trader/${b.handle ?? b.address}`}>{b.handle ?? b.address.slice(0, 10)}</a>{t.crews?.[b.address] && <span class="kind" title="buys the same tokens in the same minute as others in this crew: one opinion, counted once">crew {t.crews[b.address]}</span>}</td>
                       <td class={`r ${(b.score ?? 0) >= 60 ? 'g' : 'm'}`}>{b.score ?? '—'}</td>
                       <td class="r g">{b.bought ? usd(b.bought) : '—'}</td>
                       <td class="r c">{b.sold ? usd(b.sold) : '—'}</td>

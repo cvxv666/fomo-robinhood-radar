@@ -104,6 +104,10 @@ export type Token = {
   seeded: { wallets: number; dust: number; direct: number; seed: number; first_ts: number | null; seeded: boolean };
   /** Can it be sold: 1 yes, 0 no, null not known. A 0 keeps it out of every feed. */
   sellable: 0 | 1 | null; sell_note: string | null;
+  /** Who made it, from the chain, and what their other tokens of the week came to. */
+  creator: { address: string; via: string | null; tokens: number; seeded: number; unsellable: number; dead: number; bad: number; symbols: string[] } | null;
+  /** address -> crew number, for the wallets on this page that buy in a flock. */
+  crews: Record<string, number>;
   bought_usd: number; sold_usd: number; first_trusted_buy: number | null;
   trusted_buyers: number; hours: number;
   theses: Thesis[];

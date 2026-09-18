@@ -226,6 +226,19 @@ class Settings:
     card_min_x: float = field(default_factory=lambda: _float("CARD_MIN_X", 2.0))
     # a Discord channel webhook that hears every alert and follow-up (pipeline/discord.py)
     discord_webhook_url: str = field(default_factory=lambda: _env("DISCORD_WEBHOOK_URL", "").strip())
+    # The creator's record (pipeline/deployers.py): a young token is not pushed when its creator's
+    # other tokens of the last `deployer_days` include this many that went seeded, unsellable or
+    # dead. One: the second token pays for the first.
+    deployer_days: int = field(default_factory=lambda: _int("DEPLOYER_DAYS", 7))
+    deployer_max_bad: int = field(default_factory=lambda: _int("DEPLOYER_MAX_BAD", 1))
+    # Crews (pipeline/crews.py): two wallets are one crew when their first buys of the same token
+    # landed inside `crew_gap_s` on `crew_min_shared` tokens over `crew_days`, and on at least
+    # `crew_min_share` of what the smaller of them bought. A burst needs `hot_min_crews` opinions.
+    crew_days: int = field(default_factory=lambda: _int("CREW_DAYS", 7))
+    crew_gap_s: int = field(default_factory=lambda: _int("CREW_GAP_S", 90))
+    crew_min_shared: int = field(default_factory=lambda: _int("CREW_MIN_SHARED", 4))
+    crew_min_share: float = field(default_factory=lambda: _float("CREW_MIN_SHARE", 0.5))
+    hot_min_crews: int = field(default_factory=lambda: _int("HOT_MIN_CREWS", 2))
     # The watcher: how often it asks the chain for the blocks since last time, on how much of
     # the RPC allowance, and how far it reads on its first tick or after a stall. The scheduled
     # pass owns anything older than that.

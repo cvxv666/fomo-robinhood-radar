@@ -226,6 +226,11 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
         if why:
             log.warning("burst on %s not pushed: %s", h["sym"], why)
             continue
+        from .deployers import objection
+        why = objection(conn, h["mint"], now=now)
+        if why:
+            log.warning("burst on %s not pushed: %s", h["sym"], why)
+            continue
         key = f"hot:{h['mint']}"
         from .analyze import namesakes
         h["clones"] = namesakes(conn, h.get("sym"), h["mint"], now, hours=settings.telegram_clone_hours)

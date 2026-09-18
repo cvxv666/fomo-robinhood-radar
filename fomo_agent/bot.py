@@ -731,6 +731,11 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
             if why:
                 log.warning("launch %s not pushed: %s", t["sym"], why)
                 continue
+            from .pipeline.deployers import objection
+            why = objection(conn, t["mint"], now=now)
+            if why:
+                log.warning("launch %s not pushed: %s", t["sym"], why)
+                continue
             t["clones"] = analyze.namesakes(conn, t.get("sym"), t["mint"], now, hours=settings.telegram_clone_hours)
             # the second PAWSINU of the hour is a clone, not a launch: the message that named the
             # first one already carries the warning, and this one is not sent

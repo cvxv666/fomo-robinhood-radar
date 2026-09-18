@@ -117,6 +117,10 @@ def hot_now(conn: sqlite3.Connection, chain: str | None = None, delta: float = 3
         # a cohort takes time to arrive; five wallets inside two minutes is a script (17 Sep)
         if entries[-1][0] - entries[0][0] < settings.hot_min_span_s:
             continue
+        # six keys following one call are one opinion: the entrants have to be more than one crew
+        from .crews import distinct
+        if distinct(conn, [a for _, a, _, _, _, _ in entries]) < settings.hot_min_crews:
+            continue
         # and it is an entry only if the tape is not busy leaving: Hound was pushed at 0.33x
         # while twenty tracked wallets sold it
         bought = sum(u for _, _, _, u, _, _ in entries) or 0.0
