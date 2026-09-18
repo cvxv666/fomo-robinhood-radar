@@ -71,12 +71,12 @@
   <div class="lab" style="left:40px;top:142px">/PAPER  <span>·  $100 INTO EVERY ALERT AT THE CALL, READ TWO WAYS FROM THE SAME CANDLES</span></div>
   <canvas class="v" id="ring" width="110" height="110" style="left:40px;top:166px"></canvas>
   <div class="cap" style="left:166px;top:178px">OF ALERTS TRADED<br>ABOVE THE CALL<br><b id="p-above"></b> · <b id="p-2x"></b> REACHED ×2</div>
-  <div class="cap" style="left:380px;top:166px;line-height:1.4">OUT AT THE HOUR READ</div>
-  <div class="num" id="paper-big" style="left:380px;top:188px;font-size:40px"></div>
-  <div class="cap" style="left:380px;top:234px;line-height:1.5"><b id="p-trades"></b> TRADES · <b id="p-win"></b> WON<br>BEST <i id="p-best"></i> · WORST <s id="p-worst"></s></div>
-  <div class="cap" style="left:590px;top:166px;line-height:1.4">TRAIL −<span id="t-drop"></span>% INSIDE THE HOUR</div>
-  <div class="num" id="trail-big" style="left:590px;top:188px;font-size:40px;color:var(--green)"></div>
-  <div class="cap" style="left:590px;top:234px;line-height:1.5"><b id="t-trades"></b> TRADES · <b id="t-win"></b> WON<br>BEST <i id="t-best"></i> · WORST <s id="t-worst"></s></div>
+  <div class="cap" style="left:372px;top:166px;line-height:1.4">OUT AT THE HOUR READ</div>
+  <div class="num" id="paper-big" style="left:372px;top:188px;font-size:40px"></div>
+  <div class="cap" style="left:372px;top:234px;line-height:1.5"><b id="p-trades"></b> TRADES · <b id="p-win"></b> WON<br>BEST <i id="p-best"></i> · WORST <s id="p-worst"></s></div>
+  <div class="cap" style="left:584px;top:166px;line-height:1.4">TRAIL −<span id="t-drop"></span>% IN THE HOUR</div>
+  <div class="num" id="trail-big" style="left:584px;top:188px;font-size:40px;color:var(--green)"></div>
+  <div class="cap" style="left:584px;top:234px;line-height:1.5"><b id="t-trades"></b> TRADES · <b id="t-win"></b> WON<br>BEST <i id="t-best"></i> · WORST <s id="t-worst"></s></div>
   <canvas class="v" id="curve" width="740" height="100" style="left:40px;top:296px"></canvas>
   <div class="hook" id="p-hook" style="left:40px;top:408px;font-size:16px"></div>
   <div class="cap" style="left:40px;top:434px">SOLID: AT THE HOUR · DASHED: TRAIL  ·  EVERY TRADE IS ON <b><span id="p-site"></span>/paper</b></div>
@@ -224,7 +224,7 @@
   const hc = $('hours'), hx = hc.getContext('2d');
   function drawHours() {
     hx.clearRect(0, 0, 400, 26); const mx = Math.max(1, ...H.api.hours);
-    H.api.hours.forEach((v, i) => { const h = Math.max(2, Math.round(20 * v / mx)); hx.fillStyle = v === mx ? GREEN : '#3a3a3a'; hx.fillRect(i * 16, 24 - h, 12, h); });
+    H.api.hours.forEach((v, i) => { const h = Math.max(2, Math.round(13 * v / mx)); hx.fillStyle = v === mx ? GREEN : '#3a3a3a'; hx.fillRect(i * 16, 24 - h, 12, h); });
     hx.fillStyle = CARBON; hx.font = mono(8); hx.textAlign = 'right'; hx.fillText('24H OF API READS · UTC', 400, 7);
   }
   const wc = $('wheel'), wx = wc.getContext('2d');
