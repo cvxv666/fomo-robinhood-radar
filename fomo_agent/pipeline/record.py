@@ -58,7 +58,9 @@ def rows(conn: sqlite3.Connection, days: int = 30, kind: str | None = None, now:
             "seeded": bool(r["seeded"]), "unsellable": r["sellable"] == 0,
         }
         d["verdict"] = verdict(d, now)
-        d["paper"] = round(STAKE * (d["hour"] - 1), 2) if d["hour"] is not None and d["verdict"] not in ("open", "unmeasured") else None
+        # a honeypot's candles can print anything; the stake is gone the moment it is bought
+        d["paper"] = (-STAKE if d["verdict"] == "honeypot" else round(STAKE * (d["hour"] - 1), 2)) \
+            if (d["hour"] is not None or d["verdict"] == "honeypot") and d["verdict"] not in ("open", "unmeasured") else None
         out.append(d)
     return out
 

@@ -29,7 +29,7 @@
   .big { font-family:var(--sans); font-weight:700; letter-spacing:-.02em; line-height:.86; white-space:nowrap; }
   #title { left:40px; top:60px; font-size:56px; }
   #title i { font-style:normal; color:var(--green); }
-  #hud { position:absolute; right:40px; top:76px; text-align:right; font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--graphite); line-height:1.9; white-space:nowrap; }
+  #hud { position:absolute; right:40px; top:58px; text-align:right; font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--graphite); line-height:1.9; white-space:nowrap; }
   #hud b { color:var(--white); } #hud i { color:var(--green); font-style:normal; }
   .rule { position:absolute; left:40px; width:1520px; height:2px; background:var(--white); }
   .vrule { position:absolute; width:2px; background:var(--white); }
@@ -43,7 +43,7 @@
   canvas.v { position:absolute; }
   .hook { position:absolute; font-family:var(--sans); font-weight:700; font-size:18px; letter-spacing:-.005em; line-height:1.2; white-space:nowrap; }
   .hook i { font-style:normal; color:var(--green); } .hook s { text-decoration:none; color:var(--crimson); }
-  .card { position:absolute; width:226px; height:74px; border:1px solid var(--line); padding:10px 12px; box-sizing:border-box; }
+  .card { position:absolute; width:226px; height:80px; border:1px solid var(--line); padding:10px 12px; box-sizing:border-box; }
   .card .n { font-family:var(--sans); font-weight:700; font-size:20px; letter-spacing:-.01em; white-space:nowrap; }
   .card .s { position:absolute; right:12px; top:10px; font-size:11px; font-weight:700; color:var(--green); letter-spacing:.1em; }
   .card .p { margin-top:8px; font-size:11px; letter-spacing:.1em; color:var(--graphite); white-space:nowrap; }
@@ -82,8 +82,8 @@
   <div class="lab" style="left:832px;top:142px">/FOLLOW &lt;handle&gt;  <span>·  THAT WALLET'S EVERY FILL IN YOUR CHAT, 20 S AFTER THE BLOCK</span></div>
   <div class="hook" style="left:832px;top:170px">FOLLOW THE WALLET THAT MADE <i id="f-top"></i> IN 30 DAYS.</div>
   <div id="cards"></div>
-  <canvas class="v" id="race" width="728" height="56" style="left:832px;top:378px"></canvas>
-  <div class="cap" style="left:832px;top:436px">FREE <b id="f-free"></b> WALLETS  ·  PRO <b id="f-pro"></b>  ·  REAL FILLS ONLY  ·  <i>15× FASTER</i> THAN A SCREENER</div>
+  <canvas class="v" id="race" width="728" height="56" style="left:832px;top:384px"></canvas>
+  <div class="cap" style="left:832px;top:440px">FREE <b id="f-free"></b> WALLETS  ·  PRO <b id="f-pro"></b>  ·  REAL FILLS ONLY  ·  <i>15× FASTER</i> THAN A SCREENER</div>
   <div class="rule" style="top:478px"></div>
 
   <!-- C. /invite -->
@@ -94,16 +94,16 @@
   <div class="vrule" style="left:540px;top:492px;height:358px"></div>
 
   <!-- D. /webhook -->
-  <div class="lab" style="left:572px;top:492px">/WEBHOOK &lt;url&gt;  <span>·  EVERY ALERT POSTED TO YOUR OWN BOT  ·  PRO KEY, BURNED</span></div>
+  <div class="lab" style="left:572px;top:492px">/WEBHOOK &lt;url&gt;  <span>·  EVERY ALERT POSTED TO YOUR OWN BOT  ·  PRO KEY</span></div>
   <div class="num" style="left:572px;top:522px;font-size:72px"><span id="a-heavy"></span><small>BOTS HEAVY ENOUGH TO PAY</small></div>
   <div class="cap" style="left:572px;top:600px"><b id="a-req"></b> API REQUESTS A DAY  ·  <b id="a-readers"></b> READERS<br>THE <span id="a-heavy2"></span> ARE <i id="a-share"></i> OF IT  ·  IF THEY PAY: <i>≈ <span id="a-burn"></span></i> BURNED A MONTH</div>
   <canvas class="v" id="hours" width="400" height="26" style="left:572px;top:660px"></canvas>
-  <div id="uas" class="cap" style="left:572px;top:700px;width:400px;height:60px;overflow:hidden;line-height:1.7"></div>
-  <canvas class="v" id="wheel" width="180" height="140" style="left:876px;top:698px"></canvas>
+  <div id="uas" class="cap" style="left:572px;top:700px;width:290px;height:60px;overflow:hidden;line-height:1.7"></div>
+  <canvas class="v" id="wheel" width="180" height="140" style="left:888px;top:698px"></canvas>
   <div class="vrule" style="left:1080px;top:492px;height:358px"></div>
 
   <!-- E. the seeder -->
-  <div class="lab" style="left:1112px;top:492px">THE ALERT GOT SMARTER  <span>·  WHO MADE IT · WHO MOVES TOGETHER · WHO IS FAKING IT</span></div>
+  <div class="lab" style="left:1112px;top:492px">THE ALERT GOT SMARTER  <span>·  WHO MADE IT · WHO MOVES TOGETHER</span></div>
   <div class="hook" id="s-hook" style="left:1112px;top:520px;white-space:normal;width:440px;line-height:1.25"></div>
   <canvas class="v" id="waves" width="448" height="60" style="left:1112px;top:606px"></canvas>
   <canvas class="v" id="smart" width="280" height="60" style="left:1112px;top:690px"></canvas>
@@ -137,7 +137,7 @@
   $('p-worst2').textContent = money(H.paper.worst || 0); $('p-best2').textContent = money(H.paper.best || 0);
   $('p-1000').textContent = money(H.paper.at_1000); $('p-site').textContent = H.site || 'fomoradar.app';
   $('f-top').textContent = H.stars[0] ? H.stars[0].pnl : '—'; $('f-free').textContent = H.follow.free; $('f-pro').textContent = H.follow.pro;
-  $('cards').innerHTML = H.stars.slice(0, 4).map((s, i) => `<div class="card${i === 0 ? ' hot' : ''}" style="left:${832 + (i % 2) * 244}px;top:${206 + Math.floor(i / 2) * 84}px"><div class="n">${esc(s.handle)}</div><div class="s">${s.score}</div><div class="p">30 DAYS  <b>${esc(s.pnl)}</b></div><div class="c">/follow ${esc(s.handle)}</div></div>`).join('');
+  $('cards').innerHTML = H.stars.slice(0, 4).map((s, i) => `<div class="card${i === 0 ? ' hot' : ''}" style="left:${832 + (i % 2) * 244}px;top:${200 + Math.floor(i / 2) * 88}px"><div class="n">${esc(s.handle)}</div><div class="s">${s.score}</div><div class="p">30 DAYS  <b>${esc(s.pnl)}</b></div><div class="c">/follow ${esc(s.handle)}</div></div>`).join('');
   $('i-days').textContent = H.invite.days; $('i-month').textContent = Math.round(30 / Math.max(1, H.invite.days));
   $('i-max').textContent = H.invite.max; $('i-total').textContent = H.invite.max * H.invite.days;
   $('a-heavy').textContent = H.api.heavy; $('a-heavy2').textContent = H.api.heavy; $('a-req').textContent = big(H.api.requests); $('a-readers').textContent = H.api.readers.toLocaleString('en-US');

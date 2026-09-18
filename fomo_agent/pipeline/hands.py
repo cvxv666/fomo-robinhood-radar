@@ -25,6 +25,9 @@ from . import record
 log = logging.getLogger(__name__)
 
 TEMPLATES = pathlib.Path(__file__).resolve().parents[2] / "assets" / "boards"
+# the wave detector went live at 08:32 UTC on 18 Sep 2026; alerts on seeded tokens before that
+# are on the record, but they are not what the board is counting
+WAVES_LIVE_TS = 1789720320
 
 
 def _usd(v: float | None, dash: str = "—") -> str:
@@ -104,7 +107,7 @@ def data(conn: sqlite3.Connection, now: int | None = None) -> dict:
     seed_usd = sum(w["usd"] or 0 for w in waves)
     seeded_pushed = conn.execute(
         "SELECT COUNT(*) FROM pushes p WHERE p.ts >= ? AND EXISTS (SELECT 1 FROM trades s WHERE s.mint = p.mint AND s.kind = 'seed' AND s.ts < p.ts)",
-        (now - 86400,)).fetchone()[0]
+        (max(week, WAVES_LIVE_TS),)).fetchone()[0]
 
     key = conn.execute(
         "SELECT creator, GROUP_CONCAT(symbol, '|') syms, COUNT(*) n FROM tokens WHERE creator IS NOT NULL AND creator != '' AND created_via = 'deploy' "

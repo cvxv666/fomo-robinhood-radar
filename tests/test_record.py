@@ -39,6 +39,12 @@ def test_verdicts_and_the_paper_run(tmp_path):
     rep = record.report(conn, days=7, now=now)
     by = {r["sym"]: r for r in rep["pushes"]}
     assert [by[f"T{i}"]["verdict"] for i in range(6)] == ["2x", "above", "below", "dead", "seeded", "open"]
+    with db.tx(conn):
+        conn.execute("UPDATE tokens SET sellable=0 WHERE mint=?", (M[2],))
+    hp = {r["sym"]: r for r in record.rows(conn, days=7, now=now)}["T2"]
+    assert hp["verdict"] == "honeypot" and hp["paper"] == -100.0, "a honeypot is the stake gone"
+    with db.tx(conn):
+        conn.execute("UPDATE tokens SET sellable=NULL WHERE mint=?", (M[2],))
     assert by["T0"]["now"] == 1.5 and by["T1"]["now"] == 0.5, "now is the stored quote against the entry"
     t = rep["totals"]
     assert t["pushes"] == 6 and t["clean"] == 3 and t["above_entry"] == 2 and t["reached_2x"] == 1
