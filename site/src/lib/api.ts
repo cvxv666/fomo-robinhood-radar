@@ -76,7 +76,7 @@ export type Trader = {
   realized_usd: number | null; round_trips: number; wins: number;
   win_rate: number | null; pre_tape: number; tape_from: number | null;
   fills: { ts: number; side: string; usd: number | null; sym: string; mint: string; source: string;
-          kind: 'trade' | 'dust' | 'direct' | 'flow' }[];
+          kind: 'trade' | 'dust' | 'direct' | 'seed' | 'flow' }[];
   bought_usd: number; sold_usd: number; hours: number;
   company: { handle: string; score: number; shared: number }[];
 };
@@ -98,10 +98,10 @@ export type Token = {
   holders: Holder[]; trusted_holders: number; avg_score: number | null; conviction: number;
   cohort_pnl: number | null; cohort_cost: number | null; cohort_value: number | null;
   flow: { handle: string | null; score: number | null; side: string; usd: number | null; ts: number;
-          kind: 'trade' | 'dust' | 'direct' | 'flow' }[];
-  /** Trusted wallets that received dust or outside-key buys of this token inside the window.
+          kind: 'trade' | 'dust' | 'direct' | 'seed' | 'flow' }[];
+  /** Trusted wallets that received dust, outside-key or wave buys of this token inside the window.
    *  Past the threshold the token is out of every feed. */
-  seeded: { wallets: number; dust: number; direct: number; first_ts: number | null; seeded: boolean };
+  seeded: { wallets: number; dust: number; direct: number; seed: number; first_ts: number | null; seeded: boolean };
   /** Can it be sold: 1 yes, 0 no, null not known. A 0 keeps it out of every feed. */
   sellable: 0 | 1 | null; sell_note: string | null;
   bought_usd: number; sold_usd: number; first_trusted_buy: number | null;

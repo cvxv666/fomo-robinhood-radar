@@ -58,9 +58,11 @@ const desc = t.is_quote
   {t.seeded?.seeded && (
     <p class="note flagged">
       <b>This token was pushed into {t.seeded.wallets} trusted wallets rather than bought by them</b>
-      {' — '}{t.seeded.dust > 0 && `${t.seeded.dust} dust-sized fill${t.seeded.dust === 1 ? '' : 's'} through fomo`}
-      {t.seeded.dust > 0 && t.seeded.direct > 0 && ' and '}
-      {t.seeded.direct > 0 && `${t.seeded.direct} swap${t.seeded.direct === 1 ? '' : 's'} sent to the router by an outside key with the wallet named as recipient`}
+      {' — '}{[
+        t.seeded.seed > 0 && `a wave of ${t.seeded.seed} one-apiece buys into a queue of wallets, seconds apart`,
+        t.seeded.dust > 0 && `${t.seeded.dust} dust-sized fill${t.seeded.dust === 1 ? '' : 's'} through fomo`,
+        t.seeded.direct > 0 && `${t.seeded.direct} swap${t.seeded.direct === 1 ? '' : 's'} sent to the router by an outside key with the wallet named as recipient`,
+      ].filter(Boolean).join(' and ')}
       {t.seeded.first_ts && `, starting ${ago(t.seeded.first_ts)} ago`}. Anyone can do that to any
       address for a few dollars, and to a tracker it looks exactly like the cohort piling in. It is
       excluded from the signal, burst and launch feeds while the pattern holds, and the fills below
@@ -221,8 +223,8 @@ const desc = t.is_quote
                 {t.flow.slice(0, 25).map((f) => (
                   <tr>
                     <td class="m">{ago(f.ts)}</td>
-                    <td class={f.kind === 'dust' || f.kind === 'direct' ? 'm' : f.side === 'buy' ? 'g' : 'c'}>
-                      {f.side}{f.kind === 'dust' && <span class="kind" title="below this wallet's own size; not counted">dust</span>}{f.kind === 'direct' && <span class="kind" title="sent to the router by an outside key; not this wallet's trade">gift</span>}
+                    <td class={f.kind === 'dust' || f.kind === 'direct' || f.kind === 'seed' ? 'm' : f.side === 'buy' ? 'g' : 'c'}>
+                      {f.side}{f.kind === 'dust' && <span class="kind" title="below this wallet's own size; not counted">dust</span>}{f.kind === 'direct' && <span class="kind" title="sent to the router by an outside key; not this wallet's trade">gift</span>}{f.kind === 'seed' && <span class="kind" title="one of a queue of one-apiece buys pushed into trusted wallets seconds apart; not this wallet's trade">seeded</span>}
                     </td>
                     <td class="sym">{f.handle ?? '—'}</td>
                     <td class={`r ${(f.score ?? 0) >= 60 ? 'g' : 'm'}`}>{f.score ?? '—'}</td>
