@@ -91,6 +91,7 @@
   const still = new URLSearchParams(location.search).has('still') || matchMedia('(prefers-reduced-motion: reduce)').matches;
   const GREEN = '#00ff85', CRIMSON = '#ff003d', WHITE = '#fff', GRAPHITE = '#949494', LINE = '#2a2a2a', CARBON = '#606060';
   const $ = id => document.getElementById(id);
+  if (still) document.querySelectorAll('.led').forEach(e => { e.style.animation = 'none'; });
   const mono = px => `bold ${px}px "JetBrains Mono", monospace`;
 
   // ---- /follow: the tape. Blocks tick along a line; fills of the followed wallet land on it and
@@ -104,7 +105,8 @@
     tx.strokeStyle = LINE; tx.lineWidth = 1; tx.beginPath(); tx.moveTo(0, y); tx.lineTo(W, y); tx.stroke();
     for (let x = -off; x < W; x += 20) { tx.fillStyle = LINE; tx.fillRect(x, y - 4, 1, 8); }   // a block every 20px
     FILLS.forEach((f, i) => {
-      const x = ((i * 190 - (still ? 0 : t * speed)) % (W + 200) + W + 200) % (W + 200) - 100;
+      const x = ((i * 190 + 30 - (still ? 0 : t * speed)) % (W + 200) + W + 200) % (W + 200) - 100;
+      if (x < 6 || x > W - 10) return;
       const c = f[1] === 'buy' ? GREEN : CRIMSON;
       tx.fillStyle = c; tx.fillRect(x - 2, y - 22, 4, 22);
       tx.font = mono(11); tx.textAlign = 'left'; tx.fillStyle = WHITE; tx.fillText(f[0], x + 8, y - 26);
@@ -121,7 +123,7 @@
   const TOTAL = [0,24,-50,5,20,64,98,87,81,4,-49,-65,-92,-186,3,269,220,154,72,51,10,-43,6,-2,181,171,248,175,798,737,727,672,651,568,578,543,718,893,807,815,823,812,806,784,719,682,585,489,429,465,515,471,530,441,363,337,377,314,216,128,34,1247,3741,3661,3624,3587,3489,3390,3313,3347,3270,3192,3188,3097,3004,3069,3094,3060,3105,3045,3047,2964,2966,2968,2901,2900,2895,2890,2891,2806,2774,2807];
   const cv = $('curve'), cx = cv.getContext('2d');
   const CW = 1000, CH = 120, lo = Math.min(0, ...TOTAL), hi = Math.max(...TOTAL);
-  const px = i => 4 + (i / (TOTAL.length - 1)) * (CW - 8), py = v => 8 + (1 - (v - lo) / (hi - lo)) * (CH - 26);
+  const px = i => 4 + (i / (TOTAL.length - 1)) * (CW - 40), py = v => 10 + (1 - (v - lo) / (hi - lo)) * (CH - 30);
   function drawCurve(t) {
     cx.clearRect(0, 0, CW, CH);
     cx.strokeStyle = LINE; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(0, py(0)); cx.lineTo(CW, py(0)); cx.stroke();
@@ -134,9 +136,9 @@
     const g = cx.createRadialGradient(x, y, 0, x, y, 30); g.addColorStop(0, 'rgba(0,255,133,.6)'); g.addColorStop(1, 'rgba(0,255,133,0)');
     cx.fillStyle = g; cx.fillRect(x - 30, y - 30, 60, 60); cx.fillStyle = WHITE; cx.fillRect(x - 3, y - 3, 7, 7);
     cx.fillStyle = GRAPHITE; cx.font = mono(10); cx.textAlign = 'left'; cx.fillText('11 SEP', 4, CH - 2); cx.textAlign = 'right'; cx.fillText('18 SEP', CW - 2, CH - 2);
-    cx.fillStyle = CARBON; cx.fillText('0', CW - 2, py(0) - 4);
-    // the one that made the run: musebook, x25 at the hour
-    const j = TOTAL.indexOf(3741); cx.fillStyle = WHITE; cx.font = mono(10); cx.textAlign = 'left'; cx.fillText('musebook +$2,494', px(j) + 8, py(3741) + 12);
+    cx.fillStyle = CARBON; cx.textAlign = 'left'; cx.fillText('0', 4, py(0) - 4);
+    // the one that made the run: musebook, x25 at the hour, named above its step
+    const j = TOTAL.indexOf(3741); cx.fillStyle = WHITE; cx.font = mono(10); cx.textAlign = 'left'; cx.fillText('musebook  +$2,494', px(j) + 10, py(3741) + 20);
   }
 
   // ---- /invite: the chain, lit link by link
@@ -160,6 +162,10 @@
     wx.clearRect(0, 0, 300, 230);
     const cxp = 150, cyp = 118, r = 82;
     wx.strokeStyle = LINE; wx.lineWidth = 2; wx.beginPath(); wx.arc(cxp, cyp, r, 0, Math.PI * 2); wx.stroke();
+    const k = still ? 0.3 : (t / 4000) % 1, a = -Math.PI / 2 + k * Math.PI * 2, x = cxp + Math.cos(a) * r, y = cyp + Math.sin(a) * r;
+    wx.strokeStyle = GREEN; wx.lineWidth = 4; wx.beginPath(); wx.arc(cxp, cyp, r, a - 1.1, a); wx.stroke();
+    const g = wx.createRadialGradient(x, y, 0, x, y, 26); g.addColorStop(0, 'rgba(0,255,133,.7)'); g.addColorStop(1, 'rgba(0,255,133,0)');
+    wx.fillStyle = g; wx.fillRect(x - 26, y - 26, 52, 52); wx.fillStyle = WHITE; wx.fillRect(x - 3, y - 3, 7, 7);
     STEPS.forEach((s, i) => {
       const a = -Math.PI / 2 + (i / STEPS.length) * Math.PI * 2, x = cxp + Math.cos(a) * r, y = cyp + Math.sin(a) * r;
       wx.fillStyle = i === 2 ? CRIMSON : WHITE; wx.fillRect(x - 4, y - 4, 8, 8);
@@ -167,10 +173,6 @@
       wx.textAlign = x < cxp - 10 ? 'right' : x > cxp + 10 ? 'left' : 'center';
       wx.fillText(s, cxp + Math.cos(a) * (r + 16), cyp + Math.sin(a) * (r + 16) + 4);
     });
-    const k = still ? 0.42 : (t / 4000) % 1, a = -Math.PI / 2 + k * Math.PI * 2, x = cxp + Math.cos(a) * r, y = cyp + Math.sin(a) * r;
-    wx.strokeStyle = GREEN; wx.lineWidth = 4; wx.beginPath(); wx.arc(cxp, cyp, r, a - 1.1, a); wx.stroke();
-    const g = wx.createRadialGradient(x, y, 0, x, y, 26); g.addColorStop(0, 'rgba(0,255,133,.7)'); g.addColorStop(1, 'rgba(0,255,133,0)');
-    wx.fillStyle = g; wx.fillRect(x - 26, y - 26, 52, 52); wx.fillStyle = WHITE; wx.fillRect(x - 3, y - 3, 7, 7);
     wx.fillStyle = GREEN; wx.font = 'bold 22px "Space Grotesk", sans-serif'; wx.textAlign = 'center'; wx.fillText('$FOMOBRAIN', cxp, cyp + 2);
     wx.fillStyle = GRAPHITE; wx.font = mono(9); wx.fillText('THE FLYWHEEL', cxp, cyp + 20);
   }
