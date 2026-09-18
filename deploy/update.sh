@@ -116,7 +116,23 @@ echo "==> checking"
 # redirect works. Ask the address the site itself claims to be.
 SITE=$(ssh -i "$KEY" "$HOST" "sed -n 's/^PUBLIC_SITE_URL=//p' $APP/.env | tail -1")
 SITE=${SITE:-http://${HOST#*@}}
-for p in / /leaderboard /api/health; do
-  printf '   %s  %s%s\n' "$(curl -s -o /dev/null -w '%{http_code}' "$SITE$p")" "$SITE" "$p"
+# The status alone once said 200 for forty minutes of "Internal server error": Astro answers a
+# render crash mid-stream with the status already sent. So the body is read too - a page is a
+# page only when it is longer than an error line and does not say so.
+bad=0
+for p in / /leaderboard /record /token/0x0bd7d308f8e1639fab988df18a8011f41eacad73 /api/health; do
+  body=$(curl -s -A "radar-deploy/1.0" "$SITE$p" 2>/dev/null)
+  code=$(curl -s -o /dev/null -w '%{http_code}' -A "radar-deploy/1.0" "$SITE$p")
+  case "$p" in /api/*) min=20;; *) min=5000;; esac
+  if [ "$code" != "200" ] || [ "${#body}" -lt "$min" ] || printf '%s' "$body" | grep -q "Internal server error"; then
+    printf '   %s  %s%s  BROKEN (%s bytes)\n' "$code" "$SITE" "$p" "${#body}"; bad=1
+  else
+    printf '   %s  %s%s  (%s bytes)\n' "$code" "$SITE" "$p" "${#body}"
+  fi
 done
+if [ "$bad" = 1 ]; then
+  echo "==> a page is broken: journalctl -u radar-site -n 40"
+  ssh -i "$KEY" "$HOST" "journalctl -u radar-site -n 12 --no-pager | grep -i 'error' | tail -4"
+  exit 1
+fi
 echo "==> done"
