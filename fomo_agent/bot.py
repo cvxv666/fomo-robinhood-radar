@@ -526,6 +526,7 @@ HELP = """<b>FOMO ROBINHOOD RADAR</b>
 /exits — where they are getting out
 /top — the leaderboard, ranked by judgement
 /record — every alert sent and what came of it · /paper — the paper run
+/follow &lt;handle&gt; — that wallet's every fill, within a tick of the chain
 
 <b>Alerts</b> are on for this chat: bursts the moment they form, launches while they are still
 early, and one digest a day. /stop turns them off, /start turns them back on.
@@ -547,6 +548,7 @@ sent and what came of it, /paper — the paper run.
 <b>PRO — the alerts and the live feeds:</b>
 · a <b>burst</b> the moment it forms, a <b>launch</b> while it is still early
 · /hot /signals /fresh /exits whenever you ask
+· /follow up to {follows} wallets, every fill within a tick (free: {follows_free})
 /pro — {days} days for ${usd}, paid in ${symbol} and burned. {state}
 
 Every alert carries a <b>buy on fomo</b> link. Not on fomo.family yet? {fomo}
@@ -567,7 +569,7 @@ def help_text(conn, chat_id, now: int | None = None) -> str:
         state = f"This chat: free until {pro._date(settings.pro_grace_until)}, then /pro."
     else:
         state = "This chat: free tier."
-    return HELP_PRO.format(fomo=links_.fomo_home(), days=settings.pro_days, usd=f"{settings.pro_price_usd:g}",
+    return HELP_PRO.format(fomo=links_.fomo_home(), follows=settings.follow_pro_max, follows_free=settings.follow_free_max, days=settings.pro_days, usd=f"{settings.pro_price_usd:g}",
                            symbol=settings.pro_token_symbol, state=state)
 
 
@@ -617,6 +619,7 @@ COMMANDS = [
     ("fresh", "launches the cohort is entering early"),
     ("exits", "where the cohort is getting out"),
     ("top", "the leaderboard, by judgement"),
+    ("follow", "a wallet's every fill, within a tick: /follow <handle>"),
     ("record", "every alert sent and what came of it"),
     ("paper", "$100 into every alert, out at the hour read"),
     ("pro", "the alerts and the live feeds, paid in the token"),
@@ -772,6 +775,27 @@ def fmt_followup(row, m: dict) -> str:
         ("now", x(m.get("now"))),
         ("traded", analyze.usd(m.get("vol")) if m.get("vol") else "\u2014"),
     ]) + ("\n(from the tape only)" if m.get("witness") == "tape" else "")
+
+
+def fmt_fill(f: dict, now: int | None = None) -> str:
+    """One fill of a followed wallet: who, did what, how much, of what - and the buy link."""
+    name = f.get("handle") or f["address"][:10]
+    verb = "bought" if f["side"] == "buy" else "sold"
+    size = analyze.usd(f.get("usd_value")) if f.get("usd_value") else "some"
+    mark = "\u25b2" if f["side"] == "buy" else "\u25bd"
+    head = f"{mark} <b>{esc(name)}</b>" + (f" {f['score']}" if f.get("score") is not None else "") + f" {verb} <b>{esc(size)}</b> of {token_link(f['mint'], f['sym'])} \u00b7 {ago(f['ts'], now)} ago"
+    return "\n".join([head, "", *token_lines(f["mint"])])
+
+
+def fmt_following(rows_: list, cap: int) -> str:
+    if not rows_:
+        return f"This chat follows nobody yet. /follow &lt;handle or address&gt; \u2014 up to {cap}."
+    out = [f"<b>FOLLOWING</b> \u00b7 {len(rows_)} of {cap}", ""]
+    for r in rows_:
+        name = r["fomo_handle"] or r["address"][:10]
+        out.append(f"\u00b7 {esc(name)}" + (f" {r['score']}" if r["score"] is not None else "") + (f" \u00b7 {r['status']}" if r["status"] else ""))
+    out.append("\n/unfollow &lt;name&gt; or /unfollow all")
+    return "\n".join(out)
 
 
 def fmt_record(rep: dict) -> str:
@@ -986,6 +1010,13 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
         from .pipeline.health import report
 
         return fmt_health(report(conn))
+    if cmd in ("/follow", "/unfollow", "/following"):
+        from .pipeline import follows
+
+        if cmd == "/following" or not args:
+            return fmt_following(follows.following(conn, chat_id), follows.limit_for(conn, chat_id))
+        fn = follows.follow if cmd == "/follow" else follows.unfollow
+        return esc(fn(conn, chat_id, args[0])[1])
     if cmd in ("/record", "/paper"):
         from .pipeline import record as record_
 

@@ -282,6 +282,14 @@ MIGRATIONS: dict[int, str] = {
     );
     CREATE INDEX IF NOT EXISTS idx_x_posts_due ON x_posts(posted_at, due_ts);
     """,
+    25: """
+    -- Wallets a chat asked to follow: their fills go to it within a tick. See pipeline/follows.py.
+    CREATE TABLE IF NOT EXISTS follows(
+      chat_id TEXT NOT NULL, address TEXT NOT NULL, since INTEGER NOT NULL,
+      PRIMARY KEY(chat_id, address)
+    );
+    CREATE INDEX IF NOT EXISTS idx_follows_address ON follows(address);
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

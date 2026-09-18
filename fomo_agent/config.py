@@ -211,6 +211,11 @@ class Settings:
     # A launch whose name was pushed this recently is a clone and is not pushed; a burst on one
     # needs half again the conviction. Two more PAWSINUs went out the hour after the real one.
     telegram_clone_hours: int = field(default_factory=lambda: _int("TELEGRAM_CLONE_HOURS", 24))
+    # /follow: how many wallets a free chat and a PRO chat may follow, and the most fill alerts
+    # any chat gets in an hour (pipeline/follows.py)
+    follow_free_max: int = field(default_factory=lambda: _int("FOLLOW_FREE_MAX", 3))
+    follow_pro_max: int = field(default_factory=lambda: _int("FOLLOW_PRO_MAX", 50))
+    follow_max_per_hour: int = field(default_factory=lambda: _int("FOLLOW_MAX_PER_HOUR", 30))
     # The watcher: how often it asks the chain for the blocks since last time, on how much of
     # the RPC allowance, and how far it reads on its first tick or after a stall. The scheduled
     # pass owns anything older than that.

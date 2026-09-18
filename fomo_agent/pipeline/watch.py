@@ -74,10 +74,13 @@ def tick(conn: sqlite3.Connection, w: Watch, now: int | None = None) -> dict:
         return stats
 
     fills = w.rpc.scan(w.wallets, first, head)
+    new_sigs: list[str] = []
     with db.tx(conn):
         for trades in fills.values():
             for t in trades:
-                stats["fills"] += db.insert_trade(conn, **t.model_dump())
+                if db.insert_trade(conn, **t.model_dump()):
+                    stats["fills"] += 1
+                    new_sigs.append(t.sig)
         try:
             db.save_token_decimals(conn, w.rpc.known_decimals())
         except Exception as e:  # noqa: BLE001
@@ -89,6 +92,8 @@ def tick(conn: sqlite3.Connection, w: Watch, now: int | None = None) -> dict:
         if junk:
             stats["quarantined"] = [j["address"][:10] for j in junk]
             w.roster_at = 0.0   # the roster is read again next tick, without it
+        # judged and swept, the fills of followed wallets go to the chats that asked
+        stats["followed"] = tell_followers(conn, new_sigs, now)
     w.last_block = head
     stats["blocks"] = head - first + 1
     w.ticks += 1
@@ -163,6 +168,30 @@ def confirm(conn: sqlite3.Connection, paid: list[dict]) -> int:
             log.warning("pro confirmation to %s failed: %s", p["chat_id"], e)
             if gone(e):
                 unsubscribe(conn, p["chat_id"])
+    return sent
+
+
+def tell_followers(conn: sqlite3.Connection, sigs: list[str], now: int | None = None) -> int:
+    """Each new fill of a followed wallet, to each chat following it. Lazy on the bot for the
+    same reason `push` is."""
+    from ..bot import Telegram, fmt_fill, gone, unsubscribe
+    from . import follows
+
+    if not sigs or not settings.telegram_bot_token:
+        return 0
+    due = follows.alerts(conn, sigs, now)
+    if not due:
+        return 0
+    tg = Telegram()
+    sent = 0
+    for chat_id, f in due:
+        try:
+            tg.send(chat_id, fmt_fill(f, now))
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            log.warning("follow alert to %s failed: %s", chat_id, e)
+            if gone(e):
+                unsubscribe(conn, chat_id)
     return sent
 
 
