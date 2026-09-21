@@ -18,8 +18,11 @@ from collections import deque
 from pathlib import Path
 
 log = logging.getLogger(__name__)
-# the process, by the CLI verb it runs (serve, watch, bot, enrich-tokens...), for the shared ledger
-WHO = next((a for a in sys.argv[1:] if not a.startswith("-")), Path(sys.argv[0]).stem if sys.argv and sys.argv[0] else "?")[:24]
+# the process, for the shared ledger: the CLI verb it runs (serve, watch, bot, enrich-tokens...),
+# or a script's own name (crowd_share, daily_report); a bare "30" was the --days argument
+_argv = sys.argv if sys.argv else [""]
+WHO = (next((a for a in _argv[1:] if not a.startswith("-") and not a.isdigit()), "") if _argv[0].endswith("cli.py")
+       else Path(_argv[0]).stem or "?")[:24] or "?"
 
 
 class RateLimiter:

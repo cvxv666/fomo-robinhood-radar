@@ -228,13 +228,16 @@ def test_the_sweep_asks_again_about_a_silence_verdict_and_not_about_a_revert(con
 def test_the_cohort_share_is_measured_and_gates_only_when_a_floor_is_set(conn, monkeypatch):
     """"+" burst on $3.08M of volume with seven wallets and fell 76%: the share is on every push,
     the gate is off until the study names a line."""
+    now = db.now()
+
     class Gt:
-        def pool(self, chain, pool):
-            return {"transactions": {"h1": {"buys": 40, "sells": 30, "buyers": 25, "sellers": 20}}, "created_at": db.now() - 7200,
-                    "vol_h1": 250_000.0}
-    safety._crowd_cache.clear()
-    assert safety.cohort_share(conn, FINE, 10_000.0, gt=Gt()) == 0.04
-    assert safety.cohort_share(conn, FINE, None, gt=Gt()) is None
+        def ohlcv(self, chain, pool, timeframe, aggregate, limit, before_ts=None):
+            assert timeframe == "minute" and limit >= 30
+            # thirty-five minutes of candles, $10k a minute; only the last thirty count
+            return [[now - 60 * i, 1, 1, 1, 1, 10_000.0] for i in range(35, 0, -1)]
+    safety._share_cache.clear()
+    assert safety.cohort_share(conn, FINE, 10_000.0, now=now, gt=Gt()) == 0.033
+    assert safety.cohort_share(conn, FINE, None, now=now, gt=Gt()) is None
     monkeypatch.setattr(settings, "hot_min_cohort_share", 0.0)
     assert safety.crowd_objection(0.04) is None, "off by default"
     monkeypatch.setattr(settings, "hot_min_cohort_share", 0.1)

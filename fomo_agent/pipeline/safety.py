@@ -290,19 +290,40 @@ def crowd(conn: sqlite3.Connection, mint: str, gt=None, now: int | None = None, 
     return out
 
 
-def cohort_share(conn: sqlite3.Connection, mint: str, cohort_usd: float | None, now: int | None = None, gt=None) -> float | None:
-    """The cohort's dollars over the pool's last hour, 0..1, or None when the pool cannot say.
+_share_cache: dict[str, tuple[int, float | None]] = {}
+SHARE_WINDOW_S = 1800   # the same half hour scripts/crowd_share.py measured the ledger with
 
-    A share near one is the cohort making the market; a share near zero is the cohort arriving
-    in a market the crowd already made. The number goes on the ledger and into the message either
-    way; whether it gates a push is `hot_min_cohort_share`."""
+
+def cohort_share(conn: sqlite3.Connection, mint: str, cohort_usd: float | None, now: int | None = None, gt=None,
+                 max_age_s: int = 300) -> float | None:
+    """The cohort's dollars over the pool's last half hour, 0..1, or None when the pool cannot say.
+
+    A share near one is the cohort making the market; a share near zero is the cohort arriving in
+    a market the crowd already made. Measured the way the study measured the ledger - the pool's
+    minute candles over the same window the cohort's buys were counted in - so that the floor the
+    study names means the same thing here. The number goes on the ledger and into the message
+    either way; whether it gates a push is `hot_min_cohort_share`."""
     if not cohort_usd:
         return None
-    c = crowd(conn, mint, gt=gt, now=now)
-    vol = (c or {}).get("vol_h1")
-    if not vol or vol <= 0:
-        return None
-    return round(min(1.0, cohort_usd / vol), 3)
+    now = now or db.now()
+    hit = _share_cache.get(mint)
+    if hit and now - hit[0] < max_age_s:
+        return hit[1]
+    row = conn.execute("SELECT pool_address, chain FROM tokens WHERE mint=?", (mint,)).fetchone()
+    out = None
+    if row and row["pool_address"]:
+        try:
+            if gt is None:
+                from ..sources.geckoterminal import GeckoTerminal
+                gt = GeckoTerminal(patient=False)
+            c = gt.ohlcv(row["chain"] or "robinhood", row["pool_address"], "minute", 1, SHARE_WINDOW_S // 60 + 5) or []
+            vol = sum(x[5] for x in c if len(x) > 5 and x[0] >= now - SHARE_WINDOW_S)
+            if vol > 0:
+                out = round(min(1.0, cohort_usd / vol), 3)
+        except Exception as e:  # noqa: BLE001 - the screener being busy is not a verdict
+            log.debug("share lookup for %s failed: %s", mint[:10], e)
+    _share_cache[mint] = (now, out)
+    return out
 
 
 def crowd_objection(share: float | None) -> str | None:
