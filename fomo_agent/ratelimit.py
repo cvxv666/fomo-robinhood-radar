@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import sys
 import threading
 import time
 from collections import deque
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+# the process, by the CLI verb it runs (serve, watch, bot, enrich-tokens...), for the shared ledger
+WHO = next((a for a in sys.argv[1:] if not a.startswith("-")), Path(sys.argv[0]).stem if sys.argv and sys.argv[0] else "?")[:24]
 
 
 class RateLimiter:
@@ -92,8 +95,10 @@ class SharedRateLimiter(RateLimiter):
             c = sqlite3.connect(self.path, timeout=10, isolation_level=None, check_same_thread=False)
             c.execute("PRAGMA journal_mode=WAL")
             c.execute("PRAGMA busy_timeout=10000")
-            c.execute("CREATE TABLE IF NOT EXISTS calls(name TEXT NOT NULL, ts REAL NOT NULL)")
+            c.execute("CREATE TABLE IF NOT EXISTS calls(name TEXT NOT NULL, ts REAL NOT NULL, who TEXT)")
             c.execute("CREATE INDEX IF NOT EXISTS calls_name_ts ON calls(name, ts)")
+            if "who" not in {r[1] for r in c.execute("PRAGMA table_info(calls)")}:
+                c.execute("ALTER TABLE calls ADD COLUMN who TEXT")
             self._conn = c
         return self._conn
 
@@ -110,7 +115,9 @@ class SharedRateLimiter(RateLimiter):
                 return False, max(0.0, 60 - (now - (oldest if oldest is not None else now)) + 0.05)
             if gap and newest is not None and now - newest < gap:
                 return False, gap - (now - newest)
-            c.execute("INSERT INTO calls(name, ts) VALUES(?, ?)", (self.name, now))
+            # who took the slot, so that `SELECT who, COUNT(*) FROM calls GROUP BY who` says
+            # where the box's allowance goes when the 429s come anyway
+            c.execute("INSERT INTO calls(name, ts, who) VALUES(?, ?, ?)", (self.name, now, WHO))
             self.total += 1
             return True, 0.0
         finally:
