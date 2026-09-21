@@ -57,7 +57,8 @@ class GeckoTerminal:
         self.chains = tuple(chains) if chains else settings.dex_chains
         self.feeds = tuple(feeds) if feeds else settings.gecko_feeds
         # one window for the whole box: GeckoTerminal counts by IP, and there are six of us
-        self.limiter = shared(settings.gecko_max_req_per_min, "geckoterminal", reserve=settings.gecko_reserve_per_min)
+        self.limiter = shared(settings.gecko_max_req_per_min, "geckoterminal", reserve=settings.gecko_reserve_per_min,
+                              min_gap_s=settings.gecko_min_interval_s)
         self._last = 0.0
         self.included: list[dict] = []   # the `included` block of the last answer, for callers that asked for it
         # A batch job waits its turn and backs off on 429; that is the right shape for a pass that

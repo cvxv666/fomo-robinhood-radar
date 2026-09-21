@@ -73,13 +73,17 @@ class SharedRateLimiter(RateLimiter):
     what it did before, and says so once.
     """
 
-    def __init__(self, max_per_min: int, name: str, path: Path | str, reserve: int = 0):
+    def __init__(self, max_per_min: int, name: str, path: Path | str, reserve: int = 0, min_gap_s: float = 0.0):
         super().__init__(max_per_min, name)
         self.path = Path(path)
         # calls a minute kept back from the batch jobs for the request threads: a collector
         # sweeping fifteen thousand prices would otherwise take every slot, and the token page
         # asking for one chart would find the box's allowance spent every time
         self.reserve = reserve
+        # and the batch jobs keep this far apart from each other's calls, box-wide: twenty-two a
+        # minute in bursts of three drew 429s from an endpoint that allows thirty, and the
+        # per-process spacing did nothing about two processes firing in the same second
+        self.min_gap_s = min_gap_s
         self._conn: sqlite3.Connection | None = None
         self._broken = False
 
@@ -93,20 +97,22 @@ class SharedRateLimiter(RateLimiter):
             self._conn = c
         return self._conn
 
-    def _claim(self, limit: int | None = None) -> tuple[bool, float]:
-        """Inside one write transaction: (True, now) and the call is counted, or (False, the
-        oldest call's time) for the caller to sleep on."""
+    def _claim(self, limit: int | None = None, gap: float = 0.0) -> tuple[bool, float]:
+        """Inside one write transaction: (True, 0) and the call is counted, or (False, how long
+        to sleep before asking again)."""
         c = self._db()
         c.execute("BEGIN IMMEDIATE")
         try:
             now = time.time()
             c.execute("DELETE FROM calls WHERE name = ? AND ts < ?", (self.name, now - 60))
-            n, oldest = c.execute("SELECT COUNT(*), MIN(ts) FROM calls WHERE name = ?", (self.name,)).fetchone()
-            if n < (self.max if limit is None else limit):
-                c.execute("INSERT INTO calls(name, ts) VALUES(?, ?)", (self.name, now))
-                self.total += 1
-                return True, now
-            return False, oldest if oldest is not None else now
+            n, oldest, newest = c.execute("SELECT COUNT(*), MIN(ts), MAX(ts) FROM calls WHERE name = ?", (self.name,)).fetchone()
+            if n >= (self.max if limit is None else limit):
+                return False, max(0.0, 60 - (now - (oldest if oldest is not None else now)) + 0.05)
+            if gap and newest is not None and now - newest < gap:
+                return False, gap - (now - newest)
+            c.execute("INSERT INTO calls(name, ts) VALUES(?, ?)", (self.name, now))
+            self.total += 1
+            return True, 0.0
         finally:
             c.execute("COMMIT")
 
@@ -141,20 +147,20 @@ class SharedRateLimiter(RateLimiter):
             with self._lock:
                 while True:
                     try:
-                        claimed, oldest = self._claim(max(0, self.max - self.reserve))
+                        claimed, sleep = self._claim(max(0, self.max - self.reserve), self.min_gap_s)
                     except sqlite3.Error as e:
                         self._fallback(e)
                         break
                     if claimed:
                         return
-                    sleep = 60 - (time.time() - oldest) + 0.05
-                    log.info("%s rate limit (shared): sleeping %.1fs", self.name, sleep)
-                    time.sleep(max(sleep, 0))
+                    if sleep > 5:
+                        log.info("%s rate limit (shared): sleeping %.1fs", self.name, sleep)
+                    time.sleep(sleep)
         super().wait()
 
 
-def shared(max_per_min: int, name: str, reserve: int = 0) -> RateLimiter:
+def shared(max_per_min: int, name: str, reserve: int = 0, min_gap_s: float = 0.0) -> RateLimiter:
     """The box-wide limiter for `name`, at the configured path."""
     from .config import settings
 
-    return SharedRateLimiter(max_per_min, name, settings.ratelimit_path, reserve=reserve)
+    return SharedRateLimiter(max_per_min, name, settings.ratelimit_path, reserve=reserve, min_gap_s=min_gap_s)

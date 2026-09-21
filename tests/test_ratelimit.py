@@ -67,3 +67,14 @@ def test_the_reserve_is_kept_for_the_callers_that_do_not_wait(tmp_path, monkeypa
     rl2 = SharedRateLimiter(4, "gecko", tmp_path / "rl.db", reserve=2)
     rl2.wait()
     assert rl2.take() and rl2.take() and not rl2.take(), "the request thread has the other two"
+
+
+def test_batch_calls_keep_the_gap_box_wide_and_the_impatient_ones_do_not(tmp_path, monkeypatch):
+    path = tmp_path / "rl.db"
+    a, b = SharedRateLimiter(30, "gecko", path, min_gap_s=2.0), SharedRateLimiter(30, "gecko", path, min_gap_s=2.0)
+    a.wait()
+    slept = []
+    monkeypatch.setattr(time, "sleep", lambda s: slept.append(s) or sqlite3.connect(path).execute("UPDATE calls SET ts = ts - 2").connection.commit())
+    b.wait()
+    assert len(slept) == 1 and 0 < slept[0] <= 2.0, "the other process waited out the gap"
+    assert b.take(), "a request thread is counted, not spaced"
