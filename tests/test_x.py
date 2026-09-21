@@ -119,3 +119,31 @@ def test_the_client_refreshes_and_rotates_its_token(tmp_path, monkeypatch):
     v, ch = xsrc.pkce_pair()
     url = xsrc.authorize_url("app", "http://127.0.0.1:8765/callback", "st", ch)
     assert "code_challenge_method=S256" in url and "tweet.write" in url and "offline.access" in url
+
+
+def test_a_void_replies_under_the_post_and_pulls_a_queued_one(tmp_path, monkeypatch):
+    """ZEC: pushed 19:47, unsellable at 20:03. A post already up gets the fact in its thread; a
+    post still waiting for its hour never goes out."""
+    monkeypatch.setattr(settings, "x_enabled", True)
+    monkeypatch.setattr(settings, "x_client_id", "app")
+    monkeypatch.setattr(settings, "x_post_delay_s", 3600)
+    monkeypatch.setattr(settings, "x_max_per_day", 20)
+    conn = db.connect(tmp_path / "x.db")
+    now = db.now()
+    fx = FakeX()
+    # one push posted already (a burst an hour and a half ago), one still in the queue
+    old = pushes.record(conn, "burst", burst(), chats=3, now=now - 5400)
+    xpost.send_due(conn, fx, now=now - 1800)
+    assert len(fx.posts) == 1
+    other = "0x" + "f" * 40
+    pushes.record(conn, "launch", dict(burst(), mint=other, sym="ZEC"), chats=7, now=now - 960)
+    note = "91 buys and not one sell in the pool's last day, 36 minutes in"
+    out = xpost.void(conn, other, note, now=now, client=fx)
+    assert out == {"replied": 0, "cancelled": 1}
+    assert xpost.send_due(conn, fx, now=now + 4000) == 0, "the queued post never goes out"
+    assert "voided before posting" in conn.execute("SELECT error FROM x_posts WHERE mint = ?", (other,)).fetchone()[0]
+    out = xpost.void(conn, MINT, note, now=now, client=fx)
+    assert out == {"replied": 1, "cancelled": 0}
+    text, reply_to = fx.posts[-1]
+    assert reply_to == "1001" and text.startswith("\u26a0 90 min after the push: unsellable. 91 buys") and "honeypot" in text
+    assert old is not None

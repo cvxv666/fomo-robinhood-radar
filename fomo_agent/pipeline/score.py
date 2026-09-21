@@ -35,6 +35,9 @@ How to weigh the evidence:
 - Trade counts, unique tokens, hold times and early entries describe the *style*.
 - Genuine red flags: minute-scale holds with uniform sizes (bot), round-tripping with no result
   (wash), a single position explaining everything (one-hit).
+- `flags.distributing`, when present, means the wallet sold many times what it bought this week
+  at size: it is handing out what it holds, whatever the PnL figure says. Status is "watch" at
+  most for such a wallet, and the summary should say what it is selling down.
 
 Guidance: score>=70 -> active (large PnL with a repeatable pattern behind it);
 40-69 -> watch (promising, thin evidence, or profit that rests on one unresolved position);
@@ -105,6 +108,11 @@ def build_context(conn: sqlite3.Connection, address: str) -> dict[str, Any]:
             "median_hold_min": round(statistics.median(holds) / 60) if holds else None,
             "early_buys_10min": early,
         }
+    d7 = ctx["last_7d"]
+    from .analyze import distributing
+    why = distributing(d7.get("usd_bought"), d7.get("usd_sold"))
+    if why:
+        ctx["flags"] = {"distributing": why}
     # The open book, straight from fomo. This is the most direct evidence there is: what a trader
     # is holding, what it cost, and how far in front they are. A cost of null means fomo counts
     # profit already withdrawn from the position, so the entry price cannot be recovered.
@@ -351,13 +359,25 @@ def import_results(conn: sqlite3.Connection, path: Path, model: str = "manual") 
 
 
 def apply_score(conn: sqlite3.Connection, address: str, res: ScoreResult, model: str) -> None:
+    """Write the verdict. A distributing wallet is watch at most whatever the model said: the
+    rule is the flow's, not the model's, and the summary carries the reason."""
+    status, summary, flags = res.status, res.summary, list(res.red_flags)
+    from .analyze import flow_7d
+    why = flow_7d(conn, address)["distributing"]
+    if why:
+        if status == "active":
+            status = "watch"
+        if "distributing" not in flags:
+            flags.append("distributing")
+        if "distributing" not in (summary or ""):
+            summary = f"{summary.rstrip('.')}. Held to watch: {why}." if summary else f"Held to watch: {why}."
     with db.tx(conn):
         conn.execute(
             "UPDATE traders SET score=?, status=?, tags=?, ai_summary=?, ai_scored_at=?, ai_model=? WHERE address=?",
-            (res.score, res.status, json.dumps({"style": res.style, "red_flags": res.red_flags}),
-             res.summary, db.now(), model, address),
+            (res.score, status, json.dumps({"style": res.style, "red_flags": flags}),
+             summary, db.now(), model, address),
         )
-        db.add_score_history(conn, address, res.score, res.status, model, res.summary)
+        db.add_score_history(conn, address, res.score, status, model, summary)
 
 
 def needs_rescore(row: sqlite3.Row) -> bool:

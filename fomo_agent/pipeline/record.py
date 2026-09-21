@@ -53,6 +53,7 @@ def rows(conn: sqlite3.Connection, days: int = 30, kind: str | None = None, now:
             "px": r["px"], "wallets": r["wallets"], "conviction": r["conviction"], "heat": r["heat"],
             "liq": r["liq"], "chats": r["chats"], "followup_at": r["followup_at"],
             "best": r["best"], "peak_min": r["peak_min"], "hour": r["now_x"], "vol_usd": r["vol_usd"], "trail": r["trail_x"],
+            "cohort_share": r["cohort_share"],
             # where it sits now, in the same entry price: the stored quote against the entry
             "now": (r["price_usd"] / r["px"]) if r["price_usd"] and r["px"] else None,
             "seeded": bool(r["seeded"]), "unsellable": r["sellable"] == 0,

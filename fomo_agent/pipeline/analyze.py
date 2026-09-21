@@ -11,9 +11,11 @@ keeps a crowd of mediocre wallets from outvoting a good one.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 
 from .. import db
+from ..config import settings
 from ..sources.rpc import QUOTE_TOKENS
 
 TRUSTED = 60
@@ -173,6 +175,25 @@ def heat(buyers: list[dict], launched_ts: int | None) -> float:
                for b in buyers if b.get("score"))
 
 
+# The tickers a launch on this chain borrows when it wants to look like something it is not: the
+# top of the market by name. A token called ZEC here is not Zcash and a token called SOL is not
+# Solana; a launch wearing one of these needs a higher bar and a plain word in the message.
+LISTED_TICKERS = frozenset("""
+BTC ETH USDT XRP BNB SOL USDC DOGE TRX ADA HYPE LINK XLM SUI BCH AVAX HBAR LTC SHIB TON LEO DOT
+UNI XMR DAI PEPE AAVE CRO NEAR ETC ONDO APT MNT TAO ICP PI POL KAS ALGO ARB VET RENDER FIL ATOM
+OKB FET ENA WLD SEI BONK JUP QNT INJ TIA STX IMX GRT OP FLOKI FLR WIF LDO SAND CRV XDC THETA
+NEXO GALA PYTH IOTA JASMY RAY BSV KAIA ENS BTT CAKE ZEC XTZ EOS FLOW MANA AXS NEO EGLD CFX AR
+DYDX ROSE CHZ RUNE PENDLE MKR SNX COMP APE TRUMP VIRTUAL PENGU SPX FARTCOIN PUMP WBTC WETH
+STETH USDG USDE FDUSD TUSD PAXG XAUT PYUSD MATIC LUNA LUNC FTT BRETT MOG TURBO POPCAT MEW
+""".split())
+LISTED_EXTRA = frozenset(x.strip().upper() for x in os.environ.get("LISTED_TICKERS_EXTRA", "").split(",") if x.strip())
+
+
+def listed(sym: str | None) -> bool:
+    """Whether the name is a listed ticker's, whatever the case."""
+    return bool(sym) and sym.strip().lstrip("$").upper() in (LISTED_TICKERS | LISTED_EXTRA)
+
+
 def namesakes(conn: sqlite3.Connection, sym: str | None, mint: str, now: int | None = None,
               hours: int = 24) -> list[dict]:
     """Other tokens with this exact name in the last day, oldest first, with what became of each:
@@ -190,6 +211,32 @@ def namesakes(conn: sqlite3.Connection, sym: str | None, mint: str, now: int | N
         pushed = conn.execute("SELECT MIN(ts) FROM bot_sent WHERE mint IN (?, ?)", (r["mint"], "hot:" + r["mint"])).fetchone()[0]
         out.append({"mint": r["mint"], "t0": r["t0"], "pushed_at": pushed, "unsellable": r["sellable"] == 0})
     return out
+
+
+def borrowed_name(conn: sqlite3.Connection, sym: str | None, mint: str, now: int | None = None) -> dict | None:
+    """Why this name deserves a second look, or None: a listed ticker's, or one launched here
+    before within `namesake_days`. {"listed": bool, "earlier": [namesakes], "why": str}.
+
+    The 21 Sep ZEC was the fourth ZEC on the chain in two weeks and a honeypot; NCAT before it.
+    The clone rule looks a day back and at pushed names only - a name recycled every few days
+    slips under it, and a listed ticker's name needs no earlier twin to be a costume.
+    """
+    now = now or db.now()
+    earlier = namesakes(conn, sym, mint, now, hours=settings.namesake_days * 24)
+    is_listed = listed(sym)
+    if not earlier and not is_listed:
+        return None
+    parts = []
+    if is_listed:
+        parts.append(f"${sym} is a listed ticker; this is a Robinhood Chain token wearing its name")
+    if earlier:
+        n = len(earlier) + 1
+        parts.append(f"the {ORD(n)} ${sym} on this chain in {settings.namesake_days} days")
+    return {"listed": is_listed, "earlier": earlier, "why": "; ".join(parts)}
+
+
+def ORD(n: int) -> str:
+    return {1: "1st", 2: "2nd", 3: "3rd"}.get(n, f"{n}th")
 
 
 def fresh(conn: sqlite3.Connection, chain: str | None = None, hours: int = 24,
@@ -598,6 +645,39 @@ def find_trader(conn: sqlite3.Connection, who: str) -> sqlite3.Row | None:
     ).fetchone()
 
 
+def distributing(bought_usd: float | None, sold_usd: float | None) -> str | None:
+    """Why the week's flow says the wallet is handing out, or None. The rule wants both size
+    and proportion: a $60k sale against $50k of buys is trading, $125k against $11k is not."""
+    sold, bought = sold_usd or 0.0, bought_usd or 0.0
+    if sold >= settings.distrib_min_sold_usd and sold >= settings.distrib_ratio * max(bought, 1.0):
+        return f"distributing: sold {usd(sold)} against {usd(bought)} bought in 7d"
+    return None
+
+
+def flow_7d(conn: sqlite3.Connection, address: str, now: int | None = None) -> dict:
+    """The wallet's own buys and sells of the last seven days, in dollars, and the verdict on them."""
+    now = now or db.now()
+    r = conn.execute(
+        "SELECT COALESCE(SUM(CASE WHEN side='buy' THEN usd_value END), 0) bought, "
+        "  COALESCE(SUM(CASE WHEN side='sell' THEN usd_value END), 0) sold FROM trades "
+        "WHERE address = ? AND ts >= ? AND COALESCE(kind, 'trade') = 'trade'" + NOT_QUOTE.format(col="mint"),
+        (address, now - 7 * 86400)).fetchone()
+    return {"bought": r["bought"], "sold": r["sold"], "distributing": distributing(r["bought"], r["sold"])}
+
+
+def pnl_gap(fomo_pnl: float | None, stats: dict) -> dict | None:
+    """fomo's figure against the indexer's realized one, when both exist and disagree by more
+    than `pnl_gap_usd`: {"fomo", "indexer", "gap"}. Different questions - fomo counts open
+    positions, the indexer what was closed - and a $270k gap is worth seeing before trusting either."""
+    realized = stats.get("realized_pnl") if stats else None
+    if fomo_pnl is None or realized is None:
+        return None
+    gap = float(fomo_pnl) - float(realized)
+    if abs(gap) < settings.pnl_gap_usd:
+        return None
+    return {"fomo": fomo_pnl, "indexer": realized, "gap": gap}
+
+
 def analyze_trader(conn: sqlite3.Connection, who: str, hours: int = 168) -> dict | None:
     """One trader's verdict, open bags, recent fills and who else is in the same names."""
     row = find_trader(conn, who)
@@ -630,12 +710,16 @@ def analyze_trader(conn: sqlite3.Connection, who: str, hours: int = 168) -> dict
     )] if held else []
     tags = json.loads(row["tags"]) if row["tags"] else {}
     stats = json.loads(row["stats_json"]) if row["stats_json"] else {}
+    fomo_pnl = row["pnl_30d"] or row["pnl_7d"] or row["pnl_24h"]
+    flow = flow_7d(conn, address)
     return {
         "address": address, "handle": row["fomo_handle"], "chain": row["chain"],
         "score": row["score"], "status": row["status"], "summary": row["ai_summary"],
         "model": row["ai_model"], "style": tags.get("style") or [],
         "red_flags": tags.get("red_flags") or [], "stats": stats,
-        "fomo_pnl": row["pnl_30d"] or row["pnl_7d"] or row["pnl_24h"],
+        "fomo_pnl": fomo_pnl,
+        # the week's flow and what it says; the two PnL sources side by side when they disagree
+        "flow_7d": flow, "distributing": flow["distributing"], "pnl_gap": pnl_gap(fomo_pnl, stats),
         # the whole book: what is still held, what was closed, and what the closed part earned
         **positions,
         "fills": fills,

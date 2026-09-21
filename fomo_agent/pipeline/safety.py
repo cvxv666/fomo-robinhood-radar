@@ -252,6 +252,11 @@ def void_pushes(conn: sqlite3.Connection, mint: str, note: str, now: int | None 
                 "pushed_at": first["ts"], "note": note, "minutes_since_push": (now - first["ts"]) // 60}
         webhooks.fire(conn, "void", item, now)
         discord.send(text)
+        try:
+            from . import xpost
+            xpost.void(conn, mint, note, now)
+        except Exception as e:  # noqa: BLE001 - X being down is not the void being down
+            log.warning("x void for %s failed: %s", mint[:10], e)
     log.info("void %s: %d chats told, %s", mint[:10], sent, note)
     return sent
 
@@ -277,11 +282,35 @@ def crowd(conn: sqlite3.Connection, mint: str, gt=None, now: int | None = None, 
             tx = ((a or {}).get("transactions") or {}).get("h1") or {}
             if a and tx:
                 out = {"buys": int(tx.get("buys") or 0), "sells": int(tx.get("sells") or 0),
-                       "buyers": int(tx.get("buyers") or 0), "sellers": int(tx.get("sellers") or 0)}
+                       "buyers": int(tx.get("buyers") or 0), "sellers": int(tx.get("sellers") or 0),
+                       "vol_h1": a.get("vol_h1")}
         except Exception as e:  # noqa: BLE001 - the screener being busy is not a verdict
             log.debug("crowd lookup for %s failed: %s", mint[:10], e)
     _crowd_cache[mint] = (now, out)
     return out
+
+
+def cohort_share(conn: sqlite3.Connection, mint: str, cohort_usd: float | None, now: int | None = None, gt=None) -> float | None:
+    """The cohort's dollars over the pool's last hour, 0..1, or None when the pool cannot say.
+
+    A share near one is the cohort making the market; a share near zero is the cohort arriving
+    in a market the crowd already made. The number goes on the ledger and into the message either
+    way; whether it gates a push is `hot_min_cohort_share`."""
+    if not cohort_usd:
+        return None
+    c = crowd(conn, mint, gt=gt, now=now)
+    vol = (c or {}).get("vol_h1")
+    if not vol or vol <= 0:
+        return None
+    return round(min(1.0, cohort_usd / vol), 3)
+
+
+def crowd_objection(share: float | None) -> str | None:
+    """Why the push should not go, or None: the gate on the share, when a floor is set."""
+    floor = settings.hot_min_cohort_share
+    if floor <= 0 or share is None or share >= floor:
+        return None
+    return f"the cohort is {share:.0%} of the pool's last hour, under {floor:.0%}: following the crowd, not leading it"
 
 
 def only_the_cohort(conn: sqlite3.Connection, mint: str, wallets: int, now: int | None = None, gt=None) -> str | None:

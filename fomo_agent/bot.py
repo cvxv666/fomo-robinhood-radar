@@ -155,15 +155,19 @@ def who_line(handles, scores, limit: int = 6) -> str:
     Takes either a list or the comma-joined string sqlite's GROUP_CONCAT produces, because one
     caller aggregates in SQL and the other in Python.
     """
-    def parts(v):
-        if isinstance(v, (list, tuple)):
-            return [str(x) for x in v if x is not None]
-        return [x for x in (v or "").split(",") if x]
-
-    hs, ss = parts(handles), parts(scores)
+    hs, ss = who_line.parts(handles), who_line.parts(scores)
     pairs = [f"{esc(h)} {esc(s)}" for h, s in zip(hs, ss)][:limit]
     tail = f" +{len(hs) - limit}" if len(hs) > limit else ""
     return " · ".join(pairs) + tail
+
+
+def _parts(v):
+    if isinstance(v, (list, tuple)):
+        return [str(x) for x in v if x is not None]
+    return [x for x in (v or "").split(",") if x]
+
+
+who_line.parts = _parts
 
 
 def token_link(mint: str | None, label: str) -> str:
@@ -221,6 +225,50 @@ def clone_line(t: dict, now: int | None = None) -> str | None:
     return f"\u26a0 {ORDINAL.get(n, f'{n}th')} <b>${esc(t['sym'])}</b> in 24h \u00b7 " + " \u00b7 ".join(parts)
 
 
+def name_line(t: dict, now: int | None = None) -> str | None:
+    """'⚠ $ZEC is a listed ticker; this is a Robinhood Chain token wearing its name; the 4th $ZEC
+    on this chain in 14 days · 0x824c… 3d ago · 0xd113… 11d ago' - or nothing. Beside the 24-hour
+    clone line, not instead of it: that one names the pushes and the honeypots of the day."""
+    b = t.get("borrowed")
+    if not b:
+        return None
+    now = now or db.now()
+    earlier = [c for c in b.get("earlier") or [] if now - (c.get("t0") or now) >= 86400]
+    tail = " \u00b7 ".join(f"{short(c['mint'])} {ago(c['t0'], now)} ago" + (" honeypot" if c.get("unsellable") else "") for c in earlier[-3:])
+    return f"\u26a0 {esc(b['why'])}" + (f" \u00b7 {tail}" if tail else "")
+
+
+def share_row(t: dict) -> list[tuple[str, str]]:
+    """'of the pool's hour   4%' - how much of the last hour's volume the cohort is. Near all of
+    it, the cohort made the market; a sliver, it walked into one the crowd made."""
+    s = t.get("cohort_share")
+    if s is None:
+        return []
+    return [("of the pool's hour", f"{s:.0%}")]
+
+
+def follow_line(t: dict) -> str | None:
+    """`follow the best of them: /follow_unipcs` - the highest-scored wallet in, one tap.
+
+    Two chats in four hundred used /follow in its first three days; the names were in every push
+    all along, and the command was a screen away. A handle that is not a command's alphabet gets
+    the two-word form instead."""
+    hs, ss = who_line.parts(t.get("who")), who_line.parts(t.get("scores"))
+    best = None
+    for h, sc in zip(hs, ss):
+        try:
+            v = float(sc)
+        except (TypeError, ValueError):
+            continue
+        if h and not h.startswith("0x") and (best is None or v > best[1]):
+            best = (h, v)
+    if best is None:
+        return None
+    h = best[0]
+    cmd = f"/follow_{h}" if h.replace("_", "").isalnum() and h.isascii() else f"/follow {esc(h)}"
+    return f"follow the best of them: {cmd}"
+
+
 def fmt_hot(h: dict, now: int | None = None) -> str:
     """One burst. The clock is the headline: how much conviction arrived in how few minutes."""
     mins = max(1, round((h["last_ts"] - h["first_ts"]) / 60))
@@ -234,10 +282,14 @@ def fmt_hot(h: dict, now: int | None = None) -> str:
         ("token age", age_txt),
         ("bought", analyze.usd(h["usd"])),
         ("liquidity", analyze.usd(h.get("liq"))),
+        *share_row(h),
     ]))
     out.append(who_line(h.get("who"), h.get("scores")))
-    if clone_line(h, now):
-        out.append(clone_line(h, now))
+    if follow_line(h):
+        out.append(follow_line(h))
+    for line in (clone_line(h, now), name_line(h, now)):
+        if line:
+            out.append(line)
     out.append("")
     out.extend(token_lines(h["mint"]))
     return "\n".join(out)
@@ -395,10 +447,14 @@ def fmt_launch(t: dict, now: int | None = None) -> str:
         ("token age", f"{t['age_h']:.0f}h" if t.get("age_h") else "\u2014"),
         ("bought", analyze.usd(t.get("usd"))),
         ("liquidity", analyze.usd(t.get("liq"))),
+        *share_row(t),
     ]))
     out.append(who_line(t.get("who"), t.get("scores")))
-    if clone_line(t, now):
-        out.append(clone_line(t, now))
+    if follow_line(t):
+        out.append(follow_line(t))
+    for line in (clone_line(t, now), name_line(t, now)):
+        if line:
+            out.append(line)
     out.append("")
     out.extend(token_lines(t["mint"]))
     return "\n".join(out)
@@ -462,6 +518,12 @@ def fmt_trader(a: dict) -> str:
         out.append(f"<i>{esc(tags)}</i>")
     if a["summary"]:
         out.append(f"\n{esc(a['summary'])}")
+    if a.get("distributing") and "distributing" not in (a["summary"] or ""):
+        out.append(f"\u26a0 {esc(a['distributing'])}")
+    if a.get("pnl_gap"):
+        g = a["pnl_gap"]
+        out.append(f"fomo says {analyze.usd(g['fomo'])}, the indexer's realised {analyze.usd(g['indexer'])}: "
+                   f"{analyze.usd(abs(g['gap']))} apart. fomo counts open positions; the indexer what was closed.")
     out.append("")
     # A win rate is only stated once there are enough decided trades behind it to mean anything.
     rated = a["round_trips"] >= 5 and a["win_rate"] is not None
@@ -716,7 +778,7 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
     now = now or db.now()
     cutoff = now - settings.telegram_launch_max_age_min * 60
     stale = now - settings.telegram_launch_max_gap_s
-    from .pipeline.safety import check as sell_check, only_the_cohort
+    from .pipeline.safety import check as sell_check, cohort_share, crowd_objection, only_the_cohort
 
     out = []
     for t in analyze.fresh(conn, chain, hours=hours, limit=10)["tokens"]:
@@ -731,6 +793,11 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
             if why:
                 log.warning("launch %s not pushed: %s", t["sym"], why)
                 continue
+            t["cohort_share"] = cohort_share(conn, t["mint"], t.get("usd"), now)
+            why = crowd_objection(t["cohort_share"])
+            if why:
+                log.warning("launch %s not pushed: %s", t["sym"], why)
+                continue
             from .pipeline.deployers import objection
             why = objection(conn, t["mint"], now=now)
             if why:
@@ -741,6 +808,13 @@ def due(conn, now: int | None = None) -> list[tuple[str, dict, str]]:
             # first one already carries the warning, and this one is not sent
             if any(c.get("pushed_at") for c in t["clones"]):
                 log.warning("launch %s not pushed: a %s was pushed in the last %dh", t["sym"], t["sym"], settings.telegram_clone_hours)
+                continue
+            # a borrowed name - a listed ticker's, or one launched here already this fortnight -
+            # is told only with half again the heat, and the message says why it is suspect
+            t["borrowed"] = analyze.borrowed_name(conn, t.get("sym"), t["mint"], now)
+            if t["borrowed"] and t["heat"] < settings.telegram_min_heat * settings.namesake_bar_mult:
+                log.warning("launch %s not pushed: %s, and heat %.2f is under %.2f", t["sym"], t["borrowed"]["why"],
+                            t["heat"], settings.telegram_min_heat * settings.namesake_bar_mult)
                 continue
             out.append(("launch", t, fmt_launch(t)))
     return out
@@ -1005,6 +1079,9 @@ def handle_text(conn, text: str, chat_id, username: str | None) -> str:
     # /token_0xabc… — the deep link the signal message offers
     if cmd.startswith("/token_"):
         cmd, args = "/token", [cmd[len("/token_"):]]
+    # /follow_unipcs - the one-tap form every push offers
+    if cmd.startswith("/follow_"):
+        cmd, args = "/follow", [cmd[len("/follow_"):]]
 
     if cmd == "/start":
         # Starting is joining. Three of four thousand visitors found /subscribe on the first

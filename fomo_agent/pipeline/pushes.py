@@ -46,9 +46,10 @@ def record(conn: sqlite3.Connection, kind: str, item: dict, chats: int, now: int
     due = now + settings.telegram_followup_min * 60 if settings.telegram_followup_min > 0 else None
     with db.tx(conn):
         cur = conn.execute(
-            "INSERT INTO pushes(kind, mint, ts, px, heat, conviction, wallets, liq, chats, followup_due) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO pushes(kind, mint, ts, px, heat, conviction, wallets, liq, chats, followup_due, cohort_share) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
             (kind, mint, now, px, item.get("heat"), item.get("conviction"), item.get("wallets") or item.get("buyers"),
-             item.get("liq"), chats, due))
+             item.get("liq"), chats, due, item.get("cohort_share")))
     from . import xpost
     xpost.enqueue(conn, cur.lastrowid, kind, item, now)   # nothing unless X is on
     return cur.lastrowid

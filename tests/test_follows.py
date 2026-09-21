@@ -78,3 +78,10 @@ def test_a_chat_that_blocked_the_bot_hears_nothing_and_nothing_is_written_down(t
     with db.tx(conn):
         conn.execute("UPDATE bot_subscribers SET active = 1 WHERE chat_id = '7'")
     assert [f["sig"] for _, f in follows.alerts(conn, ["a"], now)] == ["a"]
+
+
+def test_the_one_tap_form_follows_too(tmp_path):
+    conn = db.connect(tmp_path / "f.db")
+    setup(conn)
+    assert "Following unipcs" in handle_text(conn, "/follow_UNIPCS", chat_id=7, username="u")
+    assert "Already following" in handle_text(conn, "/follow_unipcs@fomoradarRH_bot", chat_id=7, username="u")

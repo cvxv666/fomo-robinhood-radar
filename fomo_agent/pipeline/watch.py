@@ -242,6 +242,18 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
             log.warning("burst on %s not pushed: a %s was pushed in the last %dh and conviction %.1f is under %.1f",
                         h["sym"], h["sym"], settings.telegram_clone_hours, h["conviction"], 1.5 * settings.hot_delta)
             continue
+        from .safety import cohort_share, crowd_objection
+        h["cohort_share"] = cohort_share(conn, h["mint"], h.get("usd"), now)
+        why = crowd_objection(h["cohort_share"])
+        if why:
+            log.warning("burst on %s not pushed: %s", h["sym"], why)
+            continue
+        from .analyze import borrowed_name
+        h["borrowed"] = borrowed_name(conn, h.get("sym"), h["mint"], now)
+        if h["borrowed"] and h["conviction"] < settings.namesake_bar_mult * settings.hot_delta:
+            log.warning("burst on %s not pushed: %s, and conviction %.1f is under %.1f", h["sym"], h["borrowed"]["why"],
+                        h["conviction"], settings.namesake_bar_mult * settings.hot_delta)
+            continue
         text = fmt_hot(h)
         told = 0
         for sub in subs:

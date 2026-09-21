@@ -223,3 +223,22 @@ def test_the_sweep_asks_again_about_a_silence_verdict_and_not_about_a_revert(con
     assert stats["asked"] == 1 and stats["sellable"] == 1
     assert conn.execute("SELECT sellable FROM tokens WHERE mint = ?", (FINE,)).fetchone()[0] == 1
     assert conn.execute("SELECT sellable FROM tokens WHERE mint = ?", (TRAP,)).fetchone()[0] == 0
+
+
+def test_the_cohort_share_is_measured_and_gates_only_when_a_floor_is_set(conn, monkeypatch):
+    """"+" burst on $3.08M of volume with seven wallets and fell 76%: the share is on every push,
+    the gate is off until the study names a line."""
+    class Gt:
+        def pool(self, chain, pool):
+            return {"transactions": {"h1": {"buys": 40, "sells": 30, "buyers": 25, "sellers": 20}}, "created_at": db.now() - 7200,
+                    "vol_h1": 250_000.0}
+    safety._crowd_cache.clear()
+    assert safety.cohort_share(conn, FINE, 10_000.0, gt=Gt()) == 0.04
+    assert safety.cohort_share(conn, FINE, None, gt=Gt()) is None
+    monkeypatch.setattr(settings, "hot_min_cohort_share", 0.0)
+    assert safety.crowd_objection(0.04) is None, "off by default"
+    monkeypatch.setattr(settings, "hot_min_cohort_share", 0.1)
+    assert "4% of the pool's last hour" in safety.crowd_objection(0.04)
+    assert safety.crowd_objection(0.4) is None and safety.crowd_objection(None) is None
+    from fomo_agent import bot
+    assert ("of the pool's hour", "4%") in bot.share_row({"cohort_share": 0.04}) and bot.share_row({}) == []

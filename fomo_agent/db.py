@@ -335,6 +335,11 @@ MIGRATIONS: dict[int, str] = {
       PRIMARY KEY(pool, span)
     );
     """,
+    30: """
+    -- the cohort's dollars as a share of the pool's last hour at push time (safety.cohort_share):
+    -- leading the crowd or following it, for the record and the study
+    ALTER TABLE pushes ADD COLUMN cohort_share REAL;
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

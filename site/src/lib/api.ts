@@ -78,6 +78,9 @@ export type Trader = {
   fills: { ts: number; side: string; usd: number | null; sym: string; mint: string; source: string;
           kind: 'trade' | 'dust' | 'direct' | 'seed' | 'flow' }[];
   bought_usd: number; sold_usd: number; hours: number;
+  flow_7d: { bought: number; sold: number; distributing: string | null };
+  distributing: string | null;
+  pnl_gap: { fomo: number; indexer: number; gap: number } | null;
   company: { handle: string; score: number; shared: number }[];
 };
 

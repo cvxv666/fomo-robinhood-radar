@@ -32,8 +32,16 @@ const winners = closed.filter((p) => (p.realized ?? 0) > 0).length;
         <h1 style="font-size:clamp(28px,5vw,44px)">{name}</h1>
         {t.style.map((x) => <span class="badge tag">{x}</span>)}
         {t.red_flags.map((f) => <span class="badge flag">{f}</span>)}
+        {t.distributing && !t.red_flags.includes('distributing') && <span class="badge flag">distributing</span>}
       </div>
       {t.summary && <p class="verdict">{t.summary}</p>}
+      {t.distributing && <p class="verdict c" style="font-size:13px">{t.distributing} — held to watch until the flow turns, whatever the PnL says.</p>}
+      {t.pnl_gap && (
+        <p class="verdict m" style="font-size:13px">
+          fomo says {usd(t.pnl_gap.fomo)}, the indexer's realised {usd(t.pnl_gap.indexer)}: {usd(Math.abs(t.pnl_gap.gap))} apart.
+          fomo counts open positions; the indexer what was closed.
+        </p>
+      )}
       <p class="addr">{t.address}</p>
       {t.handle && <p class="trade"><a class="btn" href={fomoProfile(t.handle)} rel="noopener">Profile on fomo →</a></p>}
     </div>

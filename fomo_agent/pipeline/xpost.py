@@ -119,6 +119,46 @@ def send_due(conn: sqlite3.Connection, client=None, now: int | None = None) -> i
     return sent
 
 
+def fmt_void(note: str, minutes: int) -> str:
+    fact = note[0].upper() + note[1:] + ("" if note.endswith(".") else ".")
+    return f"⚠ {minutes} min after the push: unsellable. {fact} Off every feed; the record counts it as a honeypot."
+
+
+def void(conn: sqlite3.Connection, mint: str, note: str, now: int | None = None, client=None) -> dict:
+    """The push taken back where it was posted. A post already up gets the fact as a reply in
+    its thread, the same place the hour-later read goes; a post still in the queue never goes
+    out - an hour-old "launch" on a token nobody can sell is not a post, it is a trap with our
+    name on it. Returns {"replied": n, "cancelled": n}."""
+    out = {"replied": 0, "cancelled": 0}
+    if not enabled():
+        return out
+    now = now or db.now()
+    rows = conn.execute("SELECT * FROM x_posts WHERE mint = ? AND due_ts >= ? ORDER BY due_ts",
+                        (mint, now - settings.telegram_realert_hours * 3600 - settings.x_post_delay_s)).fetchall()
+    for r in rows:
+        if r["posted_at"] is None:
+            with db.tx(conn):
+                conn.execute("UPDATE x_posts SET attempts = 3, error = ? WHERE id = ? AND posted_at IS NULL",
+                             (f"voided before posting: {note}"[:200], r["id"]))
+            out["cancelled"] += 1
+            continue
+        if not r["tweet_id"]:
+            continue
+        pushed = conn.execute("SELECT ts FROM pushes WHERE id = ?", (r["push_id"],)).fetchone() if r["push_id"] else None
+        minutes = (now - (pushed["ts"] if pushed else r["due_ts"] - settings.x_post_delay_s)) // 60
+        if client is None:
+            from ..sources.x import XClient
+            client = XClient()
+        try:
+            client.post(fmt_void(note, max(0, minutes)), reply_to=r["tweet_id"])
+            out["replied"] += 1
+        except Exception as e:  # noqa: BLE001
+            log.warning("x: void reply for %s failed: %s", mint[:10], e)
+    if out["replied"] or out["cancelled"]:
+        log.info("x: void %s: %s", mint[:10], out)
+    return out
+
+
 def reply_followup(conn: sqlite3.Connection, push_id: int, m: dict, client=None, now: int | None = None) -> bool:
     """The look-back, as a reply under the post the push made. Nothing if the push never made it to X."""
     if not enabled():

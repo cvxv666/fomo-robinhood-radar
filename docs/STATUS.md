@@ -64,6 +64,26 @@ fomo-кошельки — EOA с делегацией EIP-7702, 23 байта к
 (`scripts/capture_fomo_endpoints.py`); мультичейн — отдельный проект (Helius/Codex бюджет,
 FOMO_SESSION, второй бот). Volна-1 пункт 1 ждёт рефкод.
 
+**Сессия 23, продолжение (21 сен): пять предложений сделаны.** *Клон известного тикера:*
+`analyze.LISTED_TICKERS` (топ рынка по имени, `LISTED_TICKERS_EXTRA` в .env добавляет) +
+`analyze.borrowed_name` — имя с биржи или уже запускавшееся на цепочке за `NAMESAKE_DAYS=14`;
+в сообщении строка «⚠ $ZEC is a listed ticker; this is a Robinhood Chain token wearing its name;
+the 4th $ZEC on this chain in 14 days · 0x824c… 3d ago · 0xd113… 11d ago honeypot»; лаунчу
+нужно `NAMESAKE_BAR_MULT=1.5` × heat, бёрсту × conviction (bot.due, watch.push). *Void в X:*
+`xpost.void` — реплай под постом пуша тем же фактом, а пост, ещё стоящий в очереди, снимается
+(`attempts=3, error='voided before posting'`); вызывается из `safety.void_pushes` при первом
+void. *Толпа против когорты:* `safety.cohort_share` — доллары когорты / объём пула за час
+(gecko `volume_usd.h1` через `crowd()`), пишется в `pushes.cohort_share` (миграция 30), строка
+«of the pool's hour 4%» в сообщении, в вебхуке и в `/api/record`; гейт `HOT_MIN_COHORT_SHARE`
+(0 = выкл) — `scripts/crowd_share.py` меряет по леджеру (когорта за полчаса до пуша против
+минутных свечей пула), результат ниже. *Раздача:* `analyze.distributing` —
+`DISTRIB_MIN_SOLD_USD=50k` продаж и ≥`DISTRIB_RATIO=5`× покупок за 7 дней; модель видит
+`flags.distributing`, `apply_score` держит статус не выше watch и дописывает причину в summary и
+тег; профиль (`flow_7d`, `distributing`, `pnl_gap` при расхождении fomo/индексер ≥
+`PNL_GAP_USD=100k`), карточка бота и страница трейдера показывают. */follow с каждого пуша:*
+`bot.follow_line` — «follow the best of them: /follow_unipcs» (лучший по скору из вошедших;
+хендл не из алфавита команд — двухсловная форма), `/follow_<handle>` разбирается как `/follow`.
+
 **Сессия 23 (21 сен): сводка за 21.09 — что починено, что оказалось не так, как прочитано.**
 *Ложная тревога:* «watcher завис на 23 минуты» (02:10 → 02:33 UTC) — не завис. Тик без филлов
 ничего не пишет, поэтому непрерывность `from` в журнале ничего не говорит о сканировании; лента

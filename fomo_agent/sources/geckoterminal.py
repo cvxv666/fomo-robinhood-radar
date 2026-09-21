@@ -199,7 +199,8 @@ class GeckoTerminal:
         except ValueError:
             created_ts = None
         return {"transactions": a.get("transactions") or {}, "created_at": created_ts,
-                "reserve_usd": _f(a.get("reserve_in_usd")), "address": a.get("address")}
+                "reserve_usd": _f(a.get("reserve_in_usd")), "address": a.get("address"),
+                "vol_h1": _f((a.get("volume_usd") or {}).get("h1"))}
 
     def ohlcv(self, chain: str, pool: str, timeframe: str = "hour", aggregate: int = 1,
               limit: int = 168, before_ts: int | None = None) -> list[list[float]]:

@@ -107,6 +107,11 @@ class Settings:
     # Heat floor for a pushed launch. Measured over a live day: 1.0 is 28 messages, 2.0 is six,
     # 3.0 is three. Six a day is a feed somebody reads; thirty is one they mute.
     telegram_min_heat: float = field(default_factory=lambda: _float("TELEGRAM_MIN_HEAT", 2.0))
+    # A launch wearing a listed ticker's name (the fourth ZEC on this chain in two weeks, NCAT) or
+    # a name that has been launched here before this fortnight needs this much more heat, and a
+    # burst on one this much more conviction, to be told. The message says which it is.
+    namesake_days: int = field(default_factory=lambda: _int("NAMESAKE_DAYS", 14))
+    namesake_bar_mult: float = field(default_factory=lambda: _float("NAMESAKE_BAR_MULT", 1.5))
     # how many tokens the enrichment pass re-asks "can it be sold" about, every fifteen minutes
     sell_check_per_pass: int = field(default_factory=lambda: _int("SELL_CHECK_PER_PASS", 12))
     # candles since a burst count as evidence only if they carry at least this much volume (and
@@ -246,6 +251,11 @@ class Settings:
     crew_min_shared: int = field(default_factory=lambda: _int("CREW_MIN_SHARED", 4))
     crew_min_share: float = field(default_factory=lambda: _float("CREW_MIN_SHARE", 0.5))
     hot_min_crews: int = field(default_factory=lambda: _int("HOT_MIN_CREWS", 2))
+    # The cohort's dollars against the pool's last hour: "+" burst on $3.08M of volume with seven
+    # wallets and fell 76%. When the cohort is a sliver of the pool it is following the crowd,
+    # not leading it. Measured on every push (pushes.cohort_share, the message, the hook); the
+    # gate is off at 0 until scripts/crowd_share.py says where the line is.
+    hot_min_cohort_share: float = field(default_factory=lambda: _float("HOT_MIN_COHORT_SHARE", 0.0))
     # the second paper read on every alert: out at the first pullback this far under the
     # running high inside the hour, at that level (hot.outcome). Twenty percent: the only rule
     # in the 18 Sep exit study that paid on both bursts and launches.
@@ -402,6 +412,15 @@ class Settings:
     bot_max_tokens: int = field(default_factory=lambda: _int("BOT_MAX_TOKENS", 10))
     bot_max_hold_min: float = field(default_factory=lambda: _float("BOT_MAX_HOLD_MIN", 5))
     bot_score: int = field(default_factory=lambda: _int("BOT_SCORE", 25))
+    # A wallet that sold this many dollars in the week, this many times what it bought, is
+    # distributing - handing out what it holds - whatever fomo's PnL says (ArtofConviction:
+    # +$261k by fomo, $125k sold against $11k bought in 7d, 26% of closed trades in profit).
+    # Watch at most until the flow turns; the card and the page say so.
+    distrib_min_sold_usd: float = field(default_factory=lambda: _float("DISTRIB_MIN_SOLD_USD", 50_000))
+    distrib_ratio: float = field(default_factory=lambda: _float("DISTRIB_RATIO", 5.0))
+    # fomo's PnL and the indexer's realized figure are different questions; a gap this wide
+    # between them is worth a line on the page
+    pnl_gap_usd: float = field(default_factory=lambda: _float("PNL_GAP_USD", 100_000))
     score_model: str = field(default_factory=lambda: _env("SCORE_MODEL", "claude-haiku-4-5"))
     deep_model: str = field(default_factory=lambda: _env("DEEP_MODEL", "claude-sonnet-5"))
     rescore_after_hours: dict[str, float] = field(

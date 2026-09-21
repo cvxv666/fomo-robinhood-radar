@@ -142,3 +142,55 @@ def test_clones_by_name_are_named_in_the_push(tmp_path):
     text = bot.fmt_launch(t, now)
     assert "3rd <b>$musebook</b> in 24h" in text and "honeypot" in text and "pushed" in text
     assert bot.clone_line({"sym": "X", "mint": c}) is None
+
+
+def test_a_borrowed_name_is_named_and_needs_half_again_the_bar(tmp_path, monkeypatch):
+    """The 21 Sep ZEC: the fourth ZEC on the chain in two weeks, wearing Zcash's ticker, a
+    honeypot. Neither the day-old clone rule nor anything else said so in the message."""
+    from fomo_agent import bot
+    from fomo_agent.config import settings
+    from fomo_agent.pipeline import analyze
+    conn = db.connect(tmp_path / "name.db")
+    now = db.now()
+    z1, z2, z3, z4 = ("0x" + f"{i:02x}" * 20 for i in (1, 2, 3, 4))
+    with db.tx(conn):
+        db.upsert_token(conn, z1, chain="robinhood", symbol="ZEC", created_at=now - 11 * 86400, sellable=0)
+        db.upsert_token(conn, z2, chain="robinhood", symbol="ZEC", created_at=now - 3 * 86400)
+        db.upsert_token(conn, z3, chain="robinhood", symbol="zec", created_at=now - 40 * 86400)
+        db.upsert_token(conn, z4, chain="robinhood", symbol="ZEC", created_at=now - 1200)
+        db.upsert_token(conn, "0x" + "ee" * 20, chain="robinhood", symbol="PAWS", created_at=now - 1200)
+    assert analyze.listed("ZEC") and analyze.listed("$sol") and not analyze.listed("PAWS")
+    b = analyze.borrowed_name(conn, "ZEC", z4, now)
+    assert b["listed"] and [x["mint"] for x in b["earlier"]] == [z1, z2], "forty days ago is out of the fortnight"
+    assert "listed ticker" in b["why"] and "3rd $ZEC on this chain in 14 days" in b["why"]
+    assert analyze.borrowed_name(conn, "PAWS", "0x" + "ee" * 20, now) is None
+    t = {"sym": "ZEC", "mint": z4, "heat": 2.5, "buyers": 3, "avg_score": 80.0, "lead_minutes": 4.0, "age_h": 0.2,
+         "usd": 1000.0, "liq": 20000.0, "who": ["ace", "mid"], "scores": [88, 74], "clones": [], "borrowed": b}
+    text = bot.fmt_launch(t, now)
+    assert "listed ticker" in text and "3rd $ZEC" in text and "11d ago honeypot" in text and "3d ago" in text
+    assert "follow the best of them: /follow_ace" in text
+    # the bar: half again the heat for a launch, half again the conviction for a burst
+    monkeypatch.setattr(settings, "telegram_min_heat", 2.0)
+    monkeypatch.setattr(settings, "namesake_bar_mult", 1.5)
+    conn.execute("INSERT INTO bot_subscribers(chat_id, username, subscribed_at, active) VALUES('7', 'u', 0, 1)")
+    conn.commit()
+    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [dict(t, heat=2.5)], "hours": 6})
+    monkeypatch.setattr(bot, "sell_check", lambda *a, **k: {"sellable": None, "note": ""}, raising=False)
+    from fomo_agent.pipeline import safety, deployers
+    monkeypatch.setattr(safety, "check", lambda *a, **k: {"sellable": None, "note": ""})
+    monkeypatch.setattr(safety, "only_the_cohort", lambda *a, **k: None)
+    monkeypatch.setattr(deployers, "objection", lambda *a, **k: None)
+    assert bot.due(conn, now) == [], "heat 2.5 is under 3.0 for a borrowed name"
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [dict(t, heat=3.2)], "hours": 6})
+    out = bot.due(conn, now)
+    assert len(out) == 1 and "listed ticker" in out[0][2]
+
+
+def test_the_follow_line_names_the_best_wallet_or_nothing():
+    from fomo_agent import bot
+    assert bot.follow_line({"who": ["ace", "mid"], "scores": [74, 88]}) == "follow the best of them: /follow_mid"
+    assert bot.follow_line({"who": "ace,mid", "scores": "90,10"}) == "follow the best of them: /follow_ace"
+    assert bot.follow_line({"who": ["0x12345678"], "scores": [90]}) is None, "an address is not a handle"
+    assert bot.follow_line({"who": ["a.b"], "scores": [90]}) == "follow the best of them: /follow a.b"
+    assert bot.follow_line({}) is None
