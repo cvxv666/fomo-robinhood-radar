@@ -197,7 +197,7 @@ def test_chart_answers_with_candles_and_says_why_when_it_cannot(client, monkeypa
     with db.tx(conn):
         db.upsert_token(conn, TOKEN, pool_address="0xpool")
     conn.close()
-    monkeypatch.setattr(api, "candles_for", lambda pool, chain, span: [[1, 2, 3, 1, 2, 9]])
+    monkeypatch.setattr(api, "candles_for", lambda pool, chain, span, **kw: [[1, 2, 3, 1, 2, 9]])
 
     body = client.get(f"/api/token/{TOKEN}/chart?span=24h").json()
     assert body["pool"] == "0xpool" and body["span"] == "24h"
@@ -279,7 +279,7 @@ def test_expired_candles_leave_the_cache(monkeypatch):
     api.candles_for("0xold", "robinhood", "7d")
     # age it past the TTL by hand
     at, rows, ttl = api._candles[("0xold", "7d")]
-    api._candles[("0xold", "7d")] = (at - api.CANDLE_TTL - 1, rows, ttl)
+    api._candles[("0xold", "7d")] = (at - ttl - 1, rows, ttl)
     api.candles_for("0xnew", "robinhood", "7d")
     assert ("0xold", "7d") not in api._candles and ("0xnew", "7d") in api._candles
 
@@ -308,7 +308,33 @@ def test_a_settled_bursts_candles_are_kept_for_hours_and_a_fresh_ones_for_minute
     candles = api._pool_candles(conn, 168)
     candles("0x" + "5" * 40); candles("0x" + "6" * 40)
     assert api._candles[("0xpoolold", "7d")][2] == api.SETTLED_TTL
-    assert api._candles[("0xpoolnew", "7d")][2] == api.CANDLE_TTL
+    assert api._candles[("0xpoolnew", "7d")][2] == api.CANDLE_TTLS["7d"]
+    conn.close()
+
+
+def test_the_candles_one_worker_fetched_serve_the_next_from_the_db(client, monkeypatch):
+    """Three workers, three copies, three requests for one chart: the DB holds the one copy."""
+    from fomo_agent import db
+    calls = []
+
+    class FakeGecko:
+        def ohlcv(self, *a):
+            calls.append(a)
+            return [[1, 2, 3, 1, 2, 9]]
+
+    monkeypatch.setitem(api._clients, "gecko", FakeGecko())
+    api._candles.clear()
+    conn = db.connect()
+    assert api.candles_for("0xshared", "robinhood", "24h", conn=conn) == [[1, 2, 3, 1, 2, 9]]
+    api._candles.clear()   # another worker: nothing in memory
+    assert api.candles_for("0xshared", "robinhood", "24h", conn=conn) == [[1, 2, 3, 1, 2, 9]]
+    assert len(calls) == 1, "the second worker read the first one's answer"
+    # past the span's TTL the DB copy is stale and the source is asked again
+    with db.tx(conn):
+        conn.execute("UPDATE candle_cache SET fetched_at = fetched_at - ?", (api.CANDLE_TTLS["24h"] + 1,))
+    api._candles.clear()
+    api.candles_for("0xshared", "robinhood", "24h", conn=conn)
+    assert len(calls) == 2
     conn.close()
 
 

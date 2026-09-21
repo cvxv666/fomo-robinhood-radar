@@ -326,6 +326,15 @@ MIGRATIONS: dict[int, str] = {
     -- inside the hour, from the same candles (hot.outcome, TRAIL_DROP)
     ALTER TABLE pushes ADD COLUMN trail_x REAL;
     """,
+    29: """
+    -- a pool's candles as the API last fetched them, shared by its workers: three of them each
+    -- kept their own five-minute copy, and eighty pools an hour asked for by bots were most of
+    -- the box's GeckoTerminal allowance (api.candles_for)
+    CREATE TABLE IF NOT EXISTS candle_cache(
+      pool TEXT NOT NULL, span TEXT NOT NULL, fetched_at INTEGER NOT NULL, rows TEXT NOT NULL,
+      PRIMARY KEY(pool, span)
+    );
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

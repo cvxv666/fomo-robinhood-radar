@@ -12,6 +12,7 @@ tool.
 """
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import threading
@@ -313,6 +314,10 @@ def dex():
 RANGES = {"24h": ("hour", 1, 24), "7d": ("hour", 1, 168), "30d": ("day", 1, 30)}
 _candles: dict[tuple[str, str], tuple[float, list, float]] = {}   # key -> (fetched at, rows, ttl)
 CANDLE_TTL = 300
+# the bars are hourly or daily; a new one lands an hour apart at the soonest, and the bar in
+# progress moving is not worth a request every five minutes. Bots asked for eighty pools' charts
+# an hour and three workers each refetched every one of them every five minutes
+CANDLE_TTLS = {"24h": 600, "7d": 1200, "30d": 3600}
 # a burst whose day is over has its outcome; its candles are read again every few hours, not
 # every five minutes. /api/hot is asked eighty times a minute by bots, each answer measures every
 # burst in the window, and three workers refreshing forty settled pools every five minutes were
@@ -328,12 +333,25 @@ def _evict_stale() -> None:
         _candles.pop(key, None)
 
 
-def candles_for(pool: str, chain_name: str, span: str, ttl: float = CANDLE_TTL) -> list[list[float]]:
-    """OHLCV for one pool, cached for five minutes (or `ttl`) and empty rather than raising."""
+def candles_for(pool: str, chain_name: str, span: str, ttl: float | None = None,
+                conn: sqlite3.Connection | None = None) -> list[list[float]]:
+    """OHLCV for one pool, cached in this worker and (given `conn`) in the DB for every worker,
+    for `ttl` seconds (the span's own by default), and empty rather than raising."""
+    ttl = ttl or CANDLE_TTLS.get(span, CANDLE_TTL)
     key = (pool, span)
     hit = _candles.get(key)
     if hit and time.monotonic() - hit[0] < hit[2]:
         return hit[1]
+    stored = None
+    if conn is not None:
+        try:
+            stored = conn.execute("SELECT fetched_at, rows FROM candle_cache WHERE pool=? AND span=?", key).fetchone()
+        except sqlite3.Error as e:
+            log.debug("candle cache read: %s", e)
+        if stored and db.now() - stored["fetched_at"] < ttl:
+            rows = json.loads(stored["rows"])
+            _candles[key] = (time.monotonic(), rows, ttl)
+            return rows
     timeframe, aggregate, limit = RANGES[span]
     try:
         rows = gecko().ohlcv(chain_name, pool, timeframe, aggregate, limit)
@@ -341,9 +359,17 @@ def candles_for(pool: str, chain_name: str, span: str, ttl: float = CANDLE_TTL) 
         # an allowance spent is the ordinary case under load, not something to log every time
         if "allowance spent" not in str(e) and "not backing off" not in str(e):
             log.warning("candles for %s failed: %s", pool[:12], e)
-        return hit[1] if hit else []
+        # what any worker last saw beats an empty chart
+        return hit[1] if hit else json.loads(stored["rows"]) if stored else []
     _evict_stale()
     _candles[key] = (time.monotonic(), rows, ttl)
+    if conn is not None and rows:
+        try:
+            with db.tx(conn):
+                conn.execute("INSERT OR REPLACE INTO candle_cache(pool, span, fetched_at, rows) VALUES(?,?,?,?)",
+                             (pool, span, db.now(), json.dumps(rows)))
+        except sqlite3.Error as e:
+            log.debug("candle cache write: %s", e)
     return rows
 
 
@@ -513,7 +539,7 @@ def _pool_candles(conn: sqlite3.Connection, hours: int):
         last = conn.execute("SELECT MAX(ts) FROM bursts WHERE mint=?", (mint,)).fetchone()[0]
         settled = last is not None and db.now() - last > 86400
         return candles_for(row["pool_address"], row["chain"] or chain() or "robinhood", span,
-                           ttl=SETTLED_TTL if settled else CANDLE_TTL) or None
+                           ttl=SETTLED_TTL if settled else None, conn=conn) or None
     return candles
 
 
@@ -638,7 +664,7 @@ def token_chart(
     if row is None or not row["pool_address"]:
         return {"mint": mint, "span": span, "pool": None, "candles": [],
                 "why": "no pool on record for this token yet"}
-    rows = candles_for(row["pool_address"], row["chain"] or chain() or "robinhood", span)
+    rows = candles_for(row["pool_address"], row["chain"] or chain() or "robinhood", span, conn=conn)
     out = {"mint": mint, "span": span, "pool": row["pool_address"],
            "symbol": row["symbol"], "candles": rows, "source": "geckoterminal"}
     if not rows:
