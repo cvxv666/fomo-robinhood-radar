@@ -278,10 +278,38 @@ def test_expired_candles_leave_the_cache(monkeypatch):
     api._candles.clear()
     api.candles_for("0xold", "robinhood", "7d")
     # age it past the TTL by hand
-    at, rows = api._candles[("0xold", "7d")]
-    api._candles[("0xold", "7d")] = (at - api.CANDLE_TTL - 1, rows)
+    at, rows, ttl = api._candles[("0xold", "7d")]
+    api._candles[("0xold", "7d")] = (at - api.CANDLE_TTL - 1, rows, ttl)
     api.candles_for("0xnew", "robinhood", "7d")
     assert ("0xold", "7d") not in api._candles and ("0xnew", "7d") in api._candles
+
+
+def test_a_settled_bursts_candles_are_kept_for_hours_and_a_fresh_ones_for_minutes(client, monkeypatch):
+    """Three workers refreshing forty day-old pools every five minutes were most of the box's
+    GeckoTerminal allowance, for a scorecard whose numbers had settled the day before."""
+    from fomo_agent import db
+    calls = []
+
+    class FakeGecko:
+        def ohlcv(self, *a):
+            calls.append(a)
+            return [[1, 2, 3, 1, 2, 9]]
+
+    monkeypatch.setitem(api._clients, "gecko", FakeGecko())
+    api._candles.clear()
+    conn = db.connect()
+    now = db.now()
+    with db.tx(conn):
+        db.upsert_token(conn, "0x" + "5" * 40, chain="robinhood", symbol="OLD", pool_address="0xpoolold")
+        db.upsert_token(conn, "0x" + "6" * 40, chain="robinhood", symbol="NEW", pool_address="0xpoolnew")
+        for mint, ts in (("0x" + "5" * 40, now - 2 * 86400), ("0x" + "6" * 40, now - 600)):
+            conn.execute("INSERT INTO bursts(mint, chain, ts, px, conviction, wallets, usd, window_s, age_s, who) "
+                         "VALUES(?, 'robinhood', ?, 1.0, 2.0, 3, 900.0, 600, 60, '[]')", (mint, ts))
+    candles = api._pool_candles(conn, 168)
+    candles("0x" + "5" * 40); candles("0x" + "6" * 40)
+    assert api._candles[("0xpoolold", "7d")][2] == api.SETTLED_TTL
+    assert api._candles[("0xpoolnew", "7d")][2] == api.CANDLE_TTL
+    conn.close()
 
 
 def test_fresh_endpoint_carries_the_filters_it_applied(client):

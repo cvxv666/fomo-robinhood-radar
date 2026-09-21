@@ -325,8 +325,9 @@ class Settings:
     gecko_feeds: tuple[str, ...] = field(
         default_factory=lambda: tuple(c.strip() for c in _env("GECKO_FEEDS", "trending_1h,trending_6h,top_volume").split(",") if c.strip())
     )
-    # GeckoTerminal allows thirty a minute per IP and counts every process on the box together
-    gecko_max_req_per_min: int = field(default_factory=lambda: _int("GECKO_MAX_REQ_PER_MIN", 25))
+    # GeckoTerminal says thirty a minute per IP and counts every process on the box together;
+    # measured from the box on 21 Sep, the twentieth call in a minute is where the 429s begin
+    gecko_max_req_per_min: int = field(default_factory=lambda: _int("GECKO_MAX_REQ_PER_MIN", 20))
     # of which this many a minute are kept for the request threads (a chart on a token page);
     # the batch jobs wait on the rest
     gecko_reserve_per_min: int = field(default_factory=lambda: _int("GECKO_RESERVE_PER_MIN", 5))

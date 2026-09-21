@@ -311,23 +311,28 @@ def dex():
 # A candle set is the same for every visitor, and the pool it comes from produces one new bar an
 # hour at most. Serving it from memory keeps a page nobody has cached off the upstream rate limit.
 RANGES = {"24h": ("hour", 1, 24), "7d": ("hour", 1, 168), "30d": ("day", 1, 30)}
-_candles: dict[tuple[str, str], tuple[float, list]] = {}
+_candles: dict[tuple[str, str], tuple[float, list, float]] = {}   # key -> (fetched at, rows, ttl)
 CANDLE_TTL = 300
+# a burst whose day is over has its outcome; its candles are read again every few hours, not
+# every five minutes. /api/hot is asked eighty times a minute by bots, each answer measures every
+# burst in the window, and three workers refreshing forty settled pools every five minutes were
+# most of the box's GeckoTerminal allowance - the token page's chart found it spent
+SETTLED_TTL = 6 * 3600
 
 
 def _evict_stale() -> None:
     """An expired entry is never served, but until this it was never dropped either, so the cache
     only ever grew — one entry per pool per span, for every token anybody had ever looked at."""
-    cutoff = time.monotonic() - CANDLE_TTL
-    for key in [k for k, (at, _) in _candles.items() if at < cutoff]:
+    now = time.monotonic()
+    for key in [k for k, (at, _, ttl) in _candles.items() if now - at > ttl]:
         _candles.pop(key, None)
 
 
-def candles_for(pool: str, chain_name: str, span: str) -> list[list[float]]:
-    """OHLCV for one pool, cached for five minutes and empty rather than raising."""
+def candles_for(pool: str, chain_name: str, span: str, ttl: float = CANDLE_TTL) -> list[list[float]]:
+    """OHLCV for one pool, cached for five minutes (or `ttl`) and empty rather than raising."""
     key = (pool, span)
     hit = _candles.get(key)
-    if hit and time.monotonic() - hit[0] < CANDLE_TTL:
+    if hit and time.monotonic() - hit[0] < hit[2]:
         return hit[1]
     timeframe, aggregate, limit = RANGES[span]
     try:
@@ -338,7 +343,7 @@ def candles_for(pool: str, chain_name: str, span: str) -> list[list[float]]:
             log.warning("candles for %s failed: %s", pool[:12], e)
         return hit[1] if hit else []
     _evict_stale()
-    _candles[key] = (time.monotonic(), rows)
+    _candles[key] = (time.monotonic(), rows, ttl)
     return rows
 
 
@@ -505,7 +510,10 @@ def _pool_candles(conn: sqlite3.Connection, hours: int):
         row = conn.execute("SELECT pool_address, chain FROM tokens WHERE mint=?", (mint,)).fetchone()
         if not row or not row["pool_address"]:
             return None
-        return candles_for(row["pool_address"], row["chain"] or chain() or "robinhood", span) or None
+        last = conn.execute("SELECT MAX(ts) FROM bursts WHERE mint=?", (mint,)).fetchone()[0]
+        settled = last is not None and db.now() - last > 86400
+        return candles_for(row["pool_address"], row["chain"] or chain() or "robinhood", span,
+                           ttl=SETTLED_TTL if settled else CANDLE_TTL) or None
     return candles
 
 
