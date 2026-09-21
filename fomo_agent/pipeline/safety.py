@@ -311,13 +311,15 @@ def sweep(conn: sqlite3.Connection, limit: int = 12, now: int | None = None, rpc
     a dozen screener requests every fifteen minutes.
     """
     now = now or db.now()
+    # a no from the pool's silence is asked again here too: every feed has dropped the token by
+    # then, so nothing else will, and a first sell is the only way back in
     rows = conn.execute(
         "SELECT tk.mint FROM tokens tk WHERE tk.mint IN ("
         "  SELECT tr.mint FROM trades tr JOIN traders t ON t.address = tr.address "
         "  WHERE tr.side = 'buy' AND tr.ts >= ? AND t.score >= 60) "
-        "AND COALESCE(tk.sellable, 1) != 0 AND COALESCE(tk.sell_checked_at, 0) < ? "
+        "AND (COALESCE(tk.sellable, 1) != 0 OR tk.sell_note LIKE ?) AND COALESCE(tk.sell_checked_at, 0) < ? "
         "ORDER BY COALESCE(tk.sell_checked_at, 0) LIMIT ?",
-        (now - 86400, now - 1800, limit)).fetchall()
+        (now - 86400, f"%{SILENCE}%", now - 1800, limit)).fetchall()
     stats = {"asked": 0, "unsellable": 0, "sellable": 0, "unknown": 0}
     for r in rows:
         v = check(conn, r["mint"], rpc=rpc, gt=gt, now=now, force=True)

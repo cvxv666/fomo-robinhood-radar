@@ -208,3 +208,18 @@ def test_a_pushed_token_that_proves_unsellable_voids_the_push_to_the_chats_that_
     # a token nobody was told about is nobody's business
     v = safety.check(conn, TRAP, rpc=NoRpc(), gt=FakeGt(buys=91, sells=0, age_s=2160), now=now, force=True)
     assert v["sellable"] == 0 and len(tg.sent) == 2
+
+
+def test_the_sweep_asks_again_about_a_silence_verdict_and_not_about_a_revert(conn):
+    class NoRpc:
+        def call(self, *a):
+            raise RpcError("down")
+    now = db.now()
+    safety.check(conn, FINE, rpc=NoRpc(), gt=FakeGt(buys=50, sells=0, age_s=1200), now=now, force=True)
+    safety.check(conn, TRAP, rpc=FakeRpc(), gt=FakeGt(), now=now, force=True)
+    assert conn.execute("SELECT COUNT(*) FROM tokens WHERE sellable = 0").fetchone()[0] == 2
+    # an hour on, the silence is asked again and the pool's three sells lift it; the revert is not asked
+    stats = safety.sweep(conn, limit=10, now=now + 3600, rpc=NoRpc(), gt=FakeGt(buys=60, sells=3, age_s=4800))
+    assert stats["asked"] == 1 and stats["sellable"] == 1
+    assert conn.execute("SELECT sellable FROM tokens WHERE mint = ?", (FINE,)).fetchone()[0] == 1
+    assert conn.execute("SELECT sellable FROM tokens WHERE mint = ?", (TRAP,)).fetchone()[0] == 0
