@@ -145,13 +145,14 @@ def fill_usd(legs: dict[str, float], eth_price: float | None) -> float | None:
 class RobinhoodRPC:
     """Tracker over the chain's public RPC. Two requests find the fills; receipts are batched."""
 
-    def __init__(self, url: str | None = None, client: httpx.Client | None = None):
+    def __init__(self, url: str | None = None, client: httpx.Client | None = None, timeout: float = 90):
         self.url = url or settings.rpc_url
         # the endpoints in the order they are asked; a 429 on one moves the next call to the next
         self.urls = [self.url] + [u for u in settings.rpc_urls if u != self.url]
         self.spared = 0   # calls the extra endpoints answered while the node was rate-limiting
+        # ninety seconds suits a 200k-block scan; the watcher passes its own, shorter one
         self.http = client or httpx.Client(
-            timeout=90,
+            timeout=timeout,
             headers={"content-type": "application/json", "user-agent": settings.rpc_user_agent},
         )
         self.routers = {r.lower() for r in settings.rpc_routers}

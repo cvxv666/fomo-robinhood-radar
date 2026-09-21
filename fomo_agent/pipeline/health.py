@@ -105,8 +105,10 @@ def checks(conn: sqlite3.Connection, rpc: RobinhoodRPC | None = None) -> list[di
             st = {}
         if (st.get("errors") or 0) > (st.get("wallets") or 0):
             lost += 1
-    # The watcher keeps no ledger, but the tape it writes does: the roster fills every minute of
-    # the day, so a quarter of an hour with no fill at all is a quarter of an hour it was blind.
+    # The watcher keeps no ledger, but the tape it writes does: the roster fills most minutes of
+    # the day, so a quarter of an hour with no fill at all is either a quiet chain or a blind
+    # watcher. The heartbeat in the journal says which; the tape alone cannot (21 Sep: 23 quiet
+    # minutes at two in the morning, the watcher ticking through every one of them).
     stamps = [r[0] for r in conn.execute("SELECT ts FROM trades WHERE ts >= ? ORDER BY ts", (now - 6 * 3600,))]
     gap = max((b - a for a, b in zip(stamps, stamps[1:])), default=0) if len(stamps) > 20 else 0
 
@@ -138,7 +140,8 @@ def checks(conn: sqlite3.Connection, rpc: RobinhoodRPC | None = None) -> list[di
                       " - the node is refusing eth_getLogs; see `journalctl -u radar-collect | grep 'scan failed'`")},
         {"name": "watcher gaps", "ok": gap < 900,
          "detail": (f"longest silence on the tape in 6h: {gap // 60} min" if len(stamps) > 20 else "too few fills to judge")
-                   + ("" if gap < 900 else " - the watcher was blind that long; `journalctl -u radar-watch | grep 'rpc says'`")},
+                   + ("" if gap < 900 else " - a quiet chain or a blind watcher: `journalctl -u radar-watch | grep -E 'alive|took|rpc says'` "
+                      "says which (a heartbeat every few minutes through the gap means the chain was quiet)")},
         {"name": "wallet resolution", "ok": True,
          "detail": f"{unresolved} fomo users still without an on-chain address, "
                    f"{resolvable} of them with swaps to try, {unresolved - resolvable} with none"},

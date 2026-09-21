@@ -786,6 +786,19 @@ def fmt_followup(row, m: dict) -> str:
     ]) + ("\n(from the tape only)" if m.get("witness") == "tape" else "")
 
 
+def fmt_void(row, note: str, now: int | None = None) -> str:
+    """The push taken back: what settled it and what it means for the record. The same shape as
+    the follow-up, so the reader knows the message is about a call they were sent."""
+    now = now or db.now()
+    sym = row["sym"] if "sym" in row.keys() and row["sym"] else None
+    if sym is None:
+        sym = row["mint"][:8]
+    mark = "▲" if row["kind"] == "burst" else "◆"
+    head = f"⚠ {mark} {token_link(row['mint'], sym)} · unsellable, {ago(row['ts'], now)} after the push"
+    fact = note[0].upper() + note[1:] + ("" if note.endswith(".") else ".")
+    return "\n".join([head, "", esc(fact), "Off every feed from now; the record counts it as a honeypot."])
+
+
 def fmt_fill(f: dict, now: int | None = None) -> str:
     """One fill of a followed wallet: who, did what, how much, of what - and the buy link."""
     name = f.get("handle") or f["address"][:10]

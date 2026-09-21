@@ -208,6 +208,13 @@ class Settings:
     # A token younger than this (since the cohort's first fill) is pushed only if the pool shows
     # somebody besides the cohort in it: a sell, or more buyers than the entrants we counted.
     hot_young_s: int = field(default_factory=lambda: _int("HOT_YOUNG_S", 1800))
+    # The pool's silence as a witness against selling: `min_buys` buys and not one sell after
+    # `min_age_s` says nobody has left. The more have bought, the sooner it speaks: the wait
+    # shrinks in proportion (8 buys wait the full half hour, 16 a quarter, 48 the floor). ZEC
+    # went out as a launch at minute 20 with fifty buyers and no seller, and was called at 36.
+    sell_silence_min_buys: int = field(default_factory=lambda: _int("SELL_SILENCE_MIN_BUYS", 8))
+    sell_silence_min_age_s: int = field(default_factory=lambda: _int("SELL_SILENCE_MIN_AGE_S", 1800))
+    sell_silence_floor_s: int = field(default_factory=lambda: _int("SELL_SILENCE_FLOOR_S", 300))
     # A launch whose name was pushed this recently is a clone and is not pushed; a burst on one
     # needs half again the conviction. Two more PAWSINUs went out the hour after the real one.
     telegram_clone_hours: int = field(default_factory=lambda: _int("TELEGRAM_CLONE_HOURS", 24))
@@ -251,6 +258,13 @@ class Settings:
     watch_roster_refresh_s: int = field(default_factory=lambda: _int("WATCH_ROSTER_REFRESH_S", 600))
     watch_start_back_blocks: int = field(default_factory=lambda: _int("WATCH_START_BACK_BLOCKS", 600))
     watch_max_range_blocks: int = field(default_factory=lambda: _int("WATCH_MAX_RANGE_BLOCKS", 6000))
+    # A tick that finds nothing says nothing, so a quiet chain and a stalled watcher read the same
+    # from the journal: one line every so often says which. And a tick over twice the poll is
+    # worth a line of its own, with what it was doing.
+    watch_heartbeat_s: int = field(default_factory=lambda: _int("WATCH_HEARTBEAT_S", 300))
+    # The watcher's calls are two hundred blocks each; ninety seconds waiting on one of them is
+    # four missed ticks, and the fallback chain in `_post` can wait that long on every endpoint.
+    watch_rpc_timeout_s: int = field(default_factory=lambda: _int("WATCH_RPC_TIMEOUT_S", 30))
 
     # public HTTP API the site and any third-party client read from
     api_host: str = field(default_factory=lambda: _env("API_HOST", "127.0.0.1"))
@@ -291,6 +305,9 @@ class Settings:
 
     # storage
     db_path: Path = field(default_factory=lambda: Path(_env("DB_PATH", "fomo_agent.db")))
+    # one allowance per box for the APIs that count by IP: every process on the machine shares it
+    ratelimit_path: Path = field(default_factory=lambda: Path(
+        _env("RATELIMIT_PATH") or (Path(_env("DB_PATH", "fomo_agent.db")).parent / "ratelimit.db")))
 
     # thresholds
     new_token_min_mcap_usd: float = field(default_factory=lambda: _float("NEW_TOKEN_MIN_MCAP_USD", 500_000))
@@ -308,7 +325,11 @@ class Settings:
     gecko_feeds: tuple[str, ...] = field(
         default_factory=lambda: tuple(c.strip() for c in _env("GECKO_FEEDS", "trending_1h,trending_6h,top_volume").split(",") if c.strip())
     )
-    gecko_max_req_per_min: int = field(default_factory=lambda: _int("GECKO_MAX_REQ_PER_MIN", 20))
+    # GeckoTerminal allows thirty a minute per IP and counts every process on the box together
+    gecko_max_req_per_min: int = field(default_factory=lambda: _int("GECKO_MAX_REQ_PER_MIN", 25))
+    # of which this many a minute are kept for the request threads (a chart on a token page);
+    # the batch jobs wait on the rest
+    gecko_reserve_per_min: int = field(default_factory=lambda: _int("GECKO_RESERVE_PER_MIN", 5))
     # codex: 10k requests/month on the $1 plan -> one filterTokens per 300s = ~8.6k/month
     codex_min_interval_s: float = field(default_factory=lambda: _float("CODEX_MIN_INTERVAL_S", 900))
     # server-side potentialScam=false filter. Observed 2026-09-04: drops spoofed-supply tokens but ALSO real

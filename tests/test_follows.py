@@ -60,3 +60,21 @@ def test_only_real_fills_are_sent_once_and_capped(tmp_path, monkeypatch):
     text = fmt_fill(due[0][1], now)
     assert "unipcs" in text and "bought" in text and "$2.4k" in text and "$JERRY" in text and "buy on fomo" in text
     assert "sold" in fmt_fill(due[1][1], now)
+
+
+def test_a_chat_that_blocked_the_bot_hears_nothing_and_nothing_is_written_down(tmp_path):
+    """Six Forbiddens a night, each written down as sent: the follows of a gone chat wait for
+    it to come back, and until then no fill goes near them."""
+    conn = db.connect(tmp_path / "f.db")
+    setup(conn)
+    follows.follow(conn, 7, "unipcs")
+    now = db.now()
+    with db.tx(conn):
+        conn.execute("UPDATE bot_subscribers SET active = 0 WHERE chat_id = '7'")
+        db.insert_trade(conn, sig="a", address=W, chain="robinhood", mint=MINT, side="buy", usd_value=2400.0, token_amount=1.0, ts=now - 20, source="rpc", kind="trade")
+    assert follows.alerts(conn, ["a"], now) == []
+    assert conn.execute("SELECT COUNT(*) FROM bot_sent").fetchone()[0] == 0
+    assert len(follows.following(conn, 7)) == 1, "the follow itself is kept for the day the chat is back"
+    with db.tx(conn):
+        conn.execute("UPDATE bot_subscribers SET active = 1 WHERE chat_id = '7'")
+    assert [f["sig"] for _, f in follows.alerts(conn, ["a"], now)] == ["a"]

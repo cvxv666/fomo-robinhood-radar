@@ -10,7 +10,9 @@ from fomo_agent.config import settings
 
 
 @pytest.fixture(autouse=True)
-def _no_gate_unless_asked(monkeypatch):
+def _no_gate_unless_asked(monkeypatch, tmp_path):
+    # the box-wide rate limit lives in a file next to the DB; here, next to the test's
+    monkeypatch.setattr(settings, "ratelimit_path", tmp_path / "ratelimit.db")
     monkeypatch.setattr(settings, "pro_price_usd", 0.0)
     monkeypatch.setattr(settings, "pro_grace_until", 0)
     monkeypatch.setattr(settings, "pro_trial_days", 0)

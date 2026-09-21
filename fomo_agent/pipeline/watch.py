@@ -43,6 +43,8 @@ class Watch:
     fills: int = 0
     alerts: int = 0
     burns: pro.Cursor = field(default_factory=pro.Cursor)
+    last_fill_at: int = 0      # the newest fill's own time, for the heartbeat
+    heartbeat_at: float = 0.0
 
 
 def roster(conn: sqlite3.Connection) -> list[str]:
@@ -81,6 +83,7 @@ def tick(conn: sqlite3.Connection, w: Watch, now: int | None = None) -> dict:
                 if db.insert_trade(conn, **t.model_dump()):
                     stats["fills"] += 1
                     new_sigs.append(t.sig)
+                    w.last_fill_at = max(w.last_fill_at, t.ts)
         try:
             db.save_token_decimals(conn, w.rpc.known_decimals())
         except Exception as e:  # noqa: BLE001
@@ -264,8 +267,22 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
     return sent
 
 
+def heartbeat(w: Watch, stats: dict, now: int | None = None) -> str:
+    """One line for the journal: alive, at which block, and when the roster last filled.
+
+    A tick that finds nothing says nothing, so the journal of a quiet night and the journal of a
+    watcher hung on a socket look the same - twenty-three minutes without a line, and a report
+    that read the gap as blocks never scanned. They were scanned; the roster made no fills. This
+    line says so every few minutes, and the tape's silence stops being the watcher's.
+    """
+    now = now or db.now()
+    quiet = f"{(now - w.last_fill_at) // 60} min ago" if w.last_fill_at else "not yet this run"
+    return (f"watch: alive · tick {w.ticks} · head {stats.get('head')} · "
+            f"{w.fills} fills this run, last {quiet} · {w.alerts} alerts")
+
+
 def run(conn: sqlite3.Connection, once: bool = False, rpc: RobinhoodRPC | None = None) -> dict:
-    rpc = rpc or RobinhoodRPC()
+    rpc = rpc or RobinhoodRPC(timeout=settings.watch_rpc_timeout_s)
     rpc.limiter.max = settings.watch_rpc_max_per_min
     w = Watch(rpc=rpc)
     # Four thousand "rpc scan" lines a day would bury the ten that matter. A tick says something
@@ -279,8 +296,15 @@ def run(conn: sqlite3.Connection, once: bool = False, rpc: RobinhoodRPC | None =
         started = time.monotonic()
         try:
             s = tick(conn, w)
+            took = time.monotonic() - started
             if s["fills"] or s["hot"]:
                 log.info("watch: %s", s)
+            # a tick over twice its interval is worth a line of its own: this is where a stall shows
+            if took > 2 * settings.watch_poll_s:
+                log.warning("watch: tick took %.0fs (head %s, %d blocks, %d fills)", took, s.get("head"), s.get("blocks", 0), s.get("fills", 0))
+            if time.monotonic() - w.heartbeat_at >= settings.watch_heartbeat_s:
+                log.info(heartbeat(w, s))
+                w.heartbeat_at = time.monotonic()
         except RpcError as e:
             # the node throttling us is waited out; the node failing on its own side is not -
             # the next attempt usually lands on a backend that answers

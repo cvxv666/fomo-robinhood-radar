@@ -23,7 +23,7 @@ import httpx
 
 from ..config import settings
 from ..models import NewToken, norm_addr
-from ..ratelimit import RateLimiter
+from ..ratelimit import shared
 from .filters import filter_tokens
 
 log = logging.getLogger(__name__)
@@ -56,7 +56,8 @@ class GeckoTerminal:
         self.http = client or httpx.Client(base_url=BASE, timeout=20, headers={"accept": "application/json"})
         self.chains = tuple(chains) if chains else settings.dex_chains
         self.feeds = tuple(feeds) if feeds else settings.gecko_feeds
-        self.limiter = RateLimiter(settings.gecko_max_req_per_min, "geckoterminal")
+        # one window for the whole box: GeckoTerminal counts by IP, and there are six of us
+        self.limiter = shared(settings.gecko_max_req_per_min, "geckoterminal", reserve=settings.gecko_reserve_per_min)
         self._last = 0.0
         self.included: list[dict] = []   # the `included` block of the last answer, for callers that asked for it
         # A batch job waits its turn and backs off on 429; that is the right shape for a pass that
@@ -90,9 +91,8 @@ class GeckoTerminal:
     def _get(self, path: str, params: dict | None = None) -> list[dict]:
         """One GET against the rate limit, backing off on 429 and giving up rather than hammering."""
         if not self.patient:
-            if not self.limiter.room():
+            if not self.limiter.take():
                 raise Busy(f"geckoterminal: allowance spent, not waiting for {path}")
-            self.limiter.wait()   # there is room, so this returns at once
             r = self.http.get(path, params=params or {})
             self._last = time.monotonic()
             if r.status_code == 429:

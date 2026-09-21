@@ -33,8 +33,7 @@ from ..sources.rpc import BALANCE_SELECTOR, RobinhoodRPC, RpcError, topic_for
 log = logging.getLogger(__name__)
 
 TRANSFER_SELECTOR = "0xa9059cbb"   # transfer(address,uint256)
-MIN_BUYS_FOR_SILENCE = 8           # buys with no sell at all before the silence counts
-MIN_AGE_FOR_SILENCE_S = 30 * 60    # and the pool has to have had time for one
+SILENCE = "not one sell"           # the wording of a silence verdict; the one kind of no that is asked again
 
 
 def _u256(n: int) -> str:
@@ -51,7 +50,13 @@ def probe_transfer(rpc: RobinhoodRPC, mint: str, pool: str, holder: str) -> tupl
     Returns ("blocked" | "ok" | "unknown", why). Unknown is a holder with no balance to move, or
     a pool that is not a plain address (a v4-style pool id has no account to transfer to).
     """
-    if not _is_address(pool):
+    # A v4-style pool is an id, not an account, and the sell goes through the router instead. A
+    # transfer to the router from a plain holder is the same first step; a revert there is the
+    # same no (the sender-list honeypot says no to any transfer that is not the deployer's).
+    # A transfer that goes through says less, because the trap may be keyed to the pool manager
+    # rather than the router - so that answer stays "unknown", and the pool's own record decides.
+    to, where, weak = (pool, "pool", False) if _is_address(pool) else (next(iter(settings.rpc_routers), ""), "router", True)
+    if not _is_address(to):
         return "unknown", "pool is not a plain address; nothing to transfer to"
     try:
         raw = rpc.call("eth_call", [{"to": mint, "data": BALANCE_SELECTOR + topic_for(holder)[2:]}, "latest"])
@@ -61,17 +66,18 @@ def probe_transfer(rpc: RobinhoodRPC, mint: str, pool: str, holder: str) -> tupl
     if units <= 0:
         return "unknown", "the holder has nothing left to move"
     amount = max(1, units // 100)
-    data = TRANSFER_SELECTOR + topic_for(pool)[2:] + _u256(amount)
+    data = TRANSFER_SELECTOR + topic_for(to)[2:] + _u256(amount)
     try:
         raw = rpc.call("eth_call", [{"from": holder, "to": mint, "data": data}, "latest"])
     except RpcError as e:
-        return "blocked", f"a transfer to the pool reverts: {str(e)[:120]}"
+        return "blocked", f"a transfer to the {where} reverts: {str(e)[:120]}"
+    ok = "unknown" if weak else "ok"
     if raw in (None, "0x"):
-        return "ok", "a transfer to the pool goes through (returns nothing, which old tokens do)"
+        return ok, f"a transfer to the {where} goes through (returns nothing, which old tokens do)"
     try:
-        return ("ok", "a transfer to the pool goes through") if int(raw, 16) else ("blocked", "a transfer to the pool returns false")
+        return (ok, f"a transfer to the {where} goes through") if int(raw, 16) else ("blocked", f"a transfer to the {where} returns false")
     except ValueError:
-        return "unknown", "a transfer to the pool answered something unreadable"
+        return "unknown", f"a transfer to the {where} answered something unreadable"
 
 
 def holders_to_try(conn: sqlite3.Connection, mint: str, limit: int = 3) -> list[str]:
@@ -105,9 +111,21 @@ def pool_silence(gt, chain: str, pool: str, now: int) -> tuple[str, str] | None:
     age = (now - created) if created else None
     if sells > 0:
         return "sells", f"{sells} sells against {buys} buys in the pool's last day"
-    if buys >= MIN_BUYS_FOR_SILENCE and age is not None and age >= MIN_AGE_FOR_SILENCE_S:
-        return "silent", f"{buys} buys and not one sell in the pool's last day, {age // 60} minutes in"
+    if buys >= settings.sell_silence_min_buys and age is not None and age >= silence_wait_s(buys):
+        return "silent", f"{buys} buys and {SILENCE} in the pool's last day, {age // 60} minutes in"
     return None
+
+
+def silence_wait_s(buys: int) -> int:
+    """How long a pool with this many buys and no sell gets before the silence is a verdict.
+
+    Eight buys wait the full half hour - a small pool may just be early. Ninety-one buys with
+    nobody out is not early at any age, so the wait shrinks in proportion, down to the floor.
+    """
+    full, floor = settings.sell_silence_min_age_s, settings.sell_silence_floor_s
+    if buys <= 0:
+        return full
+    return int(max(floor, min(full, full * settings.sell_silence_min_buys / buys)))
 
 
 def check(conn: sqlite3.Connection, mint: str, rpc: RobinhoodRPC | None = None, gt=None,
@@ -122,8 +140,10 @@ def check(conn: sqlite3.Connection, mint: str, rpc: RobinhoodRPC | None = None, 
         return {"sellable": None, "note": "unknown token", "checked_at": None, "asked": False}
     if not force and row["sell_checked_at"] and now - row["sell_checked_at"] < max_age_s:
         return {"sellable": row["sellable"], "note": row["sell_note"], "checked_at": row["sell_checked_at"], "asked": False}
-    # a verdict of no is final: a token that blocked a sell once is not asked again to be sure
-    if not force and row["sellable"] == 0:
+    # a verdict of no is final: a token that blocked a sell once is not asked again to be sure.
+    # The pool's silence is the one no that can be outgrown - a first sell lands and the count
+    # says so - and that one is asked again after its while, like a yes
+    if not force and row["sellable"] == 0 and SILENCE not in (row["sell_note"] or ""):
         return {"sellable": 0, "note": row["sell_note"], "checked_at": row["sell_checked_at"], "asked": False}
 
     chain = row["chain"] or (settings.dex_chains[0] if settings.dex_chains else "robinhood")
@@ -174,7 +194,66 @@ def check(conn: sqlite3.Connection, mint: str, rpc: RobinhoodRPC | None = None, 
         conn.execute("UPDATE tokens SET sellable=?, sell_checked_at=?, sell_note=? WHERE mint=?", (verdict, now, note, mint))
     if verdict == 0:
         log.warning("unsellable: %s - %s", mint, note)
+        if row["sellable"] != 0:
+            try:
+                void_pushes(conn, mint, note, now)
+            except Exception as e:  # noqa: BLE001 - the verdict stands whether or not the word got out
+                log.warning("could not void the pushes on %s: %s", mint[:10], e)
     return {"sellable": verdict, "note": note, "checked_at": now, "asked": True}
+
+
+def void_pushes(conn: sqlite3.Connection, mint: str, note: str, now: int | None = None, tg=None) -> int:
+    """A token that was pushed and has since proved unsellable: the chats that got the push are
+    told so, once, with the fact that settled it, and the hooks get the same event.
+
+    ZEC went out as a launch to seven chats at 19:47 and was called unsellable at 20:03, and
+    nobody who got the push heard about it until the hour's follow-up. Sixteen minutes is the
+    difference between a reader who checks the pool and one who buys more. Facts only: the count
+    and the verdict, no advice - what to do with a pool nobody has left is the reader's call.
+    """
+    from . import pushes as ledger
+
+    now = now or db.now()
+    rows = conn.execute("SELECT p.*, COALESCE(tk.symbol, substr(p.mint, 1, 8)) sym FROM pushes p "
+                        "LEFT JOIN tokens tk ON tk.mint = p.mint WHERE p.mint = ? AND p.ts >= ? ORDER BY p.ts",
+                        (mint, now - settings.telegram_realert_hours * 3600)).fetchall()
+    if not rows:
+        return 0
+    from ..bot import Telegram, fmt_void, gone, unsubscribe
+    from . import discord, webhooks
+
+    first = rows[0]
+    text = fmt_void(first, note, now)
+    key = f"void:{mint}"
+    first_time = conn.execute("SELECT 1 FROM bot_sent WHERE mint = ?", (key,)).fetchone() is None
+    chats: list[str] = []
+    for row in rows:
+        chats += [c for c in ledger.recipients(conn, row) if c not in chats]
+    sent = 0
+    if tg is None and settings.telegram_bot_token:
+        tg = Telegram()
+    for chat_id in chats:
+        if conn.execute("SELECT 1 FROM bot_sent WHERE chat_id = ? AND mint = ?", (chat_id, key)).fetchone():
+            continue
+        if tg is None:
+            continue
+        try:
+            tg.send(chat_id, text)
+            sent += 1
+        except Exception as e:  # noqa: BLE001 - one blocked chat must not stop the rest
+            log.warning("void of %s to %s failed: %s", mint[:10], chat_id, e)
+            if gone(e):
+                unsubscribe(conn, chat_id)
+            continue
+        with db.tx(conn):
+            conn.execute("INSERT INTO bot_sent(chat_id, mint, ts) VALUES(?,?,?)", (chat_id, key, now))
+    if first_time:
+        item = {"mint": mint, "sym": first["sym"], "kind": first["kind"],
+                "pushed_at": first["ts"], "note": note, "minutes_since_push": (now - first["ts"]) // 60}
+        webhooks.fire(conn, "void", item, now)
+        discord.send(text)
+    log.info("void %s: %d chats told, %s", mint[:10], sent, note)
+    return sent
 
 
 _crowd_cache: dict[str, tuple[int, dict | None]] = {}

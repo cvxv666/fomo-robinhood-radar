@@ -26,9 +26,17 @@ out = lambda k, v: print(k, json.dumps(v, ensure_ascii=False, default=str))  # n
 
 # ── 1. what went to telegram, and what became of it
 rows = conn.execute("SELECT chat_id, mint, ts FROM bot_sent WHERE ts >= ? ORDER BY ts", (since,)).fetchall()
-pushes = {}
+# bot_sent holds everything the bot wrote down as sent: launches (the mint), bursts (hot:mint),
+# follow alerts (fill:sig), voids (void:mint). Only the first two are pushes; the day the
+# follows went live, forty-one fills read as forty-one failed launches named after a tx hash
+pushes = {}; follows = collections.Counter(); voids = set()
 for r in rows:
-    key = r["mint"]; kind = "burst" if key.startswith("hot:") else "launch"; mint = key.split(":", 1)[-1]
+    key = r["mint"]
+    if key.startswith("fill:"):
+        follows[r["chat_id"]] += 1; continue
+    if key.startswith("void:"):
+        voids.add(key.split(":", 1)[-1]); continue
+    kind = "burst" if key.startswith("hot:") else "launch"; mint = key.split(":", 1)[-1]
     p = pushes.setdefault((kind, mint), {"kind": kind, "mint": mint, "ts": r["ts"], "chats": set()})
     p["chats"].add(r["chat_id"]); p["ts"] = min(p["ts"], r["ts"])
 _candles_once = _pool_candles(conn)
@@ -58,20 +66,30 @@ for p in sorted(pushes.values(), key=lambda p: p["ts"]):
     vol_since = round(sum(c[5] for c in cds if len(c) > 5 and c[0] >= ts - 300)) if cds else None
     was_seeded = seeded(conn, mint, now)["seeded"]
     # a pool nobody traded after the push is not flat, it is dead: the price did not move because
-    # nothing happened, and NCAT read 1.02x for a day on $995 of trades
+    # nothing happened, and NCAT read 1.02x for a day on $995 of trades. And a token at a
+    # quarter of the call is not open however young, nor flat however high it went first: FN
+    # peaked 1.69x and sat at 0.04x, and read "flat" because failed wanted a peak under 1.5
+    down = nowx is not None and nowx < 0.5
     verdict = ("honeypot" if tk and tk["sellable"] == 0 else "seeded" if was_seeded else
                "dead" if cds and now - ts >= 3600 and (vol_since or 0) < 2000 else
+               "dumped" if down and (best or 0) >= 1.5 else "failed" if down else
                "open" if now - ts < 6 * 3600 and (best or 0) < 2 else
-               "reached 2x" if (best or 0) >= 2 else "failed" if (nowx or 0) < 0.5 and (best or 0) < 1.5 else "flat")
+               "reached 2x" if (best or 0) >= 2 else "flat")
     report.append({"t": hhmm(ts), "kind": p["kind"], "sym": sym, "mint": mint, "chats": len(p["chats"]), "best": best, "now": nowx,
                    "vol_since": vol_since, "candles": bool(cds), "seeded": was_seeded, "unsellable": bool(tk and tk["sellable"] == 0),
+                   "voided": mint in voids,
                    "conv": b["conviction"] if b else None, "wallets": b["wallets"] if b else None, "age_h": round((now - ts) / 3600, 1), "verdict": verdict})
 out("PUSHES", report)
 out("PUSH_TOTALS", {"pushes": len(report), "launch": sum(r["kind"] == "launch" for r in report), "burst": sum(r["kind"] == "burst" for r in report),
                     "reached_2x": sum(r["verdict"] == "reached 2x" for r in report), "failed": sum(r["verdict"] == "failed" for r in report),
+                    "dumped": sum(r["verdict"] == "dumped" for r in report),
                     "flat": sum(r["verdict"] == "flat" for r in report), "open": sum(r["verdict"] == "open" for r in report),
                     "dead": sum(r["verdict"] == "dead" for r in report), "seeded": sum(r["verdict"] == "seeded" for r in report),
                     "honeypot": sum(r["verdict"] == "honeypot" for r in report), "bursts_recorded": n1("SELECT COUNT(*) FROM bursts WHERE ts >= ?", since)})
+out("FOLLOWS", {"alerts": sum(follows.values()), "chats": len(follows), "per_chat": dict(follows.most_common(5)),
+                "wallets_followed": n1("SELECT COUNT(DISTINCT address) FROM follows"),
+                "chats_following": n1("SELECT COUNT(DISTINCT chat_id) FROM follows"),
+                "voids_24h": sorted(voids)})
 out("UNSELLABLE_24H", [dict(r) for r in conn.execute("SELECT symbol, mint, sell_note FROM tokens WHERE sellable = 0 AND sell_checked_at >= ?", (since,))])
 # the seeding waves provenance.waves caught: one-fill-each buys into a queue of trusted wallets
 waves = []
@@ -161,6 +179,9 @@ for u in ("radar-api", "radar-bot", "radar-watch", "radar-collect", "radar-fomo"
 out("LOGS", logs)
 w = subprocess.run(["journalctl", "-u", "radar-watch", "--since", f"{HOURS} hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
 out("WATCH", {"ticks_with_fills": len(re.findall(r"watch: \{", w)), "fills": sum(int(x) for x in re.findall(r"'fills': (\d+)", w)),
+              # a tick that finds nothing writes nothing, so the gaps between lines are not gaps in
+              # the scan; the heartbeats and the slow-tick lines are what say whether it stalled
+              "heartbeats": len(re.findall(r"watch: alive", w)), "slow_ticks": re.findall(r"watch: tick took [^\n]*", w)[-5:],
               "rate_limited": len(re.findall(r"rate limited", w)), "bursts_pushed": sum(int(x) for x in re.findall(r"'sent': (\d+)", w)),
               "not_pushed_unsellable": len(re.findall(r"not pushed", w)),
               "spared_last": (re.findall(r"'spared': (\d+)", w) or ["0"])[-1],
@@ -168,6 +189,10 @@ out("WATCH", {"ticks_with_fills": len(re.findall(r"watch: \{", w)), "fills": sum
 c = subprocess.run(["journalctl", "-u", "radar-collect", "--since", f"{HOURS} hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
 out("COLLECT", {"passes": len(re.findall(r"track: \{", c)), "trades_written": sum(int(x) for x in re.findall(r"'trades': (\d+), 'errors'", c)),
                 "errors": sum(int(x) for x in re.findall(r"'errors': (\d+), 'by_source'", c)), "requests": sum(int(x) for x in re.findall(r"'RobinhoodRPC': (\d+)\}, 'kinds'", c)),
-                "holdings_failed": len(re.findall(r"holdings failed", c)), "last_scan": (re.findall(r"rpc scan: [^\n]*", c) or ["—"])[-1][:200]})
+                "holdings_failed": len(re.findall(r"holdings failed", c)),
+                # a pass the node cut short kept what it had read; the rest stays stale until the next
+                "holdings_cut_short": len(re.findall(r"holdings: after \d+ of \d+ pairs", c)),
+                "gecko_429": len(re.findall(r"geckoterminal 429", c)),
+                "last_scan": (re.findall(r"rpc scan: [^\n]*", c) or ["—"])[-1][:200]})
 out("DISK", {"df": subprocess.run(["df", "-h", "/"], capture_output=True, text=True).stdout.splitlines()[-1],
              "mem": subprocess.run(["free", "-m"], capture_output=True, text=True).stdout.splitlines()[1]})

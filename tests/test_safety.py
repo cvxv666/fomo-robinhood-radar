@@ -2,6 +2,7 @@
 import pytest
 
 from fomo_agent import db
+from fomo_agent.config import settings
 from fomo_agent.pipeline import analyze, hot, safety
 from fomo_agent.sources.rpc import RpcError
 
@@ -117,3 +118,93 @@ def test_the_sweep_asks_about_todays_tokens_once(conn):
     assert stats == {"asked": 2, "unsellable": 1, "sellable": 1, "unknown": 0}
     again = safety.sweep(conn, limit=10, rpc=rpc, gt=FakeGt())
     assert again["asked"] == 0, "a fresh verdict is not asked for again for a while"
+
+
+def test_the_silence_speaks_sooner_the_more_have_bought(conn, monkeypatch):
+    """ZEC: fifty buyers and no seller at minute 20 went out as a launch; the rule waited for 30."""
+    monkeypatch.setattr(settings, "sell_silence_min_buys", 8)
+    monkeypatch.setattr(settings, "sell_silence_min_age_s", 1800)
+    monkeypatch.setattr(settings, "sell_silence_floor_s", 300)
+    assert safety.silence_wait_s(8) == 1800 and safety.silence_wait_s(4) == 1800
+    assert safety.silence_wait_s(16) == 900 and safety.silence_wait_s(48) == 300 and safety.silence_wait_s(91) == 300
+
+    class NoRpc:
+        def call(self, *a):
+            raise RpcError("down")
+    # fifty buys, no sell, twenty minutes in: a no now, not at thirty
+    v = safety.check(conn, FINE, rpc=NoRpc(), gt=FakeGt(buys=50, sells=0, age_s=1200), force=True)
+    assert v["sellable"] == 0 and "50 buys" in v["note"]
+    # eight buys at twenty minutes is still early
+    v = safety.check(conn, TRAP, rpc=NoRpc(), gt=FakeGt(buys=8, sells=0, age_s=1200), force=True)
+    assert v["sellable"] is None
+
+
+def test_a_silence_verdict_is_asked_again_and_a_first_sell_lifts_it(conn):
+    class NoRpc:
+        def call(self, *a):
+            raise RpcError("down")
+    now = db.now()
+    v = safety.check(conn, FINE, rpc=NoRpc(), gt=FakeGt(buys=50, sells=0, age_s=1200), now=now, force=True)
+    assert v["sellable"] == 0
+    # inside its while the stored no is reused, like any answer
+    v = safety.check(conn, FINE, rpc=NoRpc(), gt=FakeGt(buys=60, sells=3, age_s=1500), now=now + 60)
+    assert v["sellable"] == 0 and not v["asked"]
+    # past it, the pool is asked again, and three sells make it a yes; a revert stays final
+    v = safety.check(conn, FINE, rpc=NoRpc(), gt=FakeGt(buys=60, sells=3, age_s=1500), now=now + 700)
+    assert v["sellable"] == 1 and v["asked"] and "3 sells" in v["note"]
+    safety.check(conn, TRAP, rpc=FakeRpc(), gt=FakeGt(), now=now, force=True)
+    v = safety.check(conn, TRAP, rpc=FakeRpc(), gt=FakeGt(buys=60, sells=3, age_s=1500), now=now + 700)
+    assert v["sellable"] == 0 and not v["asked"]
+
+
+def test_a_pool_that_is_an_id_is_probed_through_the_router_and_only_a_revert_counts(conn, monkeypatch):
+    """A v4-style pool has no account; the sell's first transfer goes to the router instead."""
+    router = "0x" + "9" * 40
+    monkeypatch.setattr(settings, "rpc_routers", (router,))
+    with db.tx(conn):
+        conn.execute("UPDATE tokens SET pool_address = ? WHERE mint IN (?, ?)", ("0x" + "ab" * 32, TRAP, FINE))
+    rpc = FakeRpc()
+    v = safety.check(conn, TRAP, rpc=rpc, gt=FakeGt(), force=True)
+    assert v["sellable"] == 0 and "router reverts" in v["note"]
+    _, params = [c for c in rpc.calls if c[1][0]["data"].startswith("0xa9059cbb")][0]
+    assert params[0]["data"][10:74] == "0" * 24 + "9" * 40, "the transfer went to the router"
+    # a transfer to the router that goes through is not a yes: the trap may be keyed elsewhere,
+    # and the pool's own count decides
+    v = safety.check(conn, FINE, rpc=FakeRpc(), gt=FakeGt(buys=50, sells=0, age_s=1200), force=True)
+    assert v["sellable"] == 0 and "not one sell" in v["note"]
+    v = safety.check(conn, FINE, rpc=FakeRpc(), gt=FakeGt(buys=50, sells=5, age_s=1200), force=True)
+    assert v["sellable"] == 1 and "5 sells" in v["note"]
+
+
+def test_a_pushed_token_that_proves_unsellable_voids_the_push_to_the_chats_that_got_it(conn, monkeypatch):
+    from fomo_agent.pipeline import pushes, webhooks
+    from tests.test_bot import FakeTelegram
+
+    monkeypatch.setattr(settings, "telegram_bot_token", "t")
+    fired = []
+    monkeypatch.setattr(webhooks, "fire", lambda conn, event, item, now=None, wait=False: fired.append((event, item)) or 0)
+    tg = FakeTelegram()
+    monkeypatch.setattr("fomo_agent.bot.Telegram", lambda *a, **k: tg)
+    now = db.now()
+    with db.tx(conn):
+        for c, active in (("7", 1), ("8", 1), ("9", 0)):
+            conn.execute("INSERT INTO bot_subscribers(chat_id, username, subscribed_at, active) VALUES(?, 'u', 0, ?)", (c, active))
+            conn.execute("INSERT INTO bot_sent(chat_id, mint, ts) VALUES(?, ?, ?)", (c, FINE, now - 960))
+    pushes.record(conn, "launch", {"mint": FINE, "sym": "FINE", "heat": 3.0, "buyers": 4}, 3, now - 960)
+
+    class NoRpc:
+        def call(self, *a):
+            raise RpcError("down")
+    v = safety.check(conn, FINE, rpc=NoRpc(), gt=FakeGt(buys=91, sells=0, age_s=2160), now=now, force=True)
+    assert v["sellable"] == 0
+    assert sorted(c for c, _ in tg.sent) == ["7", "8"], "the chats that got the push and are still here"
+    text = tg.sent[0][1]
+    assert "unsellable, 16m after the push" in text and "91 buys and not one sell" in text and "honeypot" in text
+    assert [e for e, _ in fired] == ["void"] and fired[0][1]["minutes_since_push"] == 16 and fired[0][1]["sym"] == "FINE"
+    # once: the next look at the same token says nothing more, to anyone
+    safety.check(conn, FINE, rpc=NoRpc(), gt=FakeGt(buys=95, sells=0, age_s=2400), now=now + 700, force=True)
+    assert len(tg.sent) == 2 and len(fired) == 1
+    assert conn.execute("SELECT COUNT(*) FROM bot_sent WHERE mint = ?", ("void:" + FINE,)).fetchone()[0] == 2
+    # a token nobody was told about is nobody's business
+    v = safety.check(conn, TRAP, rpc=NoRpc(), gt=FakeGt(buys=91, sells=0, age_s=2160), now=now, force=True)
+    assert v["sellable"] == 0 and len(tg.sent) == 2

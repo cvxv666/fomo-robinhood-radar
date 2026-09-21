@@ -84,10 +84,13 @@ def alerts(conn: sqlite3.Connection, sigs: list[str], now: int | None = None) ->
     now = now or db.now()
     out: list[tuple[str, dict]] = []
     marks = ",".join("?" * len(sigs))
+    # a chat that blocked the bot keeps its follows for the day it comes back, and hears nothing
+    # until then: six Forbiddens a night, each written down as sent, was the alternative
     rows = conn.execute(
         "SELECT tr.sig, tr.address, tr.mint, tr.side, tr.usd_value, tr.ts, COALESCE(tr.kind, 'trade') kind, "
         "  t.fomo_handle handle, t.score, COALESCE(tk.symbol, substr(tr.mint, 1, 8)) sym, f.chat_id "
         "FROM trades tr JOIN follows f ON f.address = tr.address JOIN traders t ON t.address = tr.address "
+        "JOIN bot_subscribers b ON b.chat_id = f.chat_id AND b.active = 1 "
         "LEFT JOIN tokens tk ON tk.mint = tr.mint "
         f"WHERE tr.sig IN ({marks}) AND COALESCE(tr.kind, 'trade') = 'trade' ORDER BY tr.ts", sigs).fetchall()
     for r in rows:
