@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import pathlib
+import time
 
 import httpx
 
@@ -42,9 +43,23 @@ class Telegram:
         self.requests = 0
         self._file_ids: dict[str, str] = {}
 
-    def call(self, method: str, **params) -> object:
+    def call(self, method: str, attempts: int = 3, **params) -> object:
+        """One Bot API call. A 429 is waited out and tried again - Telegram says for how long,
+        and a send that gives up on the first one is a reader who did not hear the alert."""
         self.requests += 1
         r = self.http.post(API.format(token=self.token, method=method), json=params)
+        for _ in range(attempts - 1):
+            if r.status_code != 429:
+                break
+            wait = settings.telegram_retry_after_s
+            try:
+                wait = float((r.json().get("parameters") or {}).get("retry_after") or wait)
+            except ValueError:
+                pass
+            log.info("telegram: %s rate limited, waiting %.1fs", method, wait)
+            time.sleep(min(wait, 60) + 0.05)
+            self.requests += 1
+            r = self.http.post(API.format(token=self.token, method=method), json=params)
         if r.status_code == 409:
             raise TelegramError("another copy of this bot is already polling — stop it first")
         if r.status_code == 401:
@@ -69,6 +84,21 @@ class Telegram:
     def send(self, chat_id, text: str, preview: bool = False) -> object:
         return self.call("sendMessage", chat_id=chat_id, text=text, parse_mode="HTML",
                          disable_web_page_preview=not preview)
+
+    def send_each(self, chat_ids, text: str, on_error=None) -> int:
+        """The same message to many chats, at the pace the Bot API allows. `on_error(chat, e)`
+        decides what a failure means; the rest of the list goes out either way."""
+        sent = 0
+        for i, chat_id in enumerate(chat_ids):
+            if i:
+                time.sleep(settings.telegram_send_gap_s)
+            try:
+                self.send(chat_id, text)
+                sent += 1
+            except Exception as e:  # noqa: BLE001 - one chat must not stop the rest
+                if on_error is not None:
+                    on_error(chat_id, e)
+        return sent
 
     def photo(self, chat_id, path: pathlib.Path, caption: str) -> object:
         """Send a local image with a caption, uploading it at most once.

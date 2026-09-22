@@ -103,6 +103,10 @@ class Settings:
     # Telegram bot: long polling, so it needs no public address and no webhook
     telegram_bot_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN"))
     telegram_poll_timeout: int = field(default_factory=lambda: _int("TELEGRAM_POLL_TIMEOUT", 50))
+    # the Bot API takes ~30 messages a second to different chats; this is the gap the bulk sends
+    # keep between them (25 a second), and how long a 429 without a stated wait is waited out
+    telegram_send_gap_s: float = field(default_factory=lambda: _float("TELEGRAM_SEND_GAP_S", 0.04))
+    telegram_retry_after_s: float = field(default_factory=lambda: _float("TELEGRAM_RETRY_AFTER_S", 2.0))
     # only needed where api.telegram.org is blocked. http://, socks5:// (needs httpx[socks])
     telegram_proxy: str = field(default_factory=lambda: _env("TELEGRAM_PROXY"))
     # conviction floor for a pushed alert. ~4.0 is four wallets scoring 80 agreeing on one token.

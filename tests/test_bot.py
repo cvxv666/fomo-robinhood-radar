@@ -4,6 +4,7 @@ The transport is faked, so these cover the parts that decide what a subscriber a
 which is where a bug is expensive: a wrong threshold or a broken dedupe means either silence or
 a stream of duplicates, and both lose the subscriber.
 """
+import time
 import json
 
 import pytest
@@ -503,3 +504,43 @@ def test_a_held_push_is_said_once_an_hour(caplog):
     warned = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warned) == 2 and "AGE" in warned[0].message and "DOG" in warned[1].message
     assert sum(1 for r in caplog.records if r.levelno == logging.DEBUG) == 4
+
+
+def test_a_rate_limited_send_waits_the_time_telegram_names(monkeypatch):
+    """Eight paying chats never met the Bot API's ceiling; four hundred meet it on the first
+    alert, and a reader who missed it because we sent too fast is the change undone."""
+    import httpx
+    from fomo_agent.bot.telegram import Telegram
+    slept, tries = [], []
+    monkeypatch.setattr(settings, "telegram_retry_after_s", 2.0)
+    monkeypatch.setattr(time, "sleep", slept.append)
+
+    def handler(request):
+        tries.append(1)
+        if len(tries) < 3:
+            return httpx.Response(429, json={"ok": False, "parameters": {"retry_after": 7}})
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
+
+    tg = Telegram(token="t", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert tg.send("7", "hello")["message_id"] == 1
+    assert len(tries) == 3 and [round(s) for s in slept] == [7, 7], "the wait Telegram named, not ours"
+
+
+def test_the_bulk_send_keeps_the_gap_and_carries_on_past_a_bad_chat(monkeypatch):
+    import httpx
+    from fomo_agent.bot.telegram import Telegram
+    gaps, bad = [], []
+    monkeypatch.setattr(settings, "telegram_send_gap_s", 0.04)
+    monkeypatch.setattr(time, "sleep", gaps.append)
+
+    def handler(request):
+        import json as _json
+        chat = _json.loads(request.content)["chat_id"]
+        if chat == "blocked":
+            return httpx.Response(403, json={"ok": False, "description": "Forbidden: bot was blocked by the user"})
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
+
+    tg = Telegram(token="t", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    sent = tg.send_each(["a", "blocked", "c"], "hi", on_error=lambda c, e: bad.append(c))
+    assert sent == 2 and bad == ["blocked"]
+    assert gaps == [0.04, 0.04], "a gap between sends, none before the first"

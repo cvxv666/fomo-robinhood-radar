@@ -281,22 +281,28 @@ def push(conn: sqlite3.Connection, burning: list[dict], rpc: RobinhoodRPC | None
             continue
         text = fmt_hot(h)
         told = 0
-        for sub in subs:
-            # told of this burst already, or of the launch on the same token minutes ago
-            if already_sent(conn, sub["chat_id"], key, quiet) \
-                    or already_sent(conn, sub["chat_id"], h["mint"], settings.telegram_dedupe_s):
-                continue
-            if not prefs.wants(sub, "burst", h.get("conviction"), now):
-                continue
+        # every chat that has not been told and wants this one, at the Bot API's own pace: with
+        # the alerts free this is four hundred sends, not eight
+        want = [sub["chat_id"] for sub in subs
+                if not already_sent(conn, sub["chat_id"], key, quiet)
+                and not already_sent(conn, sub["chat_id"], h["mint"], settings.telegram_dedupe_s)
+                and prefs.wants(sub, "burst", h.get("conviction"), now)]
+
+        def failed(chat_id, e):
+            log.warning("hot push to %s failed: %s", chat_id, e)
+            if gone(e):
+                unsubscribe(conn, chat_id)
+
+        for chat_id in want:
             try:
-                tg.send(sub["chat_id"], text)
-                mark_sent(conn, sub["chat_id"], key)
-                sent += 1
-                told += 1
+                tg.send(chat_id, text)
             except Exception as e:  # noqa: BLE001 - one blocked chat must not stop the rest
-                log.warning("hot push to %s failed: %s", sub["chat_id"], e)
-                if gone(e):
-                    unsubscribe(conn, sub["chat_id"])
+                failed(chat_id, e)
+                continue
+            mark_sent(conn, chat_id, key)
+            sent += 1
+            told += 1
+            time.sleep(settings.telegram_send_gap_s)
         if told:
             pro_pushes.record(conn, "burst", h, told, now)
             webhooks.fire(conn, "burst", h, now)
