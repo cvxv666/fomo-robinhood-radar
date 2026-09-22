@@ -132,6 +132,8 @@ const sample = `{
   .go { justify-self: start; }
   .fine { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; color: #606060; margin: 0; max-width: none; }
   .order { margin-top: 30px; border: 1px solid #2a2a2a; padding: 22px 24px; display: grid; gap: 18px; }
+  /* a display of its own beats the hidden attribute, and the order showed before it existed */
+  .order[hidden], .pay[hidden], .done[hidden] { display: none; }
   .status { display: flex; align-items: center; gap: 10px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #949494; }
   .led { width: 8px; height: 8px; border-radius: 50%; background: #ff003d; box-shadow: 0 0 10px #ff003d; animation: pulse 1.8s ease-in-out infinite; }
   .order.is-paid .led { background: #00ff85; box-shadow: 0 0 10px #00ff85; animation: none; }
