@@ -456,11 +456,11 @@ class RobinhoodRPC:
     def pool_currencies(self, pool_id: str, created_ts: int | None = None) -> tuple[str, str] | None:
         """The two currencies of a pool, from the pool manager's Initialize event: around the
         block the pool opened when the caller knows the time, else the recent window. Remembered."""
+        if not pool_id or not pool_id.startswith("0x") or len(pool_id) != 66:
+            return None
         pool_id = pool_id.lower()
         if pool_id in self._pools:
             return self._pools[pool_id]
-        if not pool_id.startswith("0x") or len(pool_id) != 66:
-            return None
         if created_ts:
             b = self.block_at(created_ts)
             first, last = max(b - 3000, 0), b + 3000
