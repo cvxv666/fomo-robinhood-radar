@@ -41,14 +41,60 @@ def set_url(conn: sqlite3.Connection, chat_id, url: str, now: int | None = None)
         with db.tx(conn):
             conn.execute("UPDATE api_keys SET webhook_url=NULL, webhook_failures=0 WHERE key=?", (key["key"],))
         return True, "Webhook off."
-    u = urlparse(url.strip())
-    if u.scheme != "https" or not u.netloc or u.netloc.split(":")[0] in ("localhost", "127.0.0.1"):
-        return False, "A webhook is an https URL on a host of yours: /webhook https://example.com/radar"
+    bad = why_not_a_hook(url)
+    if bad:
+        return False, f"{bad[0].upper()}{bad[1:]}: /webhook https://example.com/radar"
     with db.tx(conn):
         conn.execute("UPDATE api_keys SET webhook_url=?, webhook_failures=0, webhook_last=NULL WHERE key=?", (url.strip(), key["key"]))
     return True, (f"Webhook set. Every burst, launch and hour-later read is POSTed there as JSON, signed in "
                   f"<code>X-Radar-Signature</code> (HMAC-SHA256 of the body with your key). /webhook off stops it. "
                   f"Docs: {settings.public_site_url or ''}/docs#webhooks")
+
+
+def set_for_key(conn: sqlite3.Connection, key: str, url: str) -> tuple[bool, str]:
+    """The same setter for a key bought on the site, where there is no chat to speak to."""
+    u = (url or "").strip()
+    if u.lower() in ("off", "none", "stop", ""):
+        with db.tx(conn):
+            conn.execute("UPDATE api_keys SET webhook_url=NULL, webhook_failures=0 WHERE key=?", (key,))
+        return True, "webhook off"
+    bad = why_not_a_hook(u)
+    if bad:
+        return False, bad
+    with db.tx(conn):
+        conn.execute("UPDATE api_keys SET webhook_url=?, webhook_failures=0, webhook_last=NULL WHERE key=?", (u, key))
+    return True, "webhook set"
+
+
+def why_not_a_hook(url: str) -> str | None:
+    """Why this cannot be a webhook URL, or None. https only, and not at our own door: a hook
+    pointed at localhost is the receiver's own machine as the API sees it, which is ours."""
+    u = urlparse((url or "").strip())
+    host = u.netloc.split(":")[0].lower()
+    if u.scheme != "https" or not u.netloc:
+        return "a webhook is an https URL on a host of yours"
+    if host in ("localhost", "127.0.0.1", "::1") or host.endswith(".local") or host.startswith(("10.", "192.168.", "169.254.")):
+        return "that host is not reachable from here"
+    return None
+
+
+def sample(now: int | None = None) -> dict:
+    """What a test delivery carries: the shape of a real burst, marked as a test."""
+    now = now or db.now()
+    return payload("test", {"mint": "0x" + "0" * 40, "sym": "TEST", "chain": "robinhood", "conviction": 4.2,
+                            "wallets": 5, "usd": 12_000.0, "note": "a test delivery from fomoradar.app"}, now)
+
+
+def deliver_sample(conn: sqlite3.Connection, key: str, now: int | None = None) -> tuple[bool, str]:
+    """One signed POST to the key's hook, now, and the answer as the setter sees it."""
+    import json as _json
+
+    row = conn.execute("SELECT webhook_url FROM api_keys WHERE key=? AND revoked_at IS NULL", (key,)).fetchone()
+    if row is None or not row["webhook_url"]:
+        return False, "no webhook on this key"
+    body = _json.dumps(sample(now), ensure_ascii=False, default=str).encode()
+    ok = deliver(row["webhook_url"], key, body)
+    return ok, "delivered" if ok else "your endpoint did not answer 2xx inside six seconds"
 
 
 def status(conn: sqlite3.Connection, chat_id) -> str:
@@ -63,10 +109,12 @@ def status(conn: sqlite3.Connection, chat_id) -> str:
 
 
 def targets(conn: sqlite3.Connection, now: int | None = None) -> list[sqlite3.Row]:
+    now = now or db.now()
     rows = conn.execute(
-        "SELECT key, chat_id, webhook_url, webhook_failures FROM api_keys "
+        "SELECT key, chat_id, webhook_url, webhook_failures, paid_until FROM api_keys "
         "WHERE revoked_at IS NULL AND webhook_url IS NOT NULL AND COALESCE(webhook_failures, 0) < ?", (MAX_FAILURES,)).fetchall()
-    return [r for r in rows if pro.entitled(conn, r["chat_id"], now)]
+    # a key bought on the site pays for itself; a chat's key follows the chat's PRO
+    return [r for r in rows if (r["paid_until"] or 0) > now or pro.entitled(conn, r["chat_id"], now)]
 
 
 def payload(event: str, item: dict, now: int) -> dict:

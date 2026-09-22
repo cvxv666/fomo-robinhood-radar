@@ -75,6 +75,7 @@ class RateLimit:
 limiter = RateLimit(settings.api_rate_per_min)
 keyed = RateLimit(settings.api_key_rate_per_min)   # per key, for PRO chats
 keyring = keys.Keyring()
+WEBHOOKS_URL = f"{settings.public_site_url or 'https://fomoradar.app'}/webhooks"
 
 
 @asynccontextmanager
@@ -97,16 +98,22 @@ app = FastAPI(
         "**Reading it:** 120 requests a minute per address, no key needed. Send a `User-Agent` "
         "that names your project - requests without one are refused. A PRO subscriber of the "
         "Telegram bot (@fomoradarRH_bot, `/pro`) can ask it for a key with `/apikey` and send it "
-        "as `X-API-Key` for 600 a minute. Answers are cached for a few seconds; the feeds move on "
-        "the watcher's tick, not faster.\n\n"
-        "**Webhooks:** a PRO key can name an https URL in the bot (`/webhook <url>`). Every burst, "
+        "as `X-API-Key` for 600 a minute. A key can also be bought without the bot at `/webhooks`: "
+        "`POST /api/checkout` opens an order, the exact amount it quotes is burned from any wallet, "
+        "and the key appears at `GET /api/checkout/{secret}` within a block - no account, no email, "
+        "nothing stored about the reader. `GET /api/me` says what a key is and how it is doing, "
+        "`POST /api/webhook` points it at a URL, `POST /api/webhook/test` proves the wiring, and "
+        "`POST /api/checkout/{secret}/renew` buys another term without changing the key. Answers are "
+        "cached for a few seconds; the feeds move on the watcher\u2019s tick, not faster.\n\n"
+        "**Webhooks:** a key can name an https URL - in the bot (`/webhook <url>`) or with "
+        "`POST /api/webhook`. Every burst, "
         "launch and hour-later read is then POSTed there as JSON the second the chats get it, and so "
         "is a void - a pushed token that has since proved unsellable, with the count that settled it: "
         "`{event: burst|launch|followup|void, ts, chain, mint, symbol, data: {...what the chat was told}, "
         "links: {fomo, site}}`, with `X-Radar-Signature: sha256=<HMAC-SHA256 of the body, keyed "
         "with your API key>` to check it is ours. Answer 2xx inside six seconds; two failed tries "
-        "count one failure, twenty failures in a row switch the hook off until `/webhook` sets it again. "
-        "`/webhook off` stops it. The record of every alert is at `/api/record`; the alerts are "
+        "count one failure, twenty failures in a row switch the hook off until it is set again. "
+        "`off` as the URL stops it. The record of every alert is at `/api/record`; the alerts are "
         "research, and the receiver decides what to do with them."
     ),
     lifespan=lifespan,
@@ -136,7 +143,9 @@ _responses_lock = threading.Lock()
 # them runs the query and the other fifty-nine wait for that answer instead of running it too
 _inflight: dict[str, "asyncio.Future[None]"] = {}
 UNCACHED = ("/api/health",)
-UNCACHED_PREFIX = ("/api/pro",)   # a payment page polls for "paid"; a ten-second-old answer is a wrong one
+# a payment page polls for "paid"; a ten-second-old answer is a wrong one. A key's own endpoints
+# answer about the caller and must never be served from another caller's copy
+UNCACHED_PREFIX = ("/api/pro", "/api/checkout", "/api/me", "/api/webhook")
 
 
 def _cached(key: str):
@@ -215,10 +224,16 @@ async def rate_limit(request: Request, call_next):
             conn.close()
         return await call_next(request)
     if not limiter.check(forwarded or host):
+        # the reader who hits this is the reader who would pay: the alerts can be pushed to them
+        # instead of polled for, and nobody polling us had any way of knowing that
         return JSONResponse({"error": "rate limited", "limit_per_minute": limiter.per_minute,
-                             "more": "a PRO key from the bot (/apikey) reads 600 a minute"},
+                             "more": f"a key reads {keyed.per_minute} a minute, and the alerts can be POSTed to you "
+                                     f"as they go out: {WEBHOOKS_URL}"},
                             status_code=429)
-    return await call_next(request)
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["x-radar-webhooks"] = f"stop polling - the alerts can be POSTed to you: {WEBHOOKS_URL}"
+    return response
 
 
 # ---------------------------------------------------------------- shaping
@@ -397,6 +412,95 @@ def pro_terms(conn: sqlite3.Connection = Depends(get_conn)) -> dict:
             "token": settings.pro_token, "symbol": settings.pro_token_symbol,
             "burn_address": settings.pro_burn_address, "price": pro.price_now(conn) if pro.enabled() else None,
             "bot": settings.telegram_bot_name}
+
+
+@app.post("/api/checkout", tags=["meta"])
+def checkout_start(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    """Start an order for an API key with webhooks, without a Telegram chat in the way.
+
+    Returns the secret for this order, which is the page's bearer and nobody else's, and the
+    exact amount to burn. The watcher matches the burn by that amount, as it does for the bot's
+    quotes, and the key appears here the moment the block lands.
+    """
+    from .pipeline import checkout
+
+    order = checkout.start(conn)
+    if order is None:
+        raise HTTPException(404, "no key tier right now")
+    log.info("checkout: order %s opened for %s", order["code"], (request.client.host if request.client else "?"))
+    return order
+
+
+@app.get("/api/checkout/{secret}", tags=["meta"])
+def checkout_status(secret: str, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    """The order this secret owns: the quote, and once the burn lands, the key and its webhook."""
+    from .pipeline import checkout
+
+    out = checkout.status(conn, secret)
+    if out is None:
+        raise HTTPException(404, "no such order")
+    return out
+
+
+@app.post("/api/checkout/{secret}/renew", tags=["meta"])
+def checkout_renew(secret: str, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    """Another term on the same order: the key stays what it is, so a receiver already wired to
+    it keeps working. Returns the next amount to burn."""
+    from .pipeline import checkout
+
+    out = checkout.renew(conn, secret)
+    if out is None:
+        raise HTTPException(404, "no such order")
+    return out
+
+
+def _caller_key(request: Request, conn: sqlite3.Connection) -> str:
+    """The key this request was authenticated with. The middleware has already checked it is
+    live; this is only which one."""
+    key = request.headers.get("x-api-key") or request.query_params.get("key") or ""
+    if not key or keyring.check(conn, key)[0] is False:
+        raise HTTPException(401, "send a live key in X-Api-Key")
+    return key
+
+
+@app.get("/api/me", tags=["meta"])
+def me(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    """What this key is: its term, its allowance, its webhook and how it is doing."""
+    from .pipeline import keys as keymod
+
+    key = _caller_key(request, conn)
+    row = keymod.by_key(conn, key)
+    return {"key": key[:6] + "…", "paid_until": row["paid_until"], "requests": row["requests"],
+            "rate_per_minute": keyed.per_minute, "webhook_url": row["webhook_url"],
+            "webhook_failures": row["webhook_failures"], "webhook_last": row["webhook_last"],
+            "events": ["burst", "launch", "followup", "void"], "now": db.now()}
+
+
+@app.post("/api/webhook", tags=["meta"])
+def set_webhook(request: Request, body: dict, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    """Point this key's alerts at a URL of yours: `{"url": "https://…"}`, or `"off"` to stop.
+
+    Every burst, launch, hour-later read and void is POSTed there as it goes to the chats, signed
+    with `X-Radar-Signature: sha256=<HMAC-SHA256 of the body, keyed with your key>`.
+    """
+    from .pipeline import webhooks
+
+    key = _caller_key(request, conn)
+    ok, why = webhooks.set_for_key(conn, key, str(body.get("url", "")))
+    if not ok:
+        raise HTTPException(400, why)
+    return {"ok": True, "state": why, "docs": "/docs#webhooks"}
+
+
+@app.post("/api/webhook/test", tags=["meta"])
+def test_webhook(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    """One signed POST to your URL right now, shaped like a real event, so you can wire the
+    receiver before the first alert rather than after it."""
+    from .pipeline import webhooks
+
+    key = _caller_key(request, conn)
+    ok, why = webhooks.deliver_sample(conn, key)
+    return {"ok": ok, "detail": why, "sent": webhooks.sample()}
 
 
 @app.get("/api/pro/{code}", tags=["meta"])

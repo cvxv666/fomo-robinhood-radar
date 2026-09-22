@@ -1,0 +1,274 @@
+---
+/**
+ * The other door: a key with webhooks, bought here, without the bot.
+ *
+ * A thousand addresses poll this API every day - copy traders, paper bots, terminals - and the
+ * only way to a push was Telegram, a token quote and a /claim. The burn rail needed none of
+ * that: a quote reserves an amount nobody else is asked for, and the watcher matches the burn by
+ * that amount alone. So this page opens an order of its own, shows the amount, waits for the
+ * block, and hands over the key and the field for the URL. Nothing about the buyer is stored.
+ */
+import Base from '../layouts/Base.astro';
+import { get } from '../lib/api';
+
+type Terms = {
+  enabled: boolean; usd: number; days: number; token: string; symbol: string;
+  burn_address: string; price: number | null; bot: string;
+};
+type Rec = { totals: { pushes: number; reached_2x: number; above_entry: number; measured: number } };
+
+const t = await get<Terms>('/api/pro');
+const rec = await get<Rec>('/api/record?days=30');
+const enabled = !!t?.enabled;
+const symbol = t?.symbol ?? 'FOMOBRAIN';
+const approx = t?.price ? Math.ceil(t.usd / t.price) : null;
+const perDay = rec ? Math.round((rec.totals.pushes / 30) * 10) / 10 : null;
+const sample = `{
+  "event": "burst",
+  "ts": 1790062819,
+  "chain": "robinhood",
+  "mint": "0xddd4947010496b500abe96ab0965c38584413ba3",
+  "symbol": "Nautilo",
+  "data": {
+    "conviction": 4.06, "wallets": 7, "usd": 10148.0, "px": 0.00027,
+    "who": ["unipcs", "rasmr"], "scores": [96, 88],
+    "cohort_share": 0.22, "liq": 90000.0, "age_s": 640
+  },
+  "links": { "fomo": "https://fomo.family/token/0xddd…", "site": "https://fomoradar.app/token/0xddd…" },
+  "source": "FOMO Robinhood Radar"
+}`;
+---
+<Base title="Webhooks — FOMO Robinhood Radar" section="webhooks" noindex={false}
+      description="Every burst, launch, hour-later read and void POSTed to your endpoint the second it goes out. A key, paid in the token and burned. No Telegram needed.">
+  <div class="pagehead"><h1>Webhooks</h1></div>
+  <p class="subhead">stop polling — the alerts arrive at your endpoint the second they go out</p>
+
+  <section class="lede">
+    <p>
+      Every <b>burst</b>, <b>launch</b>, <b>hour-later read</b> and <b>void</b> is POSTed to a URL of
+      yours in the same second the paying chats get it — signed, so you can tell it is ours.
+      {perDay ? <span> That is about <b>{perDay}</b> events a day right now, and every one of them is on <a href="/record">the record</a>.</span> : null}
+    </p>
+    <p class="m">
+      The same key reads the API at {600} calls a minute instead of the public 120. Nothing about you is
+      stored: no email, no account, no wallet connected — the order is a secret this page keeps.
+    </p>
+  </section>
+
+  <section class="cols">
+    <div>
+      <h3>What arrives</h3>
+      <pre class="code"><code>{sample}</code></pre>
+      <p class="fine">
+        <code>X-Radar-Signature: sha256=&lt;HMAC-SHA256 of the body, keyed with your key&gt;</code> —
+        answer 2xx inside six seconds. Two failed tries count as one failure; twenty in a row and the
+        hook waits until you set it again. Full reference: <a href="/docs">/docs</a>.
+      </p>
+    </div>
+    <div>
+      <h3>What it costs</h3>
+      {enabled ? (
+        <div class="terms">
+          <div class="big"><span class="usd">${t!.usd}</span><span class="per">/ {t!.days} days</span></div>
+          <p class="m">
+            Paid in <b>${symbol}</b> at the pool price when you ask
+            {approx ? <span> — about <b>{approx.toLocaleString('en-US')}</b> right now</span> : null},
+            sent to the burn address. Nothing comes back out; the supply is smaller afterwards.
+          </p>
+          <button class="btn go" id="start" type="button">Get a key</button>
+          <p class="fine">Renewing keeps the same key, so a receiver already wired to it goes on working.</p>
+        </div>
+      ) : (
+        <p class="m">There is no key tier right now — the API is open at 120 calls a minute. <a href="/docs">/docs</a></p>
+      )}
+    </div>
+  </section>
+
+  <section class="order" id="order" hidden>
+    <div class="status"><span class="led" aria-hidden="true"></span><span id="state">waiting for the burn</span><span class="clock mono" id="clock"></span></div>
+
+    <div class="pay" id="pay">
+      <div class="field">
+        <span class="label">01 · Send exactly</span>
+        <button class="box" type="button" id="amount-box" title="Copy the amount"><span class="amount mono" id="amount">—</span> <span class="sym">${symbol}</span></button>
+      </div>
+      <div class="field">
+        <span class="label">02 · To the burn address</span>
+        <button class="box addr" type="button" id="addr-box" title="Copy the address"><span class="mono" id="addr">—</span></button>
+      </div>
+      <p class="fine">From any wallet on Robinhood Chain. The exact amount is the receipt — nothing to sign, nobody to tell. This page notices within a block.</p>
+    </div>
+
+    <div class="done" id="done" hidden>
+      <div class="field">
+        <span class="label">Your key — copy it now</span>
+        <button class="box" type="button" id="key-box" title="Copy the key"><span class="mono key" id="key">—</span></button>
+        <p class="fine">Send it as <code>X-Api-Key</code>. Paid until <span id="until">—</span>. Keep the link to this page: it is the only way back to the key.</p>
+      </div>
+      <div class="field">
+        <span class="label">Where to POST</span>
+        <div class="row">
+          <input class="url" id="url" type="url" placeholder="https://your.host/radar" spellcheck="false" />
+          <button class="btn" id="save" type="button">Save</button>
+          <button class="btn ghost" id="test" type="button">Send a test</button>
+        </div>
+        <p class="fine" id="hook-note">https only. <code>off</code> stops it.</p>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .lede { max-width: 72ch; display: grid; gap: 10px; margin-bottom: 26px; font-size: 16px; color: #c8c8c8; }
+  .lede b { color: #fff; font-weight: 500; }
+  .m { color: #949494; font-size: 14px; margin: 0; }
+  .cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; align-items: start; }
+  .cols h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; font-family: "JetBrains Mono", ui-monospace, monospace; color: #949494; }
+  .code { border: 1px solid #2a2a2a; padding: 14px 16px; overflow-x: auto; font-size: 12px; line-height: 1.55; color: #c8c8c8; margin: 0 0 10px; }
+  .terms { border: 1px solid #00ff85; padding: 22px 24px; display: grid; gap: 12px; }
+  .big { display: flex; align-items: baseline; gap: 10px; }
+  .usd { font-size: clamp(38px, 6vw, 60px); font-weight: 300; line-height: 1; color: #00ff85; }
+  .per { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #949494; }
+  .go { justify-self: start; }
+  .fine { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; color: #606060; margin: 0; max-width: none; }
+  .order { margin-top: 30px; border: 1px solid #2a2a2a; padding: 22px 24px; display: grid; gap: 18px; }
+  .status { display: flex; align-items: center; gap: 10px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #949494; }
+  .led { width: 8px; height: 8px; border-radius: 50%; background: #ff003d; box-shadow: 0 0 10px #ff003d; animation: pulse 1.8s ease-in-out infinite; }
+  .order.is-paid .led { background: #00ff85; box-shadow: 0 0 10px #00ff85; animation: none; }
+  .order.is-paid #state { color: #00ff85; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  @media (prefers-reduced-motion: reduce) { .led { animation: none; } }
+  .clock { margin-left: auto; color: #606060; }
+  .pay, .done { display: grid; gap: 16px; }
+  .field { display: grid; gap: 8px; }
+  .label { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #606060; }
+  .box { background: #0a0a0a; border: 1px solid #2a2a2a; padding: 14px 16px; text-align: left; color: #fff; cursor: pointer; font: inherit; }
+  .box:hover { border-color: #00ff85; }
+  .amount { font-size: clamp(22px, 4vw, 34px); }
+  .sym { color: #949494; font-size: 13px; }
+  .addr .mono, .key { font-size: 13px; word-break: break-all; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .url { flex: 1 1 320px; background: #0a0a0a; border: 1px solid #2a2a2a; color: #fff; padding: 10px 12px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; }
+  .url:focus { outline: none; border-color: #00ff85; }
+  .btn.ghost { border-color: #2a2a2a; }
+  @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+</style>
+
+<script>
+  const order = document.getElementById('order') as HTMLElement | null;
+  const startBtn = document.getElementById('start');
+  if (order) {
+    const el = (id: string) => document.getElementById(id) as HTMLElement;
+    const state = el('state'), clock = el('clock'), done = el('done'), pay = el('pay');
+    const urlInput = document.getElementById('url') as HTMLInputElement;
+    const note = el('hook-note');
+    let secret = '';
+    let expires = 0, skew = 0, paid = false, timer = 0;
+
+    const remember = (s: string) => { try { localStorage.setItem('radar-order', s); } catch { /* private window */ } };
+    const recall = () => { try { return localStorage.getItem('radar-order') ?? ''; } catch { return ''; } };
+    const nowS = () => Math.floor(Date.now() / 1000) + skew;
+
+    const copy = async (text: string) => {
+      try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch { /* fall through */ }
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch { ok = false; }
+      ta.remove(); return ok;
+    };
+    const copyOn = (id: string, value: () => string) => {
+      const box = document.getElementById(id);
+      box?.addEventListener('click', async () => {
+        if (!(await copy(value()))) return;
+        const was = box.getAttribute('title');
+        box.setAttribute('title', 'Copied'); window.setTimeout(() => box.setAttribute('title', was ?? ''), 1500);
+        box.animate([{ borderColor: '#00ff85' }, { borderColor: '#2a2a2a' }], { duration: 900 });
+      });
+    };
+    copyOn('amount-box', () => el('amount').textContent?.replace(/[^\d.]/g, '') ?? '');
+    copyOn('addr-box', () => el('addr').textContent ?? '');
+    copyOn('key-box', () => el('key').textContent ?? '');
+
+    const paint = (o: any) => {
+      expires = o.expires_at ?? 0;
+      skew = (o.now ?? 0) - Math.floor(Date.now() / 1000);
+      el('amount').textContent = Number(o.tokens).toLocaleString('en-US');
+      el('addr').textContent = o.burn_address ?? '';
+      order.hidden = false;
+      paid = o.status === 'paid' && !!o.key;
+      order.classList.toggle('is-paid', paid);
+      if (paid) {
+        pay.hidden = true; done.hidden = false;
+        state.textContent = 'paid · key live';
+        el('key').textContent = o.key;
+        el('until').textContent = o.paid_until ? new Date(o.paid_until * 1000).toUTCString().replace(/:\d\d GMT$/, ' UTC') : '—';
+        if (o.webhook_url && !urlInput.value) urlInput.value = o.webhook_url;
+        clock.textContent = '';
+      } else {
+        pay.hidden = false;
+        state.textContent = o.status === 'expired' ? 'quote expired · ask for a new one' : 'waiting for the burn';
+      }
+    };
+
+    const tick = () => {
+      if (paid || !expires) return;
+      const left = expires - nowS();
+      clock.textContent = left > 0 ? `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')} left` : 'expired';
+    };
+
+    const poll = async () => {
+      if (!secret) return;
+      try {
+        const r = await fetch(`/api/checkout/${secret}`, { headers: { accept: 'application/json' }, cache: 'no-store' });
+        if (r.ok) paint(await r.json());
+      } catch { /* the next tick tries again */ }
+      if (paid && timer) { window.clearInterval(timer); timer = 0; }
+    };
+
+    startBtn?.addEventListener('click', async () => {
+      startBtn.setAttribute('disabled', 'true');
+      try {
+        const r = await fetch('/api/checkout', { method: 'POST', headers: { accept: 'application/json' } });
+        if (!r.ok) throw new Error(String(r.status));
+        const o = await r.json();
+        secret = o.secret; remember(secret);
+        location.hash = secret.slice(0, 8);
+        paint(o);
+        if (!timer) timer = window.setInterval(poll, 6000);
+        order.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {
+        state.textContent = 'could not open an order — try again in a minute';
+        order.hidden = false;
+      }
+      startBtn.removeAttribute('disabled');
+    });
+
+    document.getElementById('save')?.addEventListener('click', async () => {
+      const key = el('key').textContent ?? '';
+      note.textContent = 'saving…';
+      try {
+        const r = await fetch('/api/webhook', {
+          method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key },
+          body: JSON.stringify({ url: urlInput.value.trim() }),
+        });
+        const b = await r.json().catch(() => ({}));
+        note.textContent = r.ok ? 'saved — the next alert goes there' : (b.detail ?? 'that URL was not accepted');
+      } catch { note.textContent = 'could not reach the API'; }
+    });
+
+    document.getElementById('test')?.addEventListener('click', async () => {
+      const key = el('key').textContent ?? '';
+      note.textContent = 'sending…';
+      try {
+        const r = await fetch('/api/webhook/test', { method: 'POST', headers: { 'x-api-key': key } });
+        const b = await r.json().catch(() => ({}));
+        note.textContent = b.ok ? 'delivered — check your receiver' : (b.detail ?? 'your endpoint did not answer');
+      } catch { note.textContent = 'could not reach the API'; }
+    });
+
+    secret = recall();
+    if (secret) { poll(); timer = window.setInterval(poll, 6000); }
+    window.setInterval(tick, 1000);
+  }
+</script>

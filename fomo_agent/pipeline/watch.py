@@ -161,8 +161,12 @@ def confirm(conn: sqlite3.Connection, paid: list[dict]) -> int:
 
     if not settings.telegram_bot_token:
         return 0
+    from . import checkout
+
     tg, sent = Telegram(), 0
     for p in paid:
+        if checkout.is_web(p["chat_id"]):
+            continue   # bought on the site: the page is watching, there is no chat to tell
         try:
             tg.send(p["chat_id"], f"✓ {p['tokens']:,.0f} ${settings.pro_token_symbol} burned. "
                                   f"PRO until {pro._date(p['paid_until'])}. The alerts and the live feeds are on.")

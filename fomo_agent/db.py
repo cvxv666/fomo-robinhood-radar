@@ -340,6 +340,12 @@ MIGRATIONS: dict[int, str] = {
     -- leading the crowd or following it, for the record and the study
     ALTER TABLE pushes ADD COLUMN cohort_share REAL;
     """,
+    31: """
+    -- a key bought on the site pays for itself: it is not a chat's, so its own term is on it
+    -- (pipeline/checkout.py). A key issued to a chat leaves this NULL and follows the chat's PRO.
+    ALTER TABLE api_keys ADD COLUMN paid_until INTEGER;
+    ALTER TABLE api_keys ADD COLUMN label TEXT;
+    """,
 }
 
 STATUSES = ("candidate", "tracking", "active", "watch", "dropped", "needs_review")

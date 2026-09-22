@@ -208,7 +208,13 @@ def record(conn: sqlite3.Connection, t: dict, ts: int, now: int | None = None) -
         if match:
             conn.execute("UPDATE pro_quotes SET status='paid', tx=? WHERE code=?", (tx, match["code"]))
     if match:
-        payment["paid_until"] = grant(conn, match["chat_id"], settings.pro_days, now)
+        # a chat gets PRO; a web order (checkout.PREFIX) gets its key, and has no chat to tell
+        from . import checkout
+
+        payment["paid_until"] = (checkout.redeem(conn, match["chat_id"], settings.pro_days, now)
+                                 if checkout.is_web(match["chat_id"])
+                                 else grant(conn, match["chat_id"], settings.pro_days, now))
+        payment["web"] = checkout.is_web(match["chat_id"])
     return payment
 
 
