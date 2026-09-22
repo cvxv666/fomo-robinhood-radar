@@ -130,17 +130,23 @@ BOT = re.compile(r"bot|crawl|spider|python|httpx|node|curl|go-http|java|okhttp|F
 ips, humans, api_ips, st = set(), set(), set(), collections.Counter()
 paths, human_hours, uas = collections.Counter(), collections.Counter(), collections.Counter()
 pages = human_pages = 0; durs = []; byh = collections.defaultdict(lambda: {"n": 0, "0": 0, "429": 0, "502": 0, "d": []})
+lines = []
 for line in raw.splitlines():
     try: m = json.loads(line)
     except Exception: continue
-    if "status" not in m or "request" not in m: continue
+    if "status" in m and "request" in m: lines.append(m)
+# an address the limiter turned away a hundred times in the window is a scanner whatever its
+# User-Agent says (130.49.215.97: 40k 429s on /token/* under a Mozilla string, and the pages it
+# did get were "the peak human hour"); its hits are not people
+scanners = {ip for ip, n in collections.Counter(m["request"].get("client_ip", "?") for m in lines if m["status"] == 429).items() if n >= 100}
+for m in lines:
     r = m["request"]; ip = r.get("client_ip", "?"); ua = (r.get("headers", {}).get("User-Agent") or ["?"])[0]; uri = r.get("uri", "").split("?")[0]
     ips.add(ip); st[m["status"]] += 1; h = time.strftime("%H", time.gmtime(m["ts"])); b = byh[h]; b["n"] += 1
     if m["status"] == 0: b["0"] += 1
     if m["status"] == 429: b["429"] += 1
     if m["status"] == 502: b["502"] += 1
     is_page = m["status"] == 200 and not uri.startswith(("/api", "/_astro", "/favicon", "/robots", "/sitemap")) and not uri.endswith((".css", ".js", ".png", ".svg", ".ico", ".xml", ".txt", ".webp", ".jpg"))
-    human = not BOT.search(ua) and "Mozilla" in ua
+    human = not BOT.search(ua) and "Mozilla" in ua and ip not in scanners
     if uri.startswith("/api"): api_ips.add(ip)
     if BOT.search(ua): uas[ua[:40]] += 1
     if is_page:
@@ -150,6 +156,8 @@ hours_tbl = []
 for h in sorted(byh):
     b = byh[h]; d = sorted(b["d"]); hours_tbl.append({"h": h, "req": b["n"], "st0": b["0"], "429": b["429"], "502": b["502"], "page_p95_ms": round(d[int(len(d) * .95)] * 1000) if d else None})
 out("SITE", {"requests": sum(st.values()), "ips": len(ips), "human_ips_on_pages": len(humans), "pages": pages, "human_pages": human_pages, "api_ips": len(api_ips),
+             # the oldest line the journal still has: under the window's start, the counts above are short
+             "scanners": sorted(scanners), "journal_from": time.strftime("%d %H:%M", time.gmtime(lines[0]["ts"])) if lines else None,
              "status": dict(st.most_common(6)), "top_paths": paths.most_common(8), "peak_human_hour": human_hours.most_common(1), "bots": uas.most_common(6), "hours": hours_tbl})
 
 # ── 4. the software and the data

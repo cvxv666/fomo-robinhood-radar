@@ -456,3 +456,44 @@ def test_a_quiet_day_says_so_in_one_line(conn):
     text = bot.fmt_digest(d)
     assert "Nothing moved" in text and "That is information too" in text
     assert "169 follow" in text, "the roster is still worth stating"
+
+
+def test_a_launch_waits_its_first_minutes(conn, monkeypatch):
+    """DEED: a seeding wave began at 19:22 and the launch went out at 19:24, seeded after the
+    fact. The first trusted buy has to be a few minutes old before the launch is one."""
+    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
+    monkeypatch.setattr(settings, "telegram_launch_min_age_s", 180)
+    bot.subscribe(conn, "chat", None)
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch(age_s=100)], "hours": 6})
+    assert bot.broadcast(conn, FakeTelegram())["sent"] == 0, "a hundred seconds in: not yet"
+    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch(age_s=200)], "hours": 6})
+    assert bot.broadcast(conn, FakeTelegram())["sent"] == 1
+
+
+def test_the_journal_never_carries_the_token(monkeypatch):
+    import logging
+    from fomo_agent.cli import Redacting
+    monkeypatch.setattr(settings, "telegram_bot_token", "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    f = Redacting("%(message)s")
+    rec = logging.LogRecord("t", logging.WARNING, __file__, 1, "poll failed: ReadError for url https://api.telegram.org/bot%s/getUpdates",
+                            ("123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ",), None)
+    assert f.format(rec) == "poll failed: ReadError for url https://api.telegram.org/bot***/getUpdates"
+    try:
+        raise RuntimeError("boom https://api.telegram.org/bot123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ/x")
+    except RuntimeError:
+        import sys
+        rec = logging.LogRecord("t", logging.ERROR, __file__, 1, "tick failed", (), sys.exc_info())
+    assert "ABCDEFGHIJKLMNOPQRSTUVWXYZ" not in f.format(rec) and "bot***/x" in f.format(rec)
+
+
+def test_a_held_push_is_said_once_an_hour(caplog):
+    import logging
+    from fomo_agent.pipeline import watch
+    watch._held.clear()
+    with caplog.at_level(logging.DEBUG, logger="fomo_agent.pipeline.watch"):
+        for _ in range(5):
+            watch.held("0xabc", "burst on %s not pushed: %s", "AGE", "the 3rd $AGE in 14 days")
+        watch.held("0xdef", "burst on %s not pushed: %s", "DOG", "the 5th $DOG in 14 days")
+    warned = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warned) == 2 and "AGE" in warned[0].message and "DOG" in warned[1].message
+    assert sum(1 for r in caplog.records if r.levelno == logging.DEBUG) == 4

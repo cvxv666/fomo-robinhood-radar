@@ -53,7 +53,8 @@ class Busy(httpx.HTTPError):
 class GeckoTerminal:
     def __init__(self, client: httpx.Client | None = None, chains: Iterable[str] | None = None,
                  feeds: Iterable[str] | None = None, patient: bool = True):
-        self.http = client or httpx.Client(base_url=BASE, timeout=20, headers={"accept": "application/json"})
+        self.http = client or httpx.Client(base_url=BASE, timeout=20 if patient else settings.gecko_impatient_timeout_s,
+                                           headers={"accept": "application/json"})
         self.chains = tuple(chains) if chains else settings.dex_chains
         self.feeds = tuple(feeds) if feeds else settings.gecko_feeds
         # one window for the whole box: GeckoTerminal counts by IP, and there are six of us

@@ -86,6 +86,9 @@ class Settings:
     rpc_routers: tuple[str, ...] = field(default_factory=lambda: tuple(
         r.strip() for r in _env("RPC_ROUTERS", "0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f").split(",") if r.strip()))
     rpc_window_blocks: int = field(default_factory=lambda: _int("RPC_WINDOW_BLOCKS", 200_000))
+    # the DEX's singleton that holds every pool and emits every swap (Uniswap v4 shape): a pool is
+    # a 32-byte id in its logs, not an address, and its swaps are found by that id
+    rpc_pool_manager: str = field(default_factory=lambda: _env("RPC_POOL_MANAGER", "0x8366a39cc670b4001a1121b8f6a443a643e40951").lower())
     rpc_min_interval_s: float = field(default_factory=lambda: _float("RPC_MIN_INTERVAL_S", 600))
     # A backfill walks 200k-block windows backwards and is bounded by requests rather than time,
     # so an unattended run cannot sit on the endpoint all night. 900 covers roughly a fortnight.
@@ -121,6 +124,9 @@ class Settings:
     noise_fills_per_hour: int = field(default_factory=lambda: _int("NOISE_FILLS_PER_HOUR", 300))
     # a launch is pushed only while it is one: this long after the first trusted wallet went in
     telegram_launch_max_age_min: int = field(default_factory=lambda: _int("TELEGRAM_LAUNCH_MAX_AGE_MIN", 60))
+    # and no sooner than this after the first trusted buy: provenance needs a few fills to see a
+    # wave's shape, and DEED went out two minutes into one (seeded, after the fact, to 7 chats)
+    telegram_launch_min_age_s: int = field(default_factory=lambda: _int("TELEGRAM_LAUNCH_MIN_AGE_S", 180))
     # ... and only while the cohort is still buying: the last trusted buy no older than this.
     # Replayed over 38 launches (12-16 Sep): pushed more than six minutes after the cohort's last
     # buy, one of six reached 2x (and slowly); inside six minutes, thirteen of thirty-two. Two
@@ -255,7 +261,9 @@ class Settings:
     # wallets and fell 76%. When the cohort is a sliver of the pool it is following the crowd,
     # not leading it. Measured on every push (pushes.cohort_share, the message, the hook); the
     # gate is off at 0 until scripts/crowd_share.py says where the line is.
-    hot_min_cohort_share: float = field(default_factory=lambda: _float("HOT_MIN_COHORT_SHARE", 0.0))
+    # The study (scripts/crowd_share.py, 93 alerts, 30 days): under 3% the pushes lost $1,975 on
+    # $100 each, 18% above the call at the hour; at 3% and over they made $1,364, 54% above.
+    hot_min_cohort_share: float = field(default_factory=lambda: _float("HOT_MIN_COHORT_SHARE", 0.03))
     # the second paper read on every alert: out at the first pullback this far under the
     # running high inside the hour, at that level (hot.outcome). Twenty percent: the only rule
     # in the 18 Sep exit study that paid on both bursts and launches.
@@ -347,6 +355,9 @@ class Settings:
     # high-cap launches (MEME on robinhood), so it is off by default.
     codex_exclude_potential_scam: bool = field(default_factory=lambda: _env("CODEX_EXCLUDE_POTENTIAL_SCAM", "false").lower() in ("1", "true", "yes"))
     gecko_min_interval_s: float = field(default_factory=lambda: _float("GECKO_MIN_INTERVAL_S", 2.0))
+    # the request-thread client's patience with the screener: twenty seconds was a token page
+    # hanging for twenty seconds while GeckoTerminal answered 504s (17:30-17:58 on 21 Sep)
+    gecko_impatient_timeout_s: float = field(default_factory=lambda: _float("GECKO_IMPATIENT_TIMEOUT_S", 4.0))
     new_token_min_liquidity_usd: float = field(default_factory=lambda: _float("NEW_TOKEN_MIN_LIQUIDITY_USD", 10_000))
     holders_top_n: int = field(default_factory=lambda: _int("HOLDERS_TOP_N", 30))
     # How long a token's price stays usable before the enrichment pass re-quotes it. Open

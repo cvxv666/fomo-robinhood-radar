@@ -235,9 +235,20 @@ def test_the_cohort_share_is_measured_and_gates_only_when_a_floor_is_set(conn, m
             assert timeframe == "minute" and limit >= 30
             # thirty-five minutes of candles, $10k a minute; only the last thirty count
             return [[now - 60 * i, 1, 1, 1, 1, 10_000.0] for i in range(35, 0, -1)]
+    class Chain:
+        """The pool's own swaps: $400k in the half hour."""
+        def pool_volume_usd(self, pool, since_ts, created_ts=None):
+            assert since_ts == now - 1800
+            return 400_000.0
+
+    class NoChain:
+        def pool_volume_usd(self, pool, since_ts, created_ts=None):
+            return None
     safety._share_cache.clear()
-    assert safety.cohort_share(conn, FINE, 10_000.0, now=now, gt=Gt()) == 0.033
-    assert safety.cohort_share(conn, FINE, None, now=now, gt=Gt()) is None
+    assert safety.cohort_share(conn, FINE, 10_000.0, now=now, gt=Gt(), rpc=Chain()) == 0.025, "the chain first"
+    safety._share_cache.clear()
+    assert safety.cohort_share(conn, FINE, 10_000.0, now=now, gt=Gt(), rpc=NoChain()) == 0.033, "the screener when the chain cannot say"
+    assert safety.cohort_share(conn, FINE, None, now=now, gt=Gt(), rpc=Chain()) is None
     monkeypatch.setattr(settings, "hot_min_cohort_share", 0.0)
     assert safety.crowd_objection(0.04) is None, "off by default"
     monkeypatch.setattr(settings, "hot_min_cohort_share", 0.1)
@@ -245,3 +256,23 @@ def test_the_cohort_share_is_measured_and_gates_only_when_a_floor_is_set(conn, m
     assert safety.crowd_objection(0.4) is None and safety.crowd_objection(None) is None
     from fomo_agent import bot
     assert ("of the pool's hour", "4%") in bot.share_row({"cohort_share": 0.04}) and bot.share_row({}) == []
+
+
+def test_a_max_tx_cap_is_a_limit_not_a_block(conn):
+    """VDT, ORE, KARURE, KEEL: "Exceeds max tx" on a one-percent move read as unsellable for a
+    day. A cap on the size of one transfer is asked again a hundred thousandth at a time."""
+    class CappedRpc(FakeRpc):
+        def call(self, method, params):
+            tx = params[0]
+            if tx["data"].startswith("0xa9059cbb"):
+                amount = int(tx["data"][74:], 16)
+                if amount > 10 ** 21:
+                    raise RpcError("eth_call: execution reverted: Exceeds max tx")
+                if tx["to"] == TRAP:
+                    raise RpcError("eth_call: execution reverted: sell disabled")
+                return "0x" + "0" * 63 + "1"
+            return super().call(method, params)
+    v = safety.check(conn, FINE, rpc=CappedRpc(), gt=FakeGt(), force=True)
+    assert v["sellable"] == 1 and "hundred thousandth" in v["note"]
+    v = safety.check(conn, TRAP, rpc=CappedRpc(), gt=FakeGt(), force=True)
+    assert v["sellable"] == 0 and "even at a hundred thousandth" in v["note"]

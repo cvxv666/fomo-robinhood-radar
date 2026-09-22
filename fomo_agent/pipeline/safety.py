@@ -70,6 +70,17 @@ def probe_transfer(rpc: RobinhoodRPC, mint: str, pool: str, holder: str) -> tupl
     try:
         raw = rpc.call("eth_call", [{"from": holder, "to": mint, "data": data}, "latest"])
     except RpcError as e:
+        # a cap on the size of one transfer is a limit, not a block: six tokens read unsellable
+        # on 21 Sep for "Exceeds max tx" on a one-percent move, VDT among them, which had done
+        # 2x with sellers all the way. Asked again a hundred thousandth at a time
+        if _is_limit(e):
+            data = TRANSFER_SELECTOR + topic_for(to)[2:] + _u256(max(1, units // 100_000))
+            try:
+                raw = rpc.call("eth_call", [{"from": holder, "to": mint, "data": data}, "latest"])
+            except RpcError as e2:
+                return "blocked", f"a transfer to the {where} reverts even at a hundred thousandth: {str(e2)[:100]}"
+            ok = "unknown" if weak else "ok"
+            return ok, f"a transfer to the {where} goes through at a hundred thousandth (one percent exceeds its max tx)"
         return "blocked", f"a transfer to the {where} reverts: {str(e)[:120]}"
     ok = "unknown" if weak else "ok"
     if raw in (None, "0x"):
@@ -78,6 +89,12 @@ def probe_transfer(rpc: RobinhoodRPC, mint: str, pool: str, holder: str) -> tupl
         return (ok, f"a transfer to the {where} goes through") if int(raw, 16) else ("blocked", f"a transfer to the {where} returns false")
     except ValueError:
         return "unknown", f"a transfer to the {where} answered something unreadable"
+
+
+def _is_limit(e: Exception) -> bool:
+    """The revert of a size cap, as tokens word it, rather than of a sell that is not allowed."""
+    m = str(e).lower()
+    return any(w in m for w in ("max tx", "maxtx", "max transaction", "exceeds max", "max wallet", "maxwallet", "amount too large", "exceeds limit"))
 
 
 def holders_to_try(conn: sqlite3.Connection, mint: str, limit: int = 3) -> list[str]:
@@ -295,33 +312,46 @@ SHARE_WINDOW_S = 1800   # the same half hour scripts/crowd_share.py measured the
 
 
 def cohort_share(conn: sqlite3.Connection, mint: str, cohort_usd: float | None, now: int | None = None, gt=None,
-                 max_age_s: int = 300) -> float | None:
-    """The cohort's dollars over the pool's last half hour, 0..1, or None when the pool cannot say.
+                 rpc: RobinhoodRPC | None = None, max_age_s: int = 300) -> float | None:
+    """The cohort's dollars over the pool's last half hour, 0..1, or None when nobody can say.
 
     A share near one is the cohort making the market; a share near zero is the cohort arriving in
-    a market the crowd already made. Measured the way the study measured the ledger - the pool's
-    minute candles over the same window the cohort's buys were counted in - so that the floor the
-    study names means the same thing here. The number goes on the ledger and into the message
-    either way; whether it gates a push is `hot_min_cohort_share`."""
+    a market the crowd already made. The pool's half hour comes from the chain - its own swaps,
+    which exist from the pool's first block - and from the screener's minute candles only when
+    the chain will not answer: the screener takes minutes to index a new pool, and a launch is
+    pushed inside those minutes (four pushes on 21 Sep, every share NULL). The same window the
+    study measured the ledger with, so the floor means the same thing here. The number goes on
+    the ledger and into the message either way; whether it gates a push is `hot_min_cohort_share`."""
     if not cohort_usd:
         return None
     now = now or db.now()
     hit = _share_cache.get(mint)
     if hit and now - hit[0] < max_age_s:
         return hit[1]
-    row = conn.execute("SELECT pool_address, chain FROM tokens WHERE mint=?", (mint,)).fetchone()
-    out = None
+    row = conn.execute("SELECT pool_address, chain, created_at FROM tokens WHERE mint=?", (mint,)).fetchone()
+    out, why = None, "no pool on record"
     if row and row["pool_address"]:
+        vol = None
         try:
-            if gt is None:
-                from ..sources.geckoterminal import GeckoTerminal
-                gt = GeckoTerminal(patient=False)
-            c = gt.ohlcv(row["chain"] or "robinhood", row["pool_address"], "minute", 1, SHARE_WINDOW_S // 60 + 5) or []
-            vol = sum(x[5] for x in c if len(x) > 5 and x[0] >= now - SHARE_WINDOW_S)
-            if vol > 0:
-                out = round(min(1.0, cohort_usd / vol), 3)
-        except Exception as e:  # noqa: BLE001 - the screener being busy is not a verdict
-            log.debug("share lookup for %s failed: %s", mint[:10], e)
+            rpc = rpc or RobinhoodRPC()
+            vol = rpc.pool_volume_usd(row["pool_address"], now - SHARE_WINDOW_S, row["created_at"])
+            why = "the chain has no swaps for it" if vol is None else ""
+        except Exception as e:  # noqa: BLE001 - the chain saying no is the screener's turn
+            why = f"chain: {str(e)[:80]}"
+        if vol is None:
+            try:
+                if gt is None:
+                    from ..sources.geckoterminal import GeckoTerminal
+                    gt = GeckoTerminal(patient=False)
+                c = gt.ohlcv(row["chain"] or "robinhood", row["pool_address"], "minute", 1, SHARE_WINDOW_S // 60 + 5) or []
+                vol = sum(x[5] for x in c if len(x) > 5 and x[0] >= now - SHARE_WINDOW_S) or None
+                why = why if vol is None else ""
+            except Exception as e:  # noqa: BLE001 - the screener being busy is not a verdict
+                why = f"{why}; screener: {str(e)[:60]}"
+        if vol is not None and vol > 0:
+            out = round(min(1.0, cohort_usd / vol), 3)
+    if out is None:
+        log.warning("cohort share of %s unmeasured: %s", mint[:10], why)
     _share_cache[mint] = (now, out)
     return out
 

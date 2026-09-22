@@ -380,3 +380,50 @@ def test_windows_stop_at_the_chain_start(monkeypatch):
     rpc = RobinhoodRPC(url="http://offline")
     wins = list(rpc.windows(0))
     assert wins[-1][0] == 0, "a chain younger than the request is walked to its own beginning"
+
+
+def test_a_pools_volume_is_read_from_its_own_swaps(monkeypatch):
+    """Fireeyes: a launchpad pool against the chain's ether, the mint as currency1. Two swaps of
+    0.01 ETH each way, at $2,500, are $50 of volume - from the block the pool opened."""
+    from fomo_agent.sources.rpc import INITIALIZE_TOPIC, NATIVE, SWAP_TOPIC
+    from fomo_agent.config import settings
+    pool = "0x" + "b3" * 32
+    mint = "0x4bcbd49a1e22ac8f1fe80ab40e49039a43973840"
+    asked = []
+
+    def word(v):
+        return f"{v & ((1 << 256) - 1):064x}"
+
+    def fake_post(self, payload):
+        method = payload["method"]
+        if method == "eth_blockNumber":
+            return {"result": hex(1_000_000)}
+        if method == "eth_getBlockByNumber":
+            block = int(payload["params"][0], 16)
+            return {"result": {"timestamp": hex(1_700_000_000 + block // 10)}}
+        if method == "eth_getLogs":
+            f = payload["params"][0]
+            asked.append(f)
+            assert f["address"] == settings.rpc_pool_manager
+            if f["topics"][0] == INITIALIZE_TOPIC:
+                return {"result": [{"topics": [INITIALIZE_TOPIC, pool, "0x" + "0" * 64, "0x" + "0" * 24 + mint[2:]], "data": "0x"}]}
+            if f["topics"][0] == SWAP_TOPIC:
+                assert f["topics"][1] == pool
+                return {"result": [
+                    {"data": "0x" + word(-(10 ** 16)) + word(5 * 10 ** 20) + word(0) * 4},   # ether out of the pool
+                    {"data": "0x" + word(10 ** 16) + word(-(5 * 10 ** 20)) + word(0) * 4},   # ether in
+                    {"data": "0xshort"},
+                ]}
+        raise AssertionError(f"unexpected call {method}")
+
+    monkeypatch.setattr(RobinhoodRPC, "_post", fake_post)
+    rpc = RobinhoodRPC(url="http://offline")
+    rpc.eth_price = 2500.0
+    assert rpc.pool_currencies(pool, created_ts=1_700_099_000) == (NATIVE, mint)
+    assert rpc.pool_currencies(pool) == (NATIVE, mint), "remembered"
+    assert rpc.pool_volume_usd(pool, since_ts=1_700_099_800) == 50.0
+    assert [a["topics"][0] for a in asked] == [INITIALIZE_TOPIC, SWAP_TOPIC]
+    assert rpc.pool_currencies("0xnotapool") is None
+    # a pool whose currencies are neither ether nor a quote asset has no dollar volume to read
+    rpc._pools["0x" + "c4" * 32] = ("0x" + "a" * 40, "0x" + "b" * 40)
+    assert rpc.pool_volume_usd("0x" + "c4" * 32, since_ts=1_700_099_800) is None

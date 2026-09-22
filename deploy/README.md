@@ -62,9 +62,18 @@ preserves `.env` across the deploy — that file belongs to the server, not to t
 ## Logs
 
 Everything goes to the journal, so rotation is journald's job rather than a logrotate file.
-`journald/fomoradar.conf` caps it at a gigabyte and thirty days — about a month of this workload,
-and longer than anybody looks back. Copy it to `/etc/systemd/journald.conf.d/` and restart
-`systemd-journald`.
+`journald/fomoradar.conf` caps it at four gigabytes and thirty days — Caddy alone writes 800k
+lines a day once the site has bots, and a gigabyte held twenty-one hours. Copy it to
+`/etc/systemd/journald.conf.d/` and restart `systemd-journald`. The API's own access log is off;
+Caddy has every request.
+
+The secrets in `.env` never reach the journal: `cli.Redacting` scrubs the bot token and the API
+keys out of every line and traceback before it is written (an httpx error carries the request
+URL, and the bot's URL carries its token).
+
+`fail2ban/` holds a jail for the site: an address the rate limiter turns away three hundred
+times in a minute is banned for an hour (`filter-caddy-429.conf` to `/etc/fail2ban/filter.d/caddy-429.conf`,
+`jail-caddy-429.conf` to `/etc/fail2ban/jail.d/caddy-429.conf`, then restart `fail2ban`).
 
 ## Access
 

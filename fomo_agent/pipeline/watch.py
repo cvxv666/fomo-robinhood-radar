@@ -117,7 +117,7 @@ def tick(conn: sqlite3.Connection, w: Watch, now: int | None = None) -> dict:
         # site read back, and what a month from now says whether the feed was worth having
         stats["recorded"] = sum(record(conn, h, settings.telegram_realert_hours * 3600, CHAIN)
                                 for h in burning)
-        stats["sent"] = push(conn, burning)
+        stats["sent"] = push(conn, burning, rpc=w.rpc)
         w.alerts += stats["sent"]
     return stats
 
@@ -203,7 +203,25 @@ def tell_followers(conn: sqlite3.Connection, sigs: list[str], now: int | None = 
     return sent
 
 
-def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
+_held: dict[str, float] = {}
+
+
+def held(mint: str, msg: str, *args, every_s: int = 3600) -> None:
+    """A push held back is said once an hour per token, not once a tick: AGE was held forty-eight
+    times in a day for the same reason, and the reason was the whole of the watcher's journal."""
+    now = time.monotonic()
+    key = f"{mint}:{msg}"
+    if now - _held.get(key, -every_s) >= every_s:
+        _held[key] = now
+        log.warning(msg, *args)
+    else:
+        log.debug(msg, *args)
+    if len(_held) > 2000:
+        for k in sorted(_held, key=_held.get)[:1000]:
+            del _held[k]
+
+
+def push(conn: sqlite3.Connection, burning: list[dict], rpc: RobinhoodRPC | None = None) -> int:
     """Tell every subscriber about each burst once. Lazy import: the bot needs a token, this does
     not, and a watcher with no bot configured is still a faster tape."""
     from ..bot import Telegram, fmt_hot, subscribers, already_sent, mark_sent, gone, unsubscribe
@@ -223,36 +241,36 @@ def push(conn: sqlite3.Connection, burning: list[dict]) -> int:
         # the first time a token bursts is the first time anyone tries to sell it in our name
         verdict = sell_check(conn, h["mint"], rpc=None, now=None)
         if verdict["sellable"] == 0:
-            log.warning("burst on %s not pushed: %s", h["sym"], verdict["note"])
+            held(h["mint"], "burst on %s not pushed: %s", h["sym"], verdict["note"])
             continue
         why = only_the_cohort(conn, h["mint"], h["wallets"], now)
         if why:
-            log.warning("burst on %s not pushed: %s", h["sym"], why)
+            held(h["mint"], "burst on %s not pushed: %s", h["sym"], why)
             continue
         from .deployers import objection
         why = objection(conn, h["mint"], now=now)
         if why:
-            log.warning("burst on %s not pushed: %s", h["sym"], why)
+            held(h["mint"], "burst on %s not pushed: %s", h["sym"], why)
             continue
         key = f"hot:{h['mint']}"
         from .analyze import namesakes
         h["clones"] = namesakes(conn, h.get("sym"), h["mint"], now, hours=settings.telegram_clone_hours)
         # a burst on a name pushed today already needs half again the conviction to be told
         if any(c.get("pushed_at") for c in h["clones"]) and h["conviction"] < 1.5 * settings.hot_delta:
-            log.warning("burst on %s not pushed: a %s was pushed in the last %dh and conviction %.1f is under %.1f",
-                        h["sym"], h["sym"], settings.telegram_clone_hours, h["conviction"], 1.5 * settings.hot_delta)
+            held(h["mint"], "burst on %s not pushed: a %s was pushed in the last %dh and conviction %.1f is under %.1f",
+                 h["sym"], h["sym"], settings.telegram_clone_hours, h["conviction"], 1.5 * settings.hot_delta)
             continue
         from .safety import cohort_share, crowd_objection
-        h["cohort_share"] = cohort_share(conn, h["mint"], h.get("usd"), now)
+        h["cohort_share"] = cohort_share(conn, h["mint"], h.get("usd"), now, rpc=rpc)
         why = crowd_objection(h["cohort_share"])
         if why:
-            log.warning("burst on %s not pushed: %s", h["sym"], why)
+            held(h["mint"], "burst on %s not pushed: %s", h["sym"], why)
             continue
         from .analyze import borrowed_name
         h["borrowed"] = borrowed_name(conn, h.get("sym"), h["mint"], now)
         if h["borrowed"] and h["conviction"] < settings.namesake_bar_mult * settings.hot_delta:
-            log.warning("burst on %s not pushed: %s, and conviction %.1f is under %.1f", h["sym"], h["borrowed"]["why"],
-                        h["conviction"], settings.namesake_bar_mult * settings.hot_delta)
+            held(h["mint"], "burst on %s not pushed: %s, and conviction %.1f is under %.1f", h["sym"], h["borrowed"]["why"],
+                 h["conviction"], settings.namesake_bar_mult * settings.hot_delta)
             continue
         text = fmt_hot(h)
         told = 0

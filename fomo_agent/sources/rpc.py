@@ -53,6 +53,18 @@ USDG = "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
 # Assets a swap is denominated in rather than positions anyone takes. USDG is the chain's dollar
 # stablecoin; both of these appear on the quote side of trades and must never read as a signal.
 QUOTE_TOKENS = {WETH: ("WETH", 18), USDG: ("USDG", 6)}
+# a v4 pool against the chain's own ether has the zero address for it; the launchpad's pools do
+NATIVE = "0x" + "0" * 40
+POOL_QUOTES = {NATIVE: ("ETH", 18), **QUOTE_TOKENS}
+# the pool manager's events, by topic: a pool opening (its id and its two currencies, indexed),
+# and a swap in it (the id indexed; amount0 and amount1 as signed 128-bit words in the data)
+INITIALIZE_TOPIC = "0xdd466e674ea557f56295e2d0218a125ea4b4f0f6f3307b95f85e6110838d6438"
+SWAP_TOPIC = "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f"
+
+
+def _int128(word: str) -> int:
+    v = int(word, 16)
+    return v - (1 << 256) if v >= (1 << 255) else v
 
 
 class RpcError(RuntimeError):
@@ -167,6 +179,7 @@ class RobinhoodRPC:
         self._known: set[str] = set()       # transactions the tape already holds; see skip_known
         self._probes: dict[int, int] = {}   # block -> timestamp, for dating an arbitrary moment
         self._decimals: dict[str, int] = {}  # token -> decimals; constant, so cached for the run
+        self._pools: dict[str, tuple[str, str]] = {}   # pool id -> (currency0, currency1), from Initialize
 
     # ---------- transport ----------
 
@@ -437,6 +450,56 @@ class RobinhoodRPC:
         topics[1 if outgoing else 2] = [topic_for(w) for w in wallets]
         raw = self.logs(from_block, to_block, topics=topics)
         return [t for t in (parse_transfer(e) for e in raw) if t]
+
+    # ---------- a pool by its id ----------
+
+    def pool_currencies(self, pool_id: str, created_ts: int | None = None) -> tuple[str, str] | None:
+        """The two currencies of a pool, from the pool manager's Initialize event: around the
+        block the pool opened when the caller knows the time, else the recent window. Remembered."""
+        pool_id = pool_id.lower()
+        if pool_id in self._pools:
+            return self._pools[pool_id]
+        if not pool_id.startswith("0x") or len(pool_id) != 66:
+            return None
+        if created_ts:
+            b = self.block_at(created_ts)
+            first, last = max(b - 3000, 0), b + 3000
+        else:
+            last = self.block_number()
+            first = max(last - settings.rpc_window_blocks, 0)
+        logs = self.logs(first, last, address=settings.rpc_pool_manager, topics=[INITIALIZE_TOPIC, pool_id])
+        if not logs:
+            return None
+        t = logs[0]["topics"]
+        cur = ("0x" + t[2][-40:], "0x" + t[3][-40:])
+        self._pools[pool_id] = cur
+        return cur
+
+    def pool_volume_usd(self, pool_id: str, since_ts: int, created_ts: int | None = None) -> float | None:
+        """Dollars swapped in a pool since `since_ts`, from its own Swap events: the quote side of
+        every swap, summed, priced. None when the pool's currencies are unknown or neither is a
+        quote asset. Two or three requests; the screener needs minutes to index a new pool and
+        this needs a block."""
+        cur = self.pool_currencies(pool_id, created_ts)
+        if not cur:
+            return None
+        side = 0 if cur[0] in POOL_QUOTES else 1 if cur[1] in POOL_QUOTES else None
+        if side is None:
+            return None
+        sym, dec = POOL_QUOTES[cur[side]]
+        first = self.block_at(since_ts)
+        logs = self.logs(first, self.block_number(), address=settings.rpc_pool_manager, topics=[SWAP_TOPIC, pool_id.lower()])
+        units = 0
+        for lg in logs:
+            data = (lg.get("data") or "0x")[2:]
+            if len(data) < 128:
+                continue
+            units += abs(_int128(data[side * 64:(side + 1) * 64]))
+        amount = units / 10 ** dec
+        if sym == "USDG":
+            return amount
+        price = self.weth_price()
+        return amount * price if price else None
 
     def weth_price(self) -> float | None:
         """WETH in dollars, from DexScreener — one free request, cached for the process."""

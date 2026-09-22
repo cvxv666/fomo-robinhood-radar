@@ -17,8 +17,30 @@ app = typer.Typer(
     no_args_is_help=True)
 
 
+class Redacting(logging.Formatter):
+    """Every secret the settings hold, out of every line and traceback before it is written.
+    An httpx error carries the request URL; the bot's URL carries its token; the journal is
+    world-readable to root and kept for a month. Two such lines on 22 Sep, and the token had
+    to be reissued."""
+
+    def __init__(self, fmt: str):
+        super().__init__(fmt)
+        from .config import settings
+        self.secrets = [v for v in (settings.telegram_bot_token, getattr(settings, "x_client_secret", None),
+                                    getattr(settings, "fomoapi_key", None), getattr(settings, "anthropic_api_key", None))
+                        if isinstance(v, str) and len(v) >= 12]
+
+    def format(self, record: logging.LogRecord) -> str:
+        out = super().format(record)
+        for v in self.secrets:
+            out = out.replace(v, "***")
+        return out
+
+
 def _setup(verbose: bool) -> None:
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    for h in logging.getLogger().handlers:
+        h.setFormatter(Redacting("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 

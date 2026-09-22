@@ -706,8 +706,10 @@ def serve(host: str | None = None, port: int | None = None, reload: bool = False
     # rate-limiting us can take a minute; the site sat behind a 502 for 64 seconds once because
     # of exactly that. Anything a request could not finish in three seconds, the client has
     # already given up on.
+    # Caddy writes every request already; uvicorn writing each one again was 776k lines a day
+    # and half the journal, which then held twenty-one hours instead of thirty days
     uvicorn.run("fomo_agent.api:app", host=host or settings.api_host,
                 port=port or settings.api_port, reload=reload,
                 reload_dirs=["fomo_agent"] if reload else None,
                 workers=None if reload else max(1, settings.api_workers),
-                timeout_graceful_shutdown=3)
+                timeout_graceful_shutdown=3, access_log=False)
