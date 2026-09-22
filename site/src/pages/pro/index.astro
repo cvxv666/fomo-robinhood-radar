@@ -19,7 +19,7 @@ const approx = t?.price ? Math.ceil(t.usd / t.price) : null;
 <Base title="PRO — FOMO Robinhood Radar" section="pro" noindex={false}
       description={`The alerts and the live feeds of FOMO Robinhood Radar, paid in $${symbol} and burned.`}>
   <div class="pagehead"><h1>PRO</h1></div>
-  <p class="subhead">the alerts and the live feeds, paid in the token and burned</p>
+  <p class="subhead">the wallet feeds and the API, paid in the token and burned — the alerts are free</p>
 
   {enabled ? (
     <section class="pro">
@@ -43,18 +43,18 @@ const approx = t?.price ? Math.ceil(t.usd / t.price) : null;
         <div>
           <h3>PRO</h3>
           <ul>
-            <li>a <b>burst</b> the moment it forms — several trusted wallets in one token inside minutes</li>
-            <li>a <b>launch</b> while it is still early</li>
-            <li><code>/hot</code> <code>/signals</code> <code>/fresh</code> <code>/exits</code>, live, whenever you ask</li>
+            <li><code>/follow</code> — a wallet's every fill, in your chat within a tick of the chain</li>
+            <li><code>/signals</code> and <code>/exits</code> — the cohort's whole book, live</li>
+            <li>an API key at 600 reads a minute, and <a href="/webhooks">webhooks</a>: every alert POSTed to your own URL</li>
           </ul>
         </div>
         <div>
           <h3>Free, always</h3>
           <ul>
-            <li><code>/top</code> — the leaderboard, ranked by judgement</li>
-            <li>any token address or trader handle, answered</li>
-            <li>one digest a day</li>
-            <li>this site</li>
+            <li>the <b>burst</b> alerts — the moment several trusted wallets enter one token</li>
+            <li><code>/hot</code> and <code>/launches</code> whenever you ask</li>
+            <li><code>/top</code>, any token address or trader handle, answered</li>
+            <li>one digest a day · <a href="/record">the record</a> · this site</li>
           </ul>
         </div>
       </div>

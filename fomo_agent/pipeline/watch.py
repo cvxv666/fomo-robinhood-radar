@@ -233,7 +233,10 @@ def push(conn: sqlite3.Connection, burning: list[dict], rpc: RobinhoodRPC | None
     from . import pushes as pro_pushes
 
     now = db.now()
-    subs = [s for s in subscribers(conn) if pro.entitled_row(s, now)]
+    # A burst goes to every chat, paid or not. It is the half of the feed that pays for itself
+    # (30 days: +$523 on $100 into each, 51% above the call, against the launches' -$1,205), and
+    # a free tier that works is worth more than eight chats hearing it alone.
+    subs = subscribers(conn)
     if not subs or not settings.telegram_bot_token:
         return 0
     tg = Telegram()

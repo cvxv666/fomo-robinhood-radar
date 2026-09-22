@@ -32,9 +32,15 @@ def last_trusted_px(conn: sqlite3.Connection, mint: str, ts: int) -> float | Non
     return row["p"] if row else None
 
 
-def record(conn: sqlite3.Connection, kind: str, item: dict, chats: int, now: int | None = None) -> int | None:
+def record(conn: sqlite3.Connection, kind: str, item: dict, chats: int, now: int | None = None,
+           shadow: bool = False) -> int | None:
     """One row per push event. The same token pushed the same way inside the re-alert window is
-    the same event and is not written twice. Returns the row id, or None when nothing was."""
+    the same event and is not written twice. Returns the row id, or None when nothing was.
+
+    A shadow row is one nobody was sent: the launch feed is measured on the same ledger so that
+    the question "would it have paid" keeps an answer, and `chats` of zero is what says so. It
+    goes nowhere else - no post, no hook, no card.
+    """
     now = now or db.now()
     mint = item["mint"]
     quiet = settings.telegram_realert_hours * 3600
@@ -50,8 +56,9 @@ def record(conn: sqlite3.Connection, kind: str, item: dict, chats: int, now: int
             "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
             (kind, mint, now, px, item.get("heat"), item.get("conviction"), item.get("wallets") or item.get("buyers"),
              item.get("liq"), chats, due, item.get("cohort_share")))
-    from . import xpost
-    xpost.enqueue(conn, cur.lastrowid, kind, item, now)   # nothing unless X is on
+    if not shadow:
+        from . import xpost
+        xpost.enqueue(conn, cur.lastrowid, kind, item, now)   # nothing unless X is on
     return cur.lastrowid
 
 

@@ -773,7 +773,7 @@ def bot_cmd(
     check: bool = typer.Option(False, "--check", help="verify the token and print the bot identity"),
 ) -> None:
     """Run the Telegram bot: answers questions and pushes signals as they happen."""
-    from .bot import Telegram, broadcast, run
+    from .bot import Telegram, run, sweep_launches
 
     tg = Telegram()
     if check:

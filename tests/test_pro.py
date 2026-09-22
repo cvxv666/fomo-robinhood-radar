@@ -116,17 +116,16 @@ def test_the_gate_lets_through_paid_grace_and_nobody_else(conn, monkeypatch):
     assert pro.entitled(conn, "nobody", now), "no price is no gate"
 
 
-def test_pushes_go_only_to_entitled_chats(conn, monkeypatch):
+def test_the_burst_goes_to_every_chat_and_the_wallet_feeds_do_not(conn, monkeypatch):
+    """The alerts are free from 22 September: the burst is the half of the feed that pays for
+    itself, and a free tier that works is the funnel. What is paid for is /follow, the cohort's
+    whole book, and the API."""
     monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
     bot.subscribe(conn, "free", None)
     bot.subscribe(conn, "paid", None)
     pro.grant(conn, "paid", 30)
-    from tests.test_bot import a_launch
-    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
-    tg = FakeTelegram()
-    stats = bot.broadcast(conn, tg)
-    assert stats["sent"] == 1 and tg.sent[0][0] == "paid"
-    # the watcher's burst push runs the same gate
+    assert "PRO" in bot.handle_text(conn, "/signals", "free", None)
+    assert "PRO" in bot.handle_text(conn, "/exits", "free", None)
     sent_to = []
     monkeypatch.setattr(settings, "telegram_bot_token", "x")
     monkeypatch.setattr(bot, "Telegram", lambda: type("T", (), {"send": lambda self, c, t, preview=False: sent_to.append(str(c))})())
@@ -135,14 +134,16 @@ def test_pushes_go_only_to_entitled_chats(conn, monkeypatch):
     h = {"mint": "0x" + "9" * 40, "sym": "HOT2", "conviction": 4.4, "wallets": 3, "usd": 9000.0, "px": 0.01,
          "first_ts": db.now() - 120, "last_ts": db.now(), "age_s": 300, "window_s": 1800, "liq": 50_000.0,
          "who": ["ace"], "scores": [88], "avg_score": 88.0}
-    assert watch.push(conn, [h]) == 1 and sent_to == ["paid"]
+    assert watch.push(conn, [h]) == 2 and sorted(sent_to) == ["free", "paid"]
 
 
 def test_free_feeds_and_pro_feeds(conn, monkeypatch):
     monkeypatch.setattr(settings, "public_site_url", "https://radar.test")
     bot.subscribe(conn, "free", None)
     monkeypatch.setattr(bot.analyze, "leaderboard", lambda *a, **k: [])
-    assert "PRO" in bot.handle_text(conn, "/hot", "free", None)
+    assert "PRO" in bot.handle_text(conn, "/signals", "free", None)
+    assert "PRO" not in bot.handle_text(conn, "/hot", "free", None), "bursts are free everywhere"
+    assert "PRO" not in bot.handle_text(conn, "/launches", "free", None), "and a launch is only ever pulled"
     assert "PRO" not in bot.handle_text(conn, "/top", "free", None) or "leaderboard" in bot.handle_text(conn, "/top", "free", None).lower()
     quote_text = bot.handle_text(conn, "/pro", "free", None)
     q = pro.open_quote(conn, "free")

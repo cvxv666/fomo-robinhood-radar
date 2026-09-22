@@ -394,15 +394,20 @@ def candles_for(pool: str, chain_name: str, span: str, ttl: float | None = None,
 def record_route(
     days: int = Query(30, ge=1, le=120),
     kind: str | None = Query(None, pattern="^(burst|launch)$"),
+    include_unsent: bool = Query(False, description="also the launches nobody was sent, kept for the study"),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> dict:
     """Every alert the bot sent in the window and what came of each: entry, the hour's peak and
     when, where it sits now, what traded, a verdict - and the paper run those rows make, a
     hundred dollars into every alert at the entry and out at the hour read. The record is what
-    the messages in a subscriber's chat add up to; nothing here is recomputed to look better."""
+    the messages in a subscriber's chat add up to; nothing here is recomputed to look better.
+
+    Launches stopped being pushed on 22 September and are still measured on the same ledger;
+    `include_unsent=true` adds those rows, which is the honest way to ask whether they should
+    come back rather than the way to make the record look busier."""
     from .pipeline import record
 
-    return record.report(conn, days=days, kind=kind)
+    return record.report(conn, days=days, kind=kind, sent_only=not include_unsent)
 
 
 @app.get("/api/pro", tags=["meta"])

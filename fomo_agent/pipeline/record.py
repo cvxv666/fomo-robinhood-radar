@@ -39,14 +39,20 @@ def verdict(r: dict, now: int) -> str:
     return "above" if r["best"] > 1.0 else "below"
 
 
-def rows(conn: sqlite3.Connection, days: int = 30, kind: str | None = None, now: int | None = None) -> list[dict]:
+def rows(conn: sqlite3.Connection, days: int = 30, kind: str | None = None, now: int | None = None,
+         sent_only: bool = True) -> list[dict]:
+    """The ledger over the window. By default only what was actually sent to somebody: the launch
+    feed is written down unsent (pushes.record shadow rows, `chats` = 0) so that it can be
+    studied, and a record of alerts nobody got is not the record of this product.
+    """
     now = now or db.now()
     out = []
     for r in conn.execute(
             "SELECT p.*, COALESCE(tk.symbol, substr(p.mint, 1, 8)) sym, tk.price_usd, tk.sellable, "
             "  EXISTS(SELECT 1 FROM trades s WHERE s.mint = p.mint AND s.kind = 'seed') seeded "
             "FROM pushes p LEFT JOIN tokens tk ON tk.mint = p.mint "
-            "WHERE p.ts >= ?" + (" AND p.kind = ?" if kind else "") + " ORDER BY p.ts DESC",
+            "WHERE p.ts >= ?" + (" AND COALESCE(p.chats, 0) > 0" if sent_only else "")
+            + (" AND p.kind = ?" if kind else "") + " ORDER BY p.ts DESC",
             [now - days * 86400, *([kind] if kind else [])]):
         d = {
             "id": r["id"], "ts": r["ts"], "kind": r["kind"], "mint": r["mint"], "sym": r["sym"],
@@ -114,7 +120,8 @@ def curve(rs: list[dict], key: str = "paper") -> list[dict]:
     return out
 
 
-def report(conn: sqlite3.Connection, days: int = 30, kind: str | None = None, now: int | None = None) -> dict:
-    rs = rows(conn, days, kind, now)
+def report(conn: sqlite3.Connection, days: int = 30, kind: str | None = None, now: int | None = None,
+           sent_only: bool = True) -> dict:
+    rs = rows(conn, days, kind, now, sent_only)
     return {"days": days, "kind": kind or "all", "stake": STAKE, "followup_min": settings.telegram_followup_min,
             "trail_drop": settings.trail_drop, "totals": totals(rs), "curve": curve(rs), "curve_trail": curve(rs, "paper_trail"), "pushes": rs}

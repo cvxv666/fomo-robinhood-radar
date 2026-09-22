@@ -132,7 +132,7 @@ def test_the_menu_is_registered_on_start(conn, monkeypatch):
 
     tg = Poller()
     bot.run(conn, tg, once=True)
-    assert [c for c, _ in tg.commands][:2] == ["hot", "signals"]
+    assert [c for c, _ in tg.commands][:2] == ["hot", "launches"]
 
 
 def test_a_bare_handle_returns_the_verdict(conn):
@@ -242,32 +242,45 @@ def a_launch(mint="0x" + "e" * 40, sym="HOT", age_s=600, heat=4.2):
             "first_ts": db.now() - age_s, "last_ts": db.now() - 60}
 
 
-def test_signals_are_not_pushed_launches_are(conn, monkeypatch):
-    """The fixture has a signal ($PONS, conviction well over any floor). Nobody is pushed it: the
-    signal feed answers /signals and nothing else. A launch goes to everyone, whatever number they
-    once gave /subscribe."""
-    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
-    bot.subscribe(conn, "low", None, min_conviction=0.5)
-    bot.subscribe(conn, "high", None, min_conviction=99.0)
-    assert bot.broadcast(conn, FakeTelegram())["sent"] == 0
-
-    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
-    tg = FakeTelegram()
-    stats = bot.broadcast(conn, tg)
-    assert stats["subscribers"] == 2 and stats["sent"] == 2 and stats["launches"] == 2
-    assert all("$HOT" in text for _, text in tg.sent)
-
-
-def test_the_same_token_is_not_sent_twice(conn, monkeypatch):
+def test_the_bot_pushes_nothing_and_writes_the_launches_down(conn, monkeypatch):
+    """Neither feed is pushed by the bot any more. The signals went first (0 for 5 over a day);
+    the launches followed on their own record - $100 into each was -$1,205 at the hour read over
+    thirty days. They are still written to the ledger, unsent, so the question stays measurable."""
     monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
     bot.subscribe(conn, "low", None, min_conviction=0.5)
     monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
-    tg = FakeTelegram()
 
-    assert bot.broadcast(conn, tg)["sent"] == 1
-    again = bot.broadcast(conn, tg)
-    assert again["sent"] == 0 and again["skipped"] == 1
-    assert len(tg.sent) == 1
+    stats = bot.sweep_launches(conn)
+    assert stats == {"qualified": 1, "recorded": 1}
+    row = conn.execute("SELECT kind, chats FROM pushes").fetchone()
+    assert row["kind"] == "launch" and row["chats"] == 0, "written down, sent to nobody"
+    assert conn.execute("SELECT COUNT(*) FROM bot_sent").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM x_posts").fetchone()[0] == 0, "and not posted either"
+    assert bot.sweep_launches(conn)["recorded"] == 0, "the same launch is one row"
+
+    # the record of this product is what it sent: the shadow rows are not in it
+    from fomo_agent.pipeline import record
+    assert record.report(conn, days=30)["totals"]["pushes"] == 0
+    assert record.report(conn, days=30, sent_only=False)["totals"]["pushes"] == 1
+
+
+def test_a_burst_is_sent_to_every_chat_and_only_once(conn, monkeypatch):
+    """The burst alert is the free tier now: it goes to every chat, paid or not, and a chat told
+    of a token is not told again inside the re-alert window."""
+    from fomo_agent.pipeline import watch
+    monkeypatch.setattr(settings, "telegram_bot_token", "x")
+    monkeypatch.setattr("fomo_agent.pipeline.safety.check", lambda *a, **k: {"sellable": 1, "note": ""})
+    bot.subscribe(conn, "free", None)
+    bot.subscribe(conn, "paid", None)
+    from fomo_agent.pipeline import pro
+    pro.grant(conn, "paid", 30)
+    sent_to = []
+    monkeypatch.setattr(bot, "Telegram", lambda: type("T", (), {"send": lambda self, c, t, preview=False: sent_to.append(str(c))})())
+    h = {"mint": "0x" + "9" * 40, "sym": "HOT2", "conviction": 4.4, "wallets": 3, "usd": 9000.0, "px": 0.01,
+         "first_ts": db.now() - 120, "last_ts": db.now(), "age_s": 300, "window_s": 1800, "liq": 50_000.0,
+         "who": ["ace"], "scores": [88], "avg_score": 88.0}
+    assert watch.push(conn, [h]) == 2 and sorted(sent_to) == ["free", "paid"]
+    assert watch.push(conn, [h]) == 0, "the same burst is one message"
 
 
 def test_a_launch_is_pushed_only_while_it_is_one(conn, monkeypatch):
@@ -288,18 +301,11 @@ def test_a_launch_the_cohort_stopped_buying_is_not_pushed(conn, monkeypatch):
     assert [t["sym"] for _, t, _ in bot.due(conn)] == ["HOT"]
 
 
-def test_one_message_per_token_whichever_came_first(conn, monkeypatch):
-    """A burst told two minutes ago makes the launch on the same token silent, and the other way
-    round: the same event is not told twice."""
+def test_a_burst_on_a_token_already_told_of_is_silent(conn, monkeypatch):
+    """The same event is not told twice, whichever surface named it first."""
     monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
     monkeypatch.setattr(settings, "telegram_dedupe_s", 600)
     bot.subscribe(conn, "one", None)
-    launch = a_launch()
-    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [launch], "hours": 6})
-    bot.mark_sent(conn, "one", f"hot:{launch['mint']}")
-    tg = FakeTelegram()
-    assert bot.broadcast(conn, tg)["sent"] == 0 and bot.broadcast(conn, tg)["skipped"] == 1
-    # and a burst after a launch
     from fomo_agent.pipeline import watch
     other = "0x" + "b" * 40
     bot.mark_sent(conn, "one", other)
@@ -315,24 +321,28 @@ def test_one_message_per_token_whichever_came_first(conn, monkeypatch):
 
 def test_a_new_subscriber_starts_from_now(conn, monkeypatch):
     """Two hundred people joined in an afternoon and every one of them got the same three-hour-old
-    launch. Now what is due at the moment of joining is treated as already seen."""
+    launch. What is due at the moment of joining is treated as already seen."""
     monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
     monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
     bot.subscribe(conn, "late", "joiner")
-    tg = FakeTelegram()
-    assert bot.broadcast(conn, tg)["sent"] == 0, "the launch that was already due is not a push for a newcomer"
-    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch(), a_launch(mint="0x" + "c" * 40, sym="NEW")], "hours": 6})
-    assert bot.broadcast(conn, tg)["sent"] == 1 and "$NEW" in tg.sent[0][1]
+    mint = a_launch()["mint"]
+    assert bot.already_sent(conn, "late", mint, 3600), "what was due at the door is not news"
+
+
+def a_burst(mint="0x" + "9" * 40, sym="HOT2"):
+    return {"mint": mint, "sym": sym, "conviction": 4.4, "wallets": 3, "usd": 9000.0, "px": 0.01,
+            "first_ts": db.now() - 120, "last_ts": db.now(), "age_s": 300, "window_s": 1800,
+            "liq": 50_000.0, "who": ["ace"], "scores": [88], "avg_score": 88.0}
 
 
 def test_a_blocked_chat_unsubscribes_itself(conn, monkeypatch):
-    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
-    bot.subscribe(conn, "blocked", None, min_conviction=0.5)
-    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
+    from fomo_agent.pipeline import watch
+    monkeypatch.setattr(settings, "telegram_bot_token", "x")
+    monkeypatch.setattr("fomo_agent.pipeline.safety.check", lambda *a, **k: {"sellable": 1, "note": ""})
+    bot.subscribe(conn, "blocked", None)
     tg = FakeTelegram(fail_for=["blocked"])
-
-    stats = bot.broadcast(conn, tg)
-    assert stats["errors"] == 1 and stats["sent"] == 0
+    monkeypatch.setattr(bot, "Telegram", lambda: tg)
+    assert watch.push(conn, [a_burst()]) == 0
     assert bot.subscribers(conn) == [], "a chat that blocked us is dropped, not retried forever"
 
 
@@ -340,12 +350,11 @@ def test_every_permanent_refusal_unsubscribes(conn, monkeypatch):
     """Telegram says why in the body; the bare status line is what httpx would have shown, and
     "Client error '403 Forbidden'" has to count too - for a day it did not, and eleven blocked
     chats were retried on every broadcast."""
-    monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
-    for i, reason in enumerate(("Forbidden: user is deactivated", "Forbidden: bot was kicked from the group chat",
-                                "Client error '403 Forbidden' for url 'https://api.telegram.org/x'",
-                                "Bad Request: chat not found")):
-        bot.subscribe(conn, f"gone{i}", None, min_conviction=0.5)
-    monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
+    from fomo_agent.pipeline import watch
+    monkeypatch.setattr(settings, "telegram_bot_token", "x")
+    monkeypatch.setattr("fomo_agent.pipeline.safety.check", lambda *a, **k: {"sellable": 1, "note": ""})
+    for i in range(4):
+        bot.subscribe(conn, f"gone{i}", None)
 
     class Refusing(FakeTelegram):
         def send(self, chat_id, text, preview=False):
@@ -353,19 +362,18 @@ def test_every_permanent_refusal_unsubscribes(conn, monkeypatch):
                        "Client error '403 Forbidden' for url 'https://api.telegram.org/x'", "Bad Request: chat not found")
             raise RuntimeError(reasons[int(str(chat_id)[-1])])
 
-    bot.broadcast(conn, Refusing())
+    monkeypatch.setattr(bot, "Telegram", lambda: Refusing())
+    watch.push(conn, [a_burst()])
     assert bot.subscribers(conn) == []
     assert not bot.gone(RuntimeError("ReadTimeout: the network blinked")), "a hiccup is retried"
 
 
-def test_broadcast_with_no_subscribers_does_nothing(conn):
-    tg = FakeTelegram()
-    assert bot.broadcast(conn, tg) == {"subscribers": 0, "sent": 0, "launches": 0,
-                                       "skipped": 0, "errors": 0}
-    assert tg.sent == []
+def test_a_sweep_with_nothing_qualifying_writes_nothing(conn):
+    assert bot.sweep_launches(conn) == {"qualified": 0, "recorded": 0}
+    assert conn.execute("SELECT COUNT(*) FROM pushes").fetchone()[0] == 0
 
 
-def test_run_once_polls_and_broadcasts(conn, monkeypatch):
+def test_run_once_answers_and_sweeps(conn, monkeypatch):
     monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
     bot.subscribe(conn, "low", None, min_conviction=0.5)
     monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch()], "hours": 6})
@@ -376,8 +384,8 @@ def test_run_once_polls_and_broadcasts(conn, monkeypatch):
 
     tg = Poller()
     stats = bot.run(conn, tg, once=True)
-    assert stats["handled"] == 1 and stats["sent"] == 1
-    assert {c for c, _ in tg.sent} == {"7", "low"}
+    assert stats["handled"] == 1 and stats["recorded"] == 1
+    assert {c for c, _ in tg.sent} == {"7"}, "the loop answers; it does not push"
 
 
 def test_fresh_command_reads_the_launch_feed(conn):
@@ -399,11 +407,12 @@ def test_fresh_command_reads_the_launch_feed(conn):
     assert "3 more had trusted buying" in text
 
     assert "FRESH" in handle_text(conn, "/fresh", 1, "u")
-    assert "/fresh" in handle_text(conn, "/help", 1, "u")
+    assert "FRESH" in handle_text(conn, "/launches", 1, "u"), "the name it goes by now"
+    assert "/launches" in handle_text(conn, "/help", 1, "u")
 
 
-def test_a_hot_launch_is_pushed_once_and_not_again_by_the_other_feed(conn, monkeypatch):
-    """Two feeds describe the same token; a subscriber should hear about it once."""
+def test_a_hot_launch_is_recorded_and_nobody_is_told(conn, monkeypatch):
+    """Two feeds describe the same token; neither is pushed, and the ledger holds one row."""
     monkeypatch.setattr(settings, "telegram_min_heat", 2.0)
     bot.subscribe(conn, "chat", "u", min_conviction=0.1)
 
@@ -418,17 +427,15 @@ def test_a_hot_launch_is_pushed_once_and_not_again_by_the_other_feed(conn, monke
     monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [hot, cold], "hours": 6})
     monkeypatch.setattr(bot.analyze, "signals", lambda *a, **k: [same])
 
-    tg = FakeTelegram()
-    stats = bot.broadcast(conn, tg)
-    assert stats["sent"] == 1 and stats["launches"] == 1
-    assert len(tg.sent) == 1
-    text = tg.sent[0][1]
+    assert bot.sweep_launches(conn) == {"qualified": 1, "recorded": 1}
+    assert conn.execute("SELECT COUNT(*) FROM bot_sent").fetchone()[0] == 0
+    text = bot.due(conn)[0][2]
     assert "$HOT" in text and "launch" in text and "heat 4.20" in text
     assert "first wallet in" in text and "6 min" in text, "the lead time is the headline"
     assert "COLD" not in text, "below the heat floor, so no message"
 
-    # the signal feed knows the same token; the dedup is per token, not per feed
-    assert bot.broadcast(conn, FakeTelegram())["sent"] == 0
+    # the signal feed knows the same token; neither surface pushes it
+    assert bot.sweep_launches(conn)["recorded"] == 0, "the same launch is one row, whoever named it"
 
 
 def test_a_launch_with_no_known_open_time_does_not_claim_to_be_first(conn):
@@ -463,11 +470,10 @@ def test_a_launch_waits_its_first_minutes(conn, monkeypatch):
     fact. The first trusted buy has to be a few minutes old before the launch is one."""
     monkeypatch.setattr(settings, "telegram_alert_window_h", 24)
     monkeypatch.setattr(settings, "telegram_launch_min_age_s", 180)
-    bot.subscribe(conn, "chat", None)
     monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch(age_s=100)], "hours": 6})
-    assert bot.broadcast(conn, FakeTelegram())["sent"] == 0, "a hundred seconds in: not yet"
+    assert bot.due(conn) == [], "a hundred seconds in: not yet"
     monkeypatch.setattr(bot.analyze, "fresh", lambda *a, **k: {"tokens": [a_launch(age_s=200)], "hours": 6})
-    assert bot.broadcast(conn, FakeTelegram())["sent"] == 1
+    assert len(bot.due(conn)) == 1
 
 
 def test_the_journal_never_carries_the_token(monkeypatch):
