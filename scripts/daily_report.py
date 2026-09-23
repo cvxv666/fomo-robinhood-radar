@@ -140,9 +140,10 @@ except Exception as e:  # noqa: BLE001
 # list of dicts took 6.6 GB and an OOM kill on a box with no swap (23 Sep, 06:52). One pass, one
 # line at a time, and nothing kept but the counters.
 BOT = re.compile(r"bot|crawl|spider|python|httpx|node|curl|go-http|java|okhttp|FomoPilot|Paper|Tracker|copytrader|fishmice|dime-|wget|axios|scrapy|Headless|LinkPreview", re.I)
-# the clouds a distributed crawler rents: one hit per address, a browser's User-Agent, and no
-# stylesheet ever fetched. 47.79/47.82 walked /token/* all day on 23 Sep and read as 2,310 people
-CLOUD = ("47.79.", "47.82.", "47.74.", "47.76.", "8.208.", "8.209.", "34.", "35.", "52.", "54.", "3.")
+# The clouds a distributed crawler rents by the thousand address: 47.79/47.82 walked /token/* all
+# day on 23 Sep, one hit each, and read as 2,310 people. Kept narrow on purpose - the big AWS and
+# Azure ranges carry as many VPNs as crawlers, and those are people.
+CLOUD = ("47.79.", "47.82.", "47.74.", "47.76.", "8.208.", "8.209.")
 ips, api_ips, st = set(), set(), collections.Counter()
 paths, uas = collections.Counter(), collections.Counter()
 pages = 0; byh = collections.defaultdict(lambda: {"n": 0, "0": 0, "429": 0, "502": 0, "d": []})
@@ -188,24 +189,30 @@ for m in caddy_lines(HOURS):
         pages += 1; paths[re.sub(r"^/(token|trader)/.*", r"/\1/*", uri)] += 1; b["d"].append(m["duration"])
         if not BOT.search(ua) and "Mozilla" in ua and not ip.startswith(CLOUD):
             v = seen[ip]; v["pages"] += 1; v["hours"][h] += 1; v["browser"] = True
+            # a browser sends the language it wants to read in; the headless crawlers walking
+            # /token/* do not, and that one header separates them better than anything else here
+            v["lang"] = v.get("lang") or "Accept-Language" in (r.get("headers") or {})
 
-# A person's browser fetches the page and then its stylesheet; a crawler takes the page and
-# leaves. One hit from an address that never asked for an asset is not a visit, and an address
-# the limiter turned away a hundred times is a scanner whatever its User-Agent says.
+# Two numbers, because no single one is honest. The loose one is every address with a browser's
+# name that is not a scanner and not in a crawler's cloud; the tight one is those that came back
+# for a second page or fetched an asset. A distributed crawler on one hit per address sits
+# between them, and on 23 September it was most of the loose number.
 scanners = sorted(ip for ip, v in seen.items() if v["429"] >= 100)
-humans = {ip for ip, v in seen.items() if v["browser"] and v["429"] < 100 and (v["assets"] or v["pages"] > 1)}
-human_pages = sum(v["pages"] for ip, v in seen.items() if ip in humans)
+humans = {ip for ip, v in seen.items() if v["browser"] and v["429"] < 100 and (v.get("lang") or v["assets"] or v["pages"] > 1)}
+engaged = {ip for ip in humans if seen[ip]["assets"] or seen[ip]["pages"] > 1}
+human_pages = sum(seen[ip]["pages"] for ip in humans)
+engaged_pages = sum(seen[ip]["pages"] for ip in engaged)
 human_hours = collections.Counter()
-for ip in humans:
+for ip in engaged:
     human_hours.update(seen[ip]["hours"])
 drive_by = sum(1 for ip, v in seen.items() if v["browser"] and ip not in humans)
 hours_tbl = []
 for h in sorted(byh):
     b = byh[h]; d = sorted(b["d"]); hours_tbl.append({"h": h, "req": b["n"], "st0": b["0"], "429": b["429"], "502": b["502"], "page_p95_ms": round(d[int(len(d) * .95)] * 1000) if d else None})
 out("SITE", {"requests": sum(st.values()), "ips": len(ips), "human_ips_on_pages": len(humans), "pages": pages, "human_pages": human_pages, "api_ips": len(api_ips),
-             # addresses with a browser's name that took one page and never asked for its stylesheet:
-             # a distributed crawler, counted as people until 23 Sep
-             "drive_by_ips": drive_by,
+             # the tight read: of those addresses, the ones that came back for a second page. The
+             # loose one counts a distributed crawler as people, which it did until 23 Sep.
+             "engaged_ips": len(engaged), "engaged_pages": engaged_pages, "drive_by_ips": drive_by,
              # the oldest line the journal still has: under the window's start, the counts above are short
              "scanners": scanners[:20], "journal_from": time.strftime("%d %H:%M", time.gmtime(first_ts)) if first_ts else None,
              "status": dict(st.most_common(6)), "top_paths": paths.most_common(8), "peak_human_hour": human_hours.most_common(1), "bots": uas.most_common(6), "hours": hours_tbl})
