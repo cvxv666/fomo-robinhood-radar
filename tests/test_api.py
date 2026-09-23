@@ -411,3 +411,36 @@ def test_a_pro_key_reads_faster_and_a_lapsed_one_does_not(client, monkeypatch):
     assert "revoked" in text and keys.current(conn, "42")["key"] in text and keys.current(conn, "42")["key"] != key
     bot.subscribe(conn, "free", None)
     assert "PRO" in bot.handle_text(conn, "/apikey", "free", None)
+
+
+def test_a_steady_tap_runs_out_of_the_day_and_is_told_where_the_key_is(client, monkeypatch):
+    """324,643 requests at four a second never touched the per-minute window; a day's allowance
+    is what stops a tap left running, and the 429 says what the key does instead."""
+    monkeypatch.setattr(api.quota, "per_day", 3)
+    api.quota.counts.clear(); api.limiter.hits.clear(); api._responses.clear()
+    h = {"user-agent": "tap/1.0", "x-forwarded-for": "5.5.5.5"}
+    for _ in range(3):
+        assert client.get("/api/health", headers=h).status_code == 200
+    r = client.get("/api/health", headers=h)
+    assert r.status_code == 429 and r.json()["error"] == "daily quota spent"
+    assert "webhooks" in r.json()["more"] and r.json()["used"] == 4
+    # another address still has its own day
+    assert client.get("/api/health", headers={"user-agent": "other/1.0", "x-forwarded-for": "6.6.6.6"}).status_code == 200
+    # and the site's own renders arrive over loopback with no forwarded address: not one visitor
+    # but all of them, and never counted (the same exemption the per-minute window has)
+    assert api.quota.check("127.0.0.1")[1] == 1
+
+
+def test_a_key_has_no_daily_cap(client, monkeypatch):
+    from fomo_agent import db
+    from fomo_agent.pipeline import keys as keymod
+    monkeypatch.setattr(api.quota, "per_day", 2)
+    api.quota.counts.clear(); api.keyring._seen.clear(); api.keyed.hits.clear(); api._responses.clear()
+    conn = db.connect()
+    with db.tx(conn):
+        conn.execute("INSERT INTO api_keys(key, chat_id, created_at, paid_until) VALUES(?,?,?,?)",
+                     ("k" * 48, "web:abc", db.now(), db.now() + 86400))
+    conn.close()
+    h = {"user-agent": "buyer/1.0", "x-forwarded-for": "7.7.7.7", "x-api-key": "k" * 48}
+    for _ in range(6):
+        assert client.get("/api/health", headers=h).status_code == 200

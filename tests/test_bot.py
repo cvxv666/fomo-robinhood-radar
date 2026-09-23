@@ -271,6 +271,7 @@ def test_a_burst_is_sent_to_every_chat_and_only_once(conn, monkeypatch):
     from fomo_agent.pipeline import watch
     monkeypatch.setattr(settings, "telegram_bot_token", "x")
     monkeypatch.setattr("fomo_agent.pipeline.safety.check", lambda *a, **k: {"sellable": 1, "note": ""})
+    monkeypatch.setattr("fomo_agent.pipeline.safety.depth", lambda *a, **k: 50_000.0)
     bot.subscribe(conn, "free", None)
     bot.subscribe(conn, "paid", None)
     from fomo_agent.pipeline import pro
@@ -314,6 +315,7 @@ def test_a_burst_on_a_token_already_told_of_is_silent(conn, monkeypatch):
     monkeypatch.setattr(settings, "telegram_bot_token", "x")
     monkeypatch.setattr(bot, "Telegram", lambda: type("T", (), {"send": lambda self, c, t, preview=False: sent_to.append(str(c))})())
     monkeypatch.setattr("fomo_agent.pipeline.safety.check", lambda *a, **k: {"sellable": 1, "note": ""})
+    monkeypatch.setattr("fomo_agent.pipeline.safety.depth", lambda *a, **k: 50_000.0)
     h = {"mint": other, "sym": "SAME", "conviction": 4.4, "wallets": 3, "usd": 9000.0, "px": 0.01,
          "first_ts": db.now() - 120, "last_ts": db.now(), "age_s": 300, "window_s": 1800, "liq": 50_000.0,
          "who": ["ace"], "scores": [88], "avg_score": 88.0}
@@ -340,6 +342,7 @@ def test_a_blocked_chat_unsubscribes_itself(conn, monkeypatch):
     from fomo_agent.pipeline import watch
     monkeypatch.setattr(settings, "telegram_bot_token", "x")
     monkeypatch.setattr("fomo_agent.pipeline.safety.check", lambda *a, **k: {"sellable": 1, "note": ""})
+    monkeypatch.setattr("fomo_agent.pipeline.safety.depth", lambda *a, **k: 50_000.0)
     bot.subscribe(conn, "blocked", None)
     tg = FakeTelegram(fail_for=["blocked"])
     monkeypatch.setattr(bot, "Telegram", lambda: tg)
@@ -354,6 +357,7 @@ def test_every_permanent_refusal_unsubscribes(conn, monkeypatch):
     from fomo_agent.pipeline import watch
     monkeypatch.setattr(settings, "telegram_bot_token", "x")
     monkeypatch.setattr("fomo_agent.pipeline.safety.check", lambda *a, **k: {"sellable": 1, "note": ""})
+    monkeypatch.setattr("fomo_agent.pipeline.safety.depth", lambda *a, **k: 50_000.0)
     for i in range(4):
         bot.subscribe(conn, f"gone{i}", None)
 

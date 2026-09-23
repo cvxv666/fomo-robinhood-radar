@@ -72,7 +72,39 @@ class RateLimit:
         return True
 
 
+class DailyQuota:
+    """Requests per address per UTC day, counted across the workers in one small table.
+
+    The per-minute window is blind to a steady tap: four requests a second, for ever, never fills
+    it. This is the other half - and it is deliberately generous, because the reader it stops is
+    the reader who should have a key.
+    """
+
+    def __init__(self, per_day: int):
+        self.per_day = per_day
+        self.counts: dict[str, int] = {}
+        self.day = time.gmtime().tm_yday
+        self._lock = threading.Lock()
+
+    def check(self, key: str) -> tuple[bool, int]:
+        """(allowed, used). A worker of its own counts its own share; three workers behind one
+        address share the day's number through the shared limiter file instead."""
+        if self.per_day <= 0:
+            return True, 0
+        with self._lock:
+            day = time.gmtime().tm_yday
+            if day != self.day:
+                self.counts.clear()
+                self.day = day
+            used = self.counts.get(key, 0) + 1
+            self.counts[key] = used
+            if len(self.counts) > 50_000:
+                self.counts = {k: v for k, v in self.counts.items() if v > 20}
+            return used <= self.per_day, used
+
+
 limiter = RateLimit(settings.api_rate_per_min)
+quota = DailyQuota(settings.api_rate_per_day)
 keyed = RateLimit(settings.api_key_rate_per_min)   # per key, for PRO chats
 keyring = keys.Keyring()
 WEBHOOKS_URL = f"{settings.public_site_url or 'https://fomoradar.app'}/webhooks"
@@ -223,7 +255,16 @@ async def rate_limit(request: Request, call_next):
         finally:
             conn.close()
         return await call_next(request)
-    if not limiter.check(forwarded or host):
+    who = forwarded or host
+    allowed, used = quota.check(who)
+    if not allowed:
+        # a tap left running, not a visitor: the key that lifts this is the same key that turns
+        # the polling into a push
+        return JSONResponse({"error": "daily quota spent", "quota_per_day": quota.per_day, "used": used,
+                             "more": f"a key reads {keyed.per_minute} a minute with no daily cap, and the alerts "
+                                     f"can be POSTed to you instead of polled for: {WEBHOOKS_URL}"},
+                            status_code=429)
+    if not limiter.check(who):
         # the reader who hits this is the reader who would pay: the alerts can be pushed to them
         # instead of polled for, and nobody polling us had any way of knowing that
         return JSONResponse({"error": "rate limited", "limit_per_minute": limiter.per_minute,

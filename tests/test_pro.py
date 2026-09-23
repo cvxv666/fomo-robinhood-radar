@@ -130,6 +130,7 @@ def test_the_burst_goes_to_every_chat_and_the_wallet_feeds_do_not(conn, monkeypa
     monkeypatch.setattr(settings, "telegram_bot_token", "x")
     monkeypatch.setattr(bot, "Telegram", lambda: type("T", (), {"send": lambda self, c, t, preview=False: sent_to.append(str(c))})())
     monkeypatch.setattr("fomo_agent.pipeline.safety.check", lambda *a, **k: {"sellable": 1, "note": ""})
+    monkeypatch.setattr("fomo_agent.pipeline.safety.depth", lambda *a, **k: 50_000.0)
     # another token: a burst on the one just pushed as a launch would be the same event twice
     h = {"mint": "0x" + "9" * 40, "sym": "HOT2", "conviction": 4.4, "wallets": 3, "usd": 9000.0, "px": 0.01,
          "first_ts": db.now() - 120, "last_ts": db.now(), "age_s": 300, "window_s": 1800, "liq": 50_000.0,

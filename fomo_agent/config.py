@@ -268,6 +268,10 @@ class Settings:
     # The study (scripts/crowd_share.py, 93 alerts, 30 days): under 3% the pushes lost $1,975 on
     # $100 each, 18% above the call at the hour; at 3% and over they made $1,364, 54% above.
     hot_min_cohort_share: float = field(default_factory=lambda: _float("HOT_MIN_COHORT_SHARE", 0.03))
+    # and a pool we can see the bottom of: a burst into one with no depth on record was -$186
+    # over 60 days (4 alerts, median 0.54 at the hour), and the two worst of 23 September were
+    # both this. Asked of the screener at push time if the enrichment pass has not got there yet.
+    hot_min_liq_usd: float = field(default_factory=lambda: _float("HOT_MIN_LIQ_USD", 10_000))
     # the second paper read on every alert: out at the first pullback this far under the
     # running high inside the hour, at that level (hot.outcome). Twenty percent: the only rule
     # in the 18 Sep exit study that paid on both bursts and launches.
@@ -292,6 +296,11 @@ class Settings:
     api_host: str = field(default_factory=lambda: _env("API_HOST", "127.0.0.1"))
     api_port: int = field(default_factory=lambda: _int("API_PORT", 8000))
     api_rate_per_min: int = field(default_factory=lambda: _int("API_RATE_PER_MIN", 120))
+    # and a day's worth per address without a key: a steady poll never trips a per-minute window,
+    # and two such taps were 43% of the traffic and 11 GB of egress on 23 September. 20,000 is a
+    # request every four seconds around the clock, which is more than any reader needs from a feed
+    # that moves on a twenty-second tick. 0 turns the quota off.
+    api_rate_per_day: int = field(default_factory=lambda: _int("API_RATE_PER_DAY", 20_000))
     # a PRO chat's API key raises its allowance to this; 0 turns keys off
     api_key_rate_per_min: int = field(default_factory=lambda: _int("API_KEY_RATE_PER_MIN", 600))
     # a request with no User-Agent at all is refused with a 400 that says what to send

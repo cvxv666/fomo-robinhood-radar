@@ -276,3 +276,35 @@ def test_a_max_tx_cap_is_a_limit_not_a_block(conn):
     assert v["sellable"] == 1 and "hundred thousandth" in v["note"]
     v = safety.check(conn, TRAP, rpc=CappedRpc(), gt=FakeGt(), force=True)
     assert v["sellable"] == 0 and "even at a hundred thousandth" in v["note"]
+
+
+def test_a_pool_nobody_can_see_is_not_worth_an_alert(conn, monkeypatch):
+    """row and CREDITS, 23 September: nine and eleven trusted wallets into pools with no depth on
+    record, both five cents on the dollar an hour later. Over sixty days that bucket was -$334."""
+    monkeypatch.setattr(settings, "hot_min_liq_usd", 10_000)
+    now = db.now()
+
+    class Gt:
+        def __init__(self, reserve):
+            self.reserve, self.asked = reserve, 0
+
+        def pool(self, chain, pool):
+            self.asked += 1
+            return None if self.reserve is None else {"transactions": {}, "created_at": now - 600, "reserve_usd": self.reserve}
+
+    # nothing on record and the screener cannot say either: held
+    with db.tx(conn):
+        conn.execute("UPDATE tokens SET liquidity_usd=NULL, checked_at=NULL WHERE mint=?", (FINE,))
+    assert safety.depth(conn, FINE, gt=Gt(None), now=now) is None
+    assert "nobody can see" in safety.thin(None)
+
+    # the screener answers: the number is used and stored, so the next look is free
+    gt = Gt(42_000.0)
+    assert safety.depth(conn, FINE, gt=gt, now=now) == 42_000.0
+    assert safety.depth(conn, FINE, gt=gt, now=now + 60) == 42_000.0 and gt.asked == 1, "stored, not asked twice"
+    assert safety.thin(42_000.0) is None
+    assert "under $10,000" in safety.thin(4_000.0)
+    # a stale number is asked again rather than trusted
+    assert safety.depth(conn, FINE, gt=Gt(7_000.0), now=now + 2000) == 7_000.0
+    monkeypatch.setattr(settings, "hot_min_liq_usd", 0)
+    assert safety.thin(None) is None, "the gate is a setting, not a law"

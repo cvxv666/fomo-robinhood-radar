@@ -267,7 +267,14 @@ def push(conn: sqlite3.Connection, burning: list[dict], rpc: RobinhoodRPC | None
             held(h["mint"], "burst on %s not pushed: a %s was pushed in the last %dh and conviction %.1f is under %.1f",
                  h["sym"], h["sym"], settings.telegram_clone_hours, h["conviction"], 1.5 * settings.hot_delta)
             continue
-        from .safety import cohort_share, crowd_objection
+        from .safety import cohort_share, crowd_objection, depth, thin
+
+        # what the pool holds, asked now rather than whenever the enrichment pass last ran
+        h["liq"] = depth(conn, h["mint"], now=now)
+        why = thin(h["liq"])
+        if why:
+            held(h["mint"], "burst on %s not pushed: %s", h["sym"], why)
+            continue
         h["cohort_share"] = cohort_share(conn, h["mint"], h.get("usd"), now, rpc=rpc)
         why = crowd_objection(h["cohort_share"])
         if why:

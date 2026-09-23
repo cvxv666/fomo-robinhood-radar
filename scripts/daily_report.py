@@ -39,6 +39,10 @@ for r in rows:
     kind = "burst" if key.startswith("hot:") else "launch"; mint = key.split(":", 1)[-1]
     p = pushes.setdefault((kind, mint), {"kind": kind, "mint": mint, "ts": r["ts"], "chats": set()})
     p["chats"].add(r["chat_id"]); p["ts"] = min(p["ts"], r["ts"])
+# `bot_sent` also holds the rows a new subscriber's backlog-quieting writes, which read as a push
+# to one chat (INFRAETH, 22 Sep). The ledger knows how many were told; it wins where it has a row.
+ledger = {(r["kind"], r["mint"]): r["chats"] for r in
+          conn.execute("SELECT kind, mint, chats FROM pushes WHERE ts >= ?", (since - 3600,))}
 _candles_once = _pool_candles(conn)
 
 
@@ -75,7 +79,8 @@ for p in sorted(pushes.values(), key=lambda p: p["ts"]):
                "dumped" if down and (best or 0) >= 1.5 else "failed" if down else
                "open" if now - ts < 6 * 3600 and (best or 0) < 2 else
                "reached 2x" if (best or 0) >= 2 else "flat")
-    report.append({"t": hhmm(ts), "kind": p["kind"], "sym": sym, "mint": mint, "chats": len(p["chats"]), "best": best, "now": nowx,
+    chats = ledger.get((p["kind"], mint), len(p["chats"]))
+    report.append({"t": hhmm(ts), "kind": p["kind"], "sym": sym, "mint": mint, "chats": chats, "best": best, "now": nowx,
                    "vol_since": vol_since, "candles": bool(cds), "seeded": was_seeded, "unsellable": bool(tk and tk["sellable"] == 0),
                    "voided": mint in voids,
                    "conv": b["conviction"] if b else None, "wallets": b["wallets"] if b else None, "age_h": round((now - ts) / 3600, 1), "verdict": verdict})
@@ -86,6 +91,12 @@ out("PUSH_TOTALS", {"pushes": len(report), "launch": sum(r["kind"] == "launch" f
                     "flat": sum(r["verdict"] == "flat" for r in report), "open": sum(r["verdict"] == "open" for r in report),
                     "dead": sum(r["verdict"] == "dead" for r in report), "seeded": sum(r["verdict"] == "seeded" for r in report),
                     "honeypot": sum(r["verdict"] == "honeypot" for r in report), "bursts_recorded": n1("SELECT COUNT(*) FROM bursts WHERE ts >= ?", since)})
+out("LAUNCHES_UNSENT", [{"t": hhmm(r["ts"]), "sym": r["sym"], "mint": r["mint"], "heat": r["heat"],
+                        "wallets": r["wallets"], "liq": r["liq"], "best": r["best"], "now": r["now_x"]}
+                       for r in conn.execute(
+                           "SELECT p.*, COALESCE(tk.symbol, substr(p.mint,1,8)) sym FROM pushes p "
+                           "LEFT JOIN tokens tk ON tk.mint = p.mint WHERE p.ts >= ? AND COALESCE(p.chats,0) = 0 "
+                           "ORDER BY p.ts", (since,))])
 out("FOLLOWS", {"alerts": sum(follows.values()), "chats": len(follows), "per_chat": dict(follows.most_common(5)),
                 "wallets_followed": n1("SELECT COUNT(DISTINCT address) FROM follows"),
                 "chats_following": n1("SELECT COUNT(DISTINCT chat_id) FROM follows"),
@@ -125,39 +136,78 @@ except Exception as e:  # noqa: BLE001
     out("PRO", {"error": str(e)})
 
 # ── 3. the site
-raw = subprocess.run(["journalctl", "-u", "caddy", "--since", f"{HOURS} hours ago", "--no-pager", "-o", "cat"], capture_output=True, text=True).stdout
+# Streamed, not slurped: a day of Caddy is 725k lines and 760 MB of JSON, and holding it as a
+# list of dicts took 6.6 GB and an OOM kill on a box with no swap (23 Sep, 06:52). One pass, one
+# line at a time, and nothing kept but the counters.
 BOT = re.compile(r"bot|crawl|spider|python|httpx|node|curl|go-http|java|okhttp|FomoPilot|Paper|Tracker|copytrader|fishmice|dime-|wget|axios|scrapy|Headless|LinkPreview", re.I)
-ips, humans, api_ips, st = set(), set(), set(), collections.Counter()
-paths, human_hours, uas = collections.Counter(), collections.Counter(), collections.Counter()
-pages = human_pages = 0; durs = []; byh = collections.defaultdict(lambda: {"n": 0, "0": 0, "429": 0, "502": 0, "d": []})
-lines = []
-for line in raw.splitlines():
-    try: m = json.loads(line)
-    except Exception: continue
-    if "status" in m and "request" in m: lines.append(m)
-# an address the limiter turned away a hundred times in the window is a scanner whatever its
-# User-Agent says (130.49.215.97: 40k 429s on /token/* under a Mozilla string, and the pages it
-# did get were "the peak human hour"); its hits are not people
-scanners = {ip for ip, n in collections.Counter(m["request"].get("client_ip", "?") for m in lines if m["status"] == 429).items() if n >= 100}
-for m in lines:
+# the clouds a distributed crawler rents: one hit per address, a browser's User-Agent, and no
+# stylesheet ever fetched. 47.79/47.82 walked /token/* all day on 23 Sep and read as 2,310 people
+CLOUD = ("47.79.", "47.82.", "47.74.", "47.76.", "8.208.", "8.209.", "34.", "35.", "52.", "54.", "3.")
+ips, api_ips, st = set(), set(), collections.Counter()
+paths, uas = collections.Counter(), collections.Counter()
+pages = 0; byh = collections.defaultdict(lambda: {"n": 0, "0": 0, "429": 0, "502": 0, "d": []})
+# per address: page views, whether a stylesheet or script was ever fetched, 429s, the hours seen
+seen = collections.defaultdict(lambda: {"pages": 0, "assets": 0, "429": 0, "hours": collections.Counter(), "browser": False})
+
+
+def caddy_lines(hours: int):
+    """One `journalctl` piped, decoded as it arrives; the process is closed either way."""
+    proc = subprocess.Popen(["journalctl", "-u", "caddy", "--since", f"{hours} hours ago", "--no-pager", "-o", "cat"],
+                            stdout=subprocess.PIPE, text=True, errors="replace", bufsize=1 << 20)
+    try:
+        for line in proc.stdout:
+            if '"status"' not in line:
+                continue
+            try:
+                m = json.loads(line)
+            except Exception:  # noqa: BLE001 - a truncated line is a line
+                continue
+            if "status" in m and "request" in m:
+                yield m
+    finally:
+        if proc.stdout:
+            proc.stdout.close()
+        proc.wait()
+
+
+first_ts = None
+for m in caddy_lines(HOURS):
     r = m["request"]; ip = r.get("client_ip", "?"); ua = (r.get("headers", {}).get("User-Agent") or ["?"])[0]; uri = r.get("uri", "").split("?")[0]
+    if first_ts is None:
+        first_ts = m["ts"]
     ips.add(ip); st[m["status"]] += 1; h = time.strftime("%H", time.gmtime(m["ts"])); b = byh[h]; b["n"] += 1
     if m["status"] == 0: b["0"] += 1
-    if m["status"] == 429: b["429"] += 1
+    if m["status"] == 429: b["429"] += 1; seen[ip]["429"] += 1
     if m["status"] == 502: b["502"] += 1
     is_page = m["status"] == 200 and not uri.startswith(("/api", "/_astro", "/favicon", "/robots", "/sitemap")) and not uri.endswith((".css", ".js", ".png", ".svg", ".ico", ".xml", ".txt", ".webp", ".jpg"))
-    human = not BOT.search(ua) and "Mozilla" in ua and ip not in scanners
+    if uri.startswith("/_astro") or uri.endswith((".css", ".js", ".webp")):
+        seen[ip]["assets"] += 1
     if uri.startswith("/api"): api_ips.add(ip)
     if BOT.search(ua): uas[ua[:40]] += 1
     if is_page:
         pages += 1; paths[re.sub(r"^/(token|trader)/.*", r"/\1/*", uri)] += 1; b["d"].append(m["duration"])
-        if human: human_pages += 1; humans.add(ip); human_hours[h] += 1
+        if not BOT.search(ua) and "Mozilla" in ua and not ip.startswith(CLOUD):
+            v = seen[ip]; v["pages"] += 1; v["hours"][h] += 1; v["browser"] = True
+
+# A person's browser fetches the page and then its stylesheet; a crawler takes the page and
+# leaves. One hit from an address that never asked for an asset is not a visit, and an address
+# the limiter turned away a hundred times is a scanner whatever its User-Agent says.
+scanners = sorted(ip for ip, v in seen.items() if v["429"] >= 100)
+humans = {ip for ip, v in seen.items() if v["browser"] and v["429"] < 100 and (v["assets"] or v["pages"] > 1)}
+human_pages = sum(v["pages"] for ip, v in seen.items() if ip in humans)
+human_hours = collections.Counter()
+for ip in humans:
+    human_hours.update(seen[ip]["hours"])
+drive_by = sum(1 for ip, v in seen.items() if v["browser"] and ip not in humans)
 hours_tbl = []
 for h in sorted(byh):
     b = byh[h]; d = sorted(b["d"]); hours_tbl.append({"h": h, "req": b["n"], "st0": b["0"], "429": b["429"], "502": b["502"], "page_p95_ms": round(d[int(len(d) * .95)] * 1000) if d else None})
 out("SITE", {"requests": sum(st.values()), "ips": len(ips), "human_ips_on_pages": len(humans), "pages": pages, "human_pages": human_pages, "api_ips": len(api_ips),
+             # addresses with a browser's name that took one page and never asked for its stylesheet:
+             # a distributed crawler, counted as people until 23 Sep
+             "drive_by_ips": drive_by,
              # the oldest line the journal still has: under the window's start, the counts above are short
-             "scanners": sorted(scanners), "journal_from": time.strftime("%d %H:%M", time.gmtime(lines[0]["ts"])) if lines else None,
+             "scanners": scanners[:20], "journal_from": time.strftime("%d %H:%M", time.gmtime(first_ts)) if first_ts else None,
              "status": dict(st.most_common(6)), "top_paths": paths.most_common(8), "peak_human_hour": human_hours.most_common(1), "bots": uas.most_common(6), "hours": hours_tbl})
 
 # ── 4. the software and the data

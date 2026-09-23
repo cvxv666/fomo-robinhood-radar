@@ -10,6 +10,12 @@ WorkingDirectory=/opt/fomoradar/app
 EnvironmentFile=/opt/fomoradar/app/.env
 Environment=PYTHONIOENCODING=utf-8
 ExecStart=/bin/bash /opt/fomoradar/app/scripts/daily_prep.sh
+# It reads a day of the site's journal. On 23 September it read all of it into memory at once,
+# took 6.6 GB and was killed - on a box with no swap, the killer's next choice could have been
+# the watcher or the API. The report streams now; this is the ceiling that keeps the choice off
+# the table at all, and a job that hits it fails alone.
+MemoryMax=1500M
+MemorySwapMax=0
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict

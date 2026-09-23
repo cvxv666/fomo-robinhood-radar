@@ -75,6 +75,18 @@ URL, and the bot's URL carries its token).
 times in a minute is banned for an hour (`filter-caddy-429.conf` to `/etc/fail2ban/filter.d/caddy-429.conf`,
 `jail-caddy-429.conf` to `/etc/fail2ban/jail.d/caddy-429.conf`, then restart `fail2ban`).
 
+## Memory
+
+The box has 8 GB and no swap by default, which means the kernel's only answer to a memory spike
+is to kill something - and it picks by size, not by importance. Two guards: `radar-daily.service`
+carries `MemoryMax=1500M` so the report can only fail alone, and a small swap file gives the rest
+a moment to breathe rather than dying instantly:
+
+```
+fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+```
+
 ## Access
 
 Key-only. Password authentication is off in `/etc/ssh/sshd_config.d/99-fomoradar.conf`, and the root

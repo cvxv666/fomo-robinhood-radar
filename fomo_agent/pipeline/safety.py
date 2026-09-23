@@ -364,6 +364,49 @@ def crowd_objection(share: float | None) -> str | None:
     return f"the cohort is {share:.0%} of the pool's last hour, under {floor:.0%}: following the crowd, not leading it"
 
 
+def depth(conn: sqlite3.Connection, mint: str, gt=None, now: int | None = None, max_age_s: int = 900) -> float | None:
+    """Dollars in the pool, or None when nobody can say.
+
+    The enrichment pass writes `liquidity_usd` every quarter of an hour, which is forever for a
+    token twenty minutes old - and those are exactly the ones a burst fires on. So a stale or
+    missing number is asked of the screener here, for this one pool, and stored.
+    """
+    now = now or db.now()
+    row = conn.execute("SELECT liquidity_usd, checked_at, pool_address, chain FROM tokens WHERE mint=?", (mint,)).fetchone()
+    if row is None:
+        return None
+    if row["liquidity_usd"] and row["checked_at"] and now - row["checked_at"] < max_age_s:
+        return float(row["liquidity_usd"])
+    if not row["pool_address"]:
+        return float(row["liquidity_usd"]) if row["liquidity_usd"] else None
+    try:
+        if gt is None:
+            from ..sources.geckoterminal import GeckoTerminal
+            gt = GeckoTerminal(patient=False)
+        a = gt.pool(row["chain"] or "robinhood", row["pool_address"])
+    except Exception as e:  # noqa: BLE001 - the screener being busy is not a depth of zero
+        log.debug("depth of %s: %s", mint[:10], e)
+        a = None
+    liq = (a or {}).get("reserve_usd")
+    if liq is None:
+        return float(row["liquidity_usd"]) if row["liquidity_usd"] else None
+    with db.tx(conn):
+        conn.execute("UPDATE tokens SET liquidity_usd=?, checked_at=? WHERE mint=?", (float(liq), now, mint))
+    return float(liq)
+
+
+def thin(liq: float | None) -> str | None:
+    """Why this pool is too thin to alert on, or None."""
+    floor = settings.hot_min_liq_usd
+    if floor <= 0:
+        return None
+    if liq is None:
+        return "no depth on record and the screener cannot say: nobody can see this pool yet"
+    if liq < floor:
+        return f"the pool holds ${liq:,.0f}, under ${floor:,.0f}"
+    return None
+
+
 def only_the_cohort(conn: sqlite3.Connection, mint: str, wallets: int, now: int | None = None, gt=None) -> str | None:
     """Why a young token should wait, or None if it need not.
 
