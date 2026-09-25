@@ -357,11 +357,21 @@ def cohort_share(conn: sqlite3.Connection, mint: str, cohort_usd: float | None, 
 
 
 def crowd_objection(share: float | None) -> str | None:
-    """Why the push should not go, or None: the gate on the share, when a floor is set."""
-    floor = settings.hot_min_cohort_share
-    if floor <= 0 or share is None or share >= floor:
+    """Why the push should not go, or None. Both ends of the share are a reason.
+
+    A sliver means the cohort arrived in a market somebody else made and is following it. All of
+    it means there is no market besides the cohort - and a pool whose only traders are the eight
+    wallets we watch has nobody to sell to. Three of those in three days went to a twentieth of
+    the call inside the hour.
+    """
+    floor, ceiling = settings.hot_min_cohort_share, settings.hot_max_cohort_share
+    if share is None:
         return None
-    return f"the cohort is {share:.0%} of the pool's last hour, under {floor:.0%}: following the crowd, not leading it"
+    if floor > 0 and share < floor:
+        return f"the cohort is {share:.0%} of the pool's last half hour, under {floor:.0%}: following the crowd, not leading it"
+    if 0 < ceiling < 1 and share >= ceiling:
+        return f"the cohort is {share:.0%} of the pool's last half hour: nobody in it but us, and nobody to sell to"
+    return None
 
 
 def depth(conn: sqlite3.Connection, mint: str, gt=None, now: int | None = None, max_age_s: int = 900) -> float | None:

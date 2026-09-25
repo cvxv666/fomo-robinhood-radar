@@ -53,11 +53,13 @@ def stale_price_tokens(conn: sqlite3.Connection, limit: int | None = None,
     """
     now = db.now()
     max_age = now - (settings.price_max_age_s if max_age_s is None else max_age_s)
+    cold = now - settings.price_cold_max_age_s
+    hot_since = now - settings.price_hot_days * 86400
     return conn.execute(
-        "SELECT u.token AS token, u.chain AS chain FROM ("
-        "  SELECT mint AS token, chain FROM trades WHERE side='buy' AND ts >= ?"
-        "  UNION ALL SELECT token, chain FROM fomo_positions WHERE closed_at IS NULL"
-        "  UNION ALL SELECT h.token, t.chain FROM holdings h JOIN traders t ON t.address = h.address WHERE h.amount > 0"
+        "SELECT u.token AS token, u.chain AS chain, MAX(u.hot) AS hot FROM ("
+        "  SELECT mint AS token, chain, (ts >= ?) AS hot FROM trades WHERE side='buy' AND ts >= ?"
+        "  UNION ALL SELECT token, chain, 1 FROM fomo_positions WHERE closed_at IS NULL"
+        "  UNION ALL SELECT h.token, t.chain, 1 FROM holdings h JOIN traders t ON t.address = h.address WHERE h.amount > 0"
         ") u JOIN tokens t ON t.mint = u.token "
         "WHERE u.chain IS NOT NULL AND (t.checked_at IS NULL OR t.checked_at < ?) "
         # a token that cannot be sold is re-quoted once a day, not every two hours: its price
@@ -65,8 +67,12 @@ def stale_price_tokens(conn: sqlite3.Connection, limit: int | None = None,
         # answered 429 to (278 a day, the same two dozen trap tokens)
         "AND (COALESCE(t.sellable, 1) != 0 OR COALESCE(t.checked_at, 0) < ?) "
         "GROUP BY u.token, u.chain "
-        "ORDER BY COALESCE(t.checked_at, 0) ASC LIMIT ?",
-        (now - settings.price_refresh_days * 86400, max_age, now - 86400, limit or settings.price_refresh_limit),
+        # and one the cohort last touched days ago and holds none of goes on the slow clock: the
+        # queue was 3,502 tokens every two hours, and the screener said 429 five hundred times a day
+        "HAVING MAX(u.hot) = 1 OR COALESCE(MAX(t.checked_at), 0) < ? "
+        "ORDER BY MAX(u.hot) DESC, COALESCE(t.checked_at, 0) ASC LIMIT ?",
+        (hot_since, now - settings.price_refresh_days * 86400, max_age, now - 86400, cold,
+         limit or settings.price_refresh_limit),
     ).fetchall()
 
 

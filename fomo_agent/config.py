@@ -272,6 +272,10 @@ class Settings:
     # over 60 days (4 alerts, median 0.54 at the hour), and the two worst of 23 September were
     # both this. Asked of the screener at push time if the enrichment pass has not got there yet.
     hot_min_liq_usd: float = field(default_factory=lambda: _float("HOT_MIN_LIQ_USD", 10_000))
+    # ...and not all of it either. A share at the ceiling means the pool's half hour *is* the
+    # cohort's money and nobody else is trading: row and CREDITS on the 23rd, FOOMS on the 24th,
+    # all three at or near 1.0, all three a twentieth of the call an hour later. 1 turns it off.
+    hot_max_cohort_share: float = field(default_factory=lambda: _float("HOT_MAX_COHORT_SHARE", 0.9))
     # the second paper read on every alert: out at the first pullback this far under the
     # running high inside the hour, at that level (hot.outcome). Twenty percent: the only rule
     # in the 18 Sep exit study that paid on both bursts and launches.
@@ -383,6 +387,12 @@ class Settings:
     # balance or an open fomo position says somebody still holds it. Every buy ever put 6,300
     # tokens in the queue and the screener answered 429 eight hundred times a day.
     price_refresh_days: int = field(default_factory=lambda: _int("PRICE_REFRESH_DAYS", 7))
+    # A token the cohort traded this week but not since, and holds none of, does not need a new
+    # price every two hours: 3,502 of them in the queue was 542 GeckoTerminal 429s a day. Those
+    # are re-asked on this slower clock; what was traded in `price_hot_days` or is held keeps the
+    # two-hour one.
+    price_hot_days: int = field(default_factory=lambda: _int("PRICE_HOT_DAYS", 2))
+    price_cold_max_age_s: int = field(default_factory=lambda: _int("PRICE_COLD_MAX_AGE_S", 86_400))
     # On-chain balances: how long a read stays usable, and how many (wallet, token) pairs one pass
     # re-reads. Forty go per request, so 2000 pairs is 50 free RPC calls.
     holdings_max_age_s: int = field(default_factory=lambda: _int("HOLDINGS_MAX_AGE_S", 3600))

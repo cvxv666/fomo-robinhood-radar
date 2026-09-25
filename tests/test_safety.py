@@ -250,10 +250,16 @@ def test_the_cohort_share_is_measured_and_gates_only_when_a_floor_is_set(conn, m
     assert safety.cohort_share(conn, FINE, 10_000.0, now=now, gt=Gt(), rpc=NoChain()) == 0.033, "the screener when the chain cannot say"
     assert safety.cohort_share(conn, FINE, None, now=now, gt=Gt(), rpc=Chain()) is None
     monkeypatch.setattr(settings, "hot_min_cohort_share", 0.0)
+    monkeypatch.setattr(settings, "hot_max_cohort_share", 1.0)
     assert safety.crowd_objection(0.04) is None, "off by default"
     monkeypatch.setattr(settings, "hot_min_cohort_share", 0.1)
-    assert "4% of the pool's last hour" in safety.crowd_objection(0.04)
+    assert "4% of the pool's last half hour" in safety.crowd_objection(0.04)
     assert safety.crowd_objection(0.4) is None and safety.crowd_objection(None) is None
+    # and the other end: a pool whose only traders are the wallets we watch has nobody to sell to
+    monkeypatch.setattr(settings, "hot_max_cohort_share", 0.9)
+    assert "nobody in it but us" in safety.crowd_objection(1.0)
+    assert "nobody in it but us" in safety.crowd_objection(0.93)
+    assert safety.crowd_objection(0.5) is None
     from fomo_agent import bot
     assert ("of the pool's hour", "4%") in bot.share_row({"cohort_share": 0.04}) and bot.share_row({}) == []
 

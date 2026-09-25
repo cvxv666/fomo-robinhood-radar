@@ -84,6 +84,18 @@ for p in sorted(pushes.values(), key=lambda p: p["ts"]):
                    "vol_since": vol_since, "candles": bool(cds), "seeded": was_seeded, "unsellable": bool(tk and tk["sellable"] == 0),
                    "voided": mint in voids,
                    "conv": b["conviction"] if b else None, "wallets": b["wallets"] if b else None, "age_h": round((now - ts) / 3600, 1), "verdict": verdict})
+# What each word in `verdict` means, printed with them so a reader of this file never has to
+# guess and a description of it elsewhere cannot drift out of date.
+out("VERDICTS", {
+    "honeypot": "the token cannot be sold (safety.check said no)",
+    "seeded": "the buying was pushed into the wallets, not done by them (provenance)",
+    "dead": "an hour on, under $2k traded in the pool since the push: nothing happened at all",
+    "dumped": "it went to 1.5x or better and is now under half the call",
+    "failed": "under half the call, without ever having been much above it",
+    "open": "younger than six hours and not yet at 2x: too early to judge",
+    "reached 2x": "the pool's own candles printed twice the call",
+    "flat": "measured, above half the call, never reached 2x",
+})
 out("PUSHES", report)
 out("PUSH_TOTALS", {"pushes": len(report), "launch": sum(r["kind"] == "launch" for r in report), "burst": sum(r["kind"] == "burst" for r in report),
                     "reached_2x": sum(r["verdict"] == "reached 2x" for r in report), "failed": sum(r["verdict"] == "failed" for r in report),
@@ -189,6 +201,7 @@ for m in caddy_lines(HOURS):
         pages += 1; paths[re.sub(r"^/(token|trader)/.*", r"/\1/*", uri)] += 1; b["d"].append(m["duration"])
         if not BOT.search(ua) and "Mozilla" in ua and not ip.startswith(CLOUD):
             v = seen[ip]; v["pages"] += 1; v["hours"][h] += 1; v["browser"] = True
+            v["first"] = v.get("first") or m["ts"]; v["last"] = m["ts"]
             # a browser sends the language it wants to read in; the headless crawlers walking
             # /token/* do not, and that one header separates them better than anything else here
             v["lang"] = v.get("lang") or "Accept-Language" in (r.get("headers") or {})
@@ -199,7 +212,18 @@ for m in caddy_lines(HOURS):
 # between them, and on 23 September it was most of the loose number.
 scanners = sorted(ip for ip, v in seen.items() if v["429"] >= 100)
 humans = {ip for ip, v in seen.items() if v["browser"] and v["429"] < 100 and (v.get("lang") or v["assets"] or v["pages"] > 1)}
-engaged = {ip for ip in humans if seen[ip]["assets"] or seen[ip]["pages"] > 1}
+# ...and reads at a human pace. 353 addresses took 15,509 trader pages between them on 24 Sep -
+# thirty-seven each, under a browser's name - and the old rule counted every one as a reader.
+# Nobody opens a page every few seconds for an hour; twenty an hour is already a fast reader.
+def _pace(v) -> float:
+    hours = max((v.get("last", 0) - v.get("first", 0)) / 3600, 1 / 6)   # a visit is ten minutes at least
+    return v["pages"] / hours
+
+
+engaged = {ip for ip in humans
+           if (seen[ip]["assets"] or seen[ip]["pages"] > 1) and _pace(seen[ip]) <= 20}
+walkers = sorted(((round(_pace(v)), ip, v["pages"]) for ip, v in seen.items()
+                  if v["browser"] and v["pages"] > 5 and _pace(v) > 20), reverse=True)[:5]
 human_pages = sum(seen[ip]["pages"] for ip in humans)
 engaged_pages = sum(seen[ip]["pages"] for ip in engaged)
 human_hours = collections.Counter()
@@ -213,6 +237,8 @@ out("SITE", {"requests": sum(st.values()), "ips": len(ips), "human_ips_on_pages"
              # the tight read: of those addresses, the ones that came back for a second page. The
              # loose one counts a distributed crawler as people, which it did until 23 Sep.
              "engaged_ips": len(engaged), "engaged_pages": engaged_pages, "drive_by_ips": drive_by,
+             # addresses reading faster than any person, with a browser's name on them: pages an hour
+             "walkers": [{"pages_per_hour": r, "ip": ip, "pages": n} for r, ip, n in walkers],
              # the oldest line the journal still has: under the window's start, the counts above are short
              "scanners": scanners[:20], "journal_from": time.strftime("%d %H:%M", time.gmtime(first_ts)) if first_ts else None,
              "status": dict(st.most_common(6)), "top_paths": paths.most_common(8), "peak_human_hour": human_hours.most_common(1), "bots": uas.most_common(6), "hours": hours_tbl})
