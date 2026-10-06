@@ -1,0 +1,157 @@
+{
+  "generated_at_utc": "2026-10-06 11:29:24",
+  "tape": {
+    "fills": 187306,
+    "tokens": 28524,
+    "traders_tracked": 562,
+    "traders_scored": 558,
+    "fomo_users_seen": 2943,
+    "fomo_users_resolved": 2094,
+    "first_fill_utc": "2026-08-06",
+    "last_fill_utc": "2026-10-06"
+  },
+  "bot": {
+    "subscribers_active": 491,
+    "subscribers_inactive": 145,
+    "messages_sent": 43308,
+    "pro_paid_chats": 12,
+    "burned_tokens": 14688598.947453516,
+    "burned_usd": 240.0
+  },
+  "record_all_time": {
+    "pushes": 157,
+    "bursts": 67,
+    "launches": 90,
+    "measured": 136,
+    "clean": 117,
+    "above_entry": 105,
+    "reached_2x": 30,
+    "median_best": 1.39,
+    "seeded": 14,
+    "dead": 6,
+    "honeypot": 2,
+    "paper": {
+      "stake": 100.0,
+      "trades": 134,
+      "staked": 13400.0,
+      "pnl": -175.0,
+      "wins": 54,
+      "win_rate": 0.403,
+      "best": 487.0,
+      "worst": -100.0
+    },
+    "paper_trail": {
+      "stake": 100.0,
+      "drop": 0.2,
+      "trades": 123,
+      "staked": 12300.0,
+      "pnl": -54.0,
+      "wins": 36,
+      "win_rate": 0.293,
+      "best": 201.0,
+      "worst": -100.0
+    }
+  },
+  "record_bursts": {
+    "pushes": 67,
+    "bursts": 67,
+    "launches": 0,
+    "measured": 59,
+    "clean": 43,
+    "above_entry": 38,
+    "reached_2x": 14,
+    "median_best": 1.32,
+    "seeded": 10,
+    "dead": 6,
+    "honeypot": 1,
+    "paper": {
+      "stake": 100.0,
+      "trades": 58,
+      "staked": 5800.0,
+      "pnl": 1030.0,
+      "wins": 28,
+      "win_rate": 0.483,
+      "best": 487.0,
+      "worst": -100.0
+    },
+    "paper_trail": {
+      "stake": 100.0,
+      "drop": 0.2,
+      "trades": 52,
+      "staked": 5200.0,
+      "pnl": 151.0,
+      "wins": 18,
+      "win_rate": 0.346,
+      "best": 201.0,
+      "worst": -100.0
+    }
+  },
+  "record_launches": {
+    "pushes": 90,
+    "bursts": 0,
+    "launches": 90,
+    "measured": 77,
+    "clean": 74,
+    "above_entry": 67,
+    "reached_2x": 16,
+    "median_best": 1.42,
+    "seeded": 4,
+    "dead": 0,
+    "honeypot": 1,
+    "paper": {
+      "stake": 100.0,
+      "trades": 76,
+      "staked": 7600.0,
+      "pnl": -1205.0,
+      "wins": 26,
+      "win_rate": 0.342,
+      "best": 189.0,
+      "worst": -100.0
+    },
+    "paper_trail": {
+      "stake": 100.0,
+      "drop": 0.2,
+      "trades": 71,
+      "staked": 7100.0,
+      "pnl": -205.0,
+      "wins": 18,
+      "win_rate": 0.254,
+      "best": 201.0,
+      "worst": -100.0
+    }
+  },
+  "record_including_unsent": {
+    "pushes": 196,
+    "bursts": 67,
+    "launches": 129,
+    "measured": 170,
+    "clean": 139,
+    "above_entry": 124,
+    "reached_2x": 34,
+    "median_best": 1.38,
+    "seeded": 18,
+    "dead": 15,
+    "honeypot": 2,
+    "paper": {
+      "stake": 100.0,
+      "trades": 169,
+      "staked": 16900.0,
+      "pnl": 890.0,
+      "wins": 70,
+      "win_rate": 0.414,
+      "best": 487.0,
+      "worst": -100.0
+    },
+    "paper_trail": {
+      "stake": 100.0,
+      "drop": 0.2,
+      "trades": 151,
+      "staked": 15100.0,
+      "pnl": 331.0,
+      "wins": 47,
+      "win_rate": 0.311,
+      "best": 201.0,
+      "worst": -100.0
+    }
+  }
+}

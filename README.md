@@ -13,7 +13,23 @@ say which of them look repeatable. The result is a live site, a Telegram bot and
 one database: signals, bursts, launches, exits, a token analyzer, a trader analyzer, and a
 leaderboard ranked by judgement rather than by headline PnL.
 
-**Live: [fomoradar.app](https://fomoradar.app) · [@fomoradarRH_bot](https://t.me/fomoradarRH_bot) · [API docs](https://fomoradar.app/docs)**
+> **Archived on 6 October 2026.** The server, the site and the bot are switched off; the links
+> below no longer answer. Everything needed to run it again is in this repository, and what it
+> concluded in two months of live operation is in [`archive/`](archive/) — every alert it sent with
+> what became of it, the verdict on all 558 wallets it judged, and the tape day by day.
+>
+> It ran from 6 August to 6 October 2026: 187,306 fills from 562 tracked wallets over 28,524
+> tokens, 2,094 fomo.family profiles resolved to the wallet that actually trades, 157 alerts to
+> 491 Telegram subscribers, $0 a month in infrastructure beyond a €5 box.
+>
+> **What it learned about its own signal, which is the only number that matters:** a hundred
+> dollars into every burst alert — several trusted wallets entering one token inside minutes —
+> came to **+$1,030** at the hour read over 67 alerts. The same money into every *launch* alert
+> came to **−$1,205** over 90. Three weeks before the end the launch feed was taken off the push
+> entirely and the bursts were made free to everyone; the launches went on being measured and sent
+> to nobody. Had it started as what it finished as, the paper run would read +$1,030.
+
+Previously live at fomoradar.app · [@fomoradarRH_bot](https://t.me/fomoradarRH_bot) · the API docs were served at `/docs`
 
 ## What it looks like
 
