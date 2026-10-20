@@ -35,6 +35,7 @@ def test_a_chat_chooses_kinds_bar_and_quiet_hours(tmp_path):
 
 def test_an_invite_rewards_both_once_and_only_a_new_chat(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "pro_price_usd", 20.0)   # the gate is on
+    monkeypatch.setattr(settings, "pro_token", "0x" + "f" * 40)   # pro.enabled() needs both
     monkeypatch.setattr(settings, "pro_referral_days", 7)
     monkeypatch.setattr(settings, "telegram_bot_name", "radarbot")
     conn = db.connect(tmp_path / "w.db")

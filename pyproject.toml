@@ -31,3 +31,6 @@ include = ["fomo_agent*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# tests/test_pushes.py imports helpers from tests.test_bot; `pytest` (unlike `python -m pytest`)
+# does not put the repository root on sys.path by itself
+pythonpath = ["."]
